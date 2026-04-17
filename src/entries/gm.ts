@@ -7,13 +7,17 @@ import { createToolManager } from '../input/tool-manager.js';
 import { createSelectTool } from '../input/tool-select.js';
 import { createTokenTool } from '../input/tool-token.js';
 import { mountToolbar } from '../ui/toolbar.js';
+import { mountSessionMenu } from '../ui/session-menu.js';
 import { createSyncChannel } from '../sync/channel.js';
 import { serializeState, toSerializablePatch } from '../sync/messages.js';
+import { loadPersistedState, saveState } from '../state/persistence.js';
+import { debounce } from '../util/debounce.js';
 
 const canvas = document.getElementById('canvas') as HTMLCanvasElement | null;
 if (!canvas) throw new Error('Canvas element #canvas not found');
 
-const store = createStore();
+const initial = loadPersistedState();
+const store = createStore(initial ?? undefined);
 const selection = createSelectionState();
 
 const panZoomRef: { handle: { isSpaceHeld(): boolean } | null } = { handle: null };
@@ -47,6 +51,12 @@ mountToolbar(document.body, toolManager, [
 
 toolManager.setActive('select');
 
+mountSessionMenu(document.body, {
+  onNewSession: () => {
+    store.resetSession();
+  },
+});
+
 const channel = createSyncChannel();
 if (channel) {
   channel.onMessage((msg) => {
@@ -59,9 +69,14 @@ if (channel) {
   channel.send({ type: 'full-state', state: serializeState(store.getState()) });
 }
 
+const persist = debounce(() => saveState(store.getState()), 200);
+
 store.subscribe((patch) => {
   renderer.requestRender();
+  persist();
   if (patch && channel) {
     channel.send({ type: 'patch', patch: toSerializablePatch(patch) });
   }
 });
+
+window.addEventListener('beforeunload', () => persist.flush());

@@ -4,11 +4,14 @@ import { createStore } from '../state/store.js';
 import { DEFAULT_CAMERA } from '../state/types.js';
 import { createSyncChannel } from '../sync/channel.js';
 import { deserializeState, fromSerializablePatch } from '../sync/messages.js';
+import { loadPersistedState, saveState } from '../state/persistence.js';
+import { debounce } from '../util/debounce.js';
 
 const canvas = document.getElementById('canvas') as HTMLCanvasElement | null;
 if (!canvas) throw new Error('Canvas element #canvas not found');
 
-const store = createStore();
+const initial = loadPersistedState();
+const store = createStore(initial ?? undefined);
 
 const renderer = createRenderer({
   canvas,
@@ -19,7 +22,12 @@ const renderer = createRenderer({
 
 attachPanZoom(renderer);
 
-store.subscribe(() => renderer.requestRender());
+const persist = debounce(() => saveState(store.getState()), 200);
+
+store.subscribe(() => {
+  renderer.requestRender();
+  persist();
+});
 
 const channel = createSyncChannel();
 if (channel) {
@@ -34,6 +42,8 @@ if (channel) {
 } else {
   showSyncWarning();
 }
+
+window.addEventListener('beforeunload', () => persist.flush());
 
 function showSyncWarning() {
   const banner = document.createElement('div');

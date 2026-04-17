@@ -151,6 +151,37 @@ body.view {
   background: var(--accent-hover);
 }
 
+/* Session menu (GM, top-right) */
+.session-menu {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  display: flex;
+  gap: 0.35rem;
+  padding: 0.4rem;
+  background: rgba(27, 29, 34, 0.92);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  z-index: 10;
+}
+
+.session-menu button {
+  appearance: none;
+  background: transparent;
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.45rem 0.8rem;
+  font-size: 0.85rem;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 100ms ease;
+}
+
+.session-menu button:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
 /* Sync warning banner (Spectator, private mode) */
 .sync-warning {
   position: absolute;
