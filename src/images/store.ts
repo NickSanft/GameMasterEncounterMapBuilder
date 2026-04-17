@@ -55,6 +55,15 @@ const urlCache = new Map<ID, string>();
 
 export async function putImage(blob: Blob, mimeType: string): Promise<ID> {
   const id = nid();
+  await putImageAs(id, blob, mimeType);
+  return id;
+}
+
+export async function putImageAs(
+  id: ID,
+  blob: Blob,
+  mimeType: string,
+): Promise<void> {
   const record: ImageRecord = {
     id,
     blob,
@@ -62,7 +71,20 @@ export async function putImage(blob: Blob, mimeType: string): Promise<ID> {
     createdAt: Date.now(),
   };
   await runTx('readwrite', (s) => s.put(record));
-  return id;
+}
+
+export function blobToDataURL(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () => reject(reader.error ?? new Error('File read failed'));
+    reader.readAsDataURL(blob);
+  });
+}
+
+export async function dataURLToBlob(dataUrl: string): Promise<Blob> {
+  const res = await fetch(dataUrl);
+  return res.blob();
 }
 
 export async function getImage(id: ID): Promise<ImageRecord | null> {
