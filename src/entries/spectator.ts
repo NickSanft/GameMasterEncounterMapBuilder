@@ -43,17 +43,6 @@ const renderer = createRenderer({
 
 attachPanZoom(renderer);
 
-const persistCameraDebounced = debounce(() => {
-  if (preferences.get().persistCamera) saveCamera('spectator', renderer.camera);
-}, 400);
-renderer.onCameraChange(persistCameraDebounced);
-
-preferences.subscribe((prefs) => {
-  applyPrefsToBody(prefs);
-  renderer.requestRender();
-  if (!prefs.persistCamera) clearCamera('spectator');
-  else persistCameraDebounced();
-});
 
 const settingsModal = mountSettingsModal({
   viewMode: 'spectator',
@@ -82,6 +71,37 @@ store.subscribe((patch) => {
   }
 });
 
+const FOLLOW_PAUSE_MS = 2000;
+
+let applyingRemoteCamera = false;
+let pauseFollowUntil = 0;
+
+const persistCameraDebounced = debounce(() => {
+  if (preferences.get().persistCamera) saveCamera('spectator', renderer.camera);
+}, 400);
+
+renderer.onCameraChange(() => {
+  persistCameraDebounced();
+  if (!applyingRemoteCamera) {
+    pauseFollowUntil = Date.now() + FOLLOW_PAUSE_MS;
+  }
+});
+
+preferences.subscribe((prefs) => {
+  applyPrefsToBody(prefs);
+  renderer.requestRender();
+  if (!prefs.persistCamera) clearCamera('spectator');
+  else persistCameraDebounced();
+});
+
+function applyRemoteCamera(camera: { x: number; y: number; zoom: number }) {
+  if (!preferences.get().followGmCamera) return;
+  if (Date.now() < pauseFollowUntil) return;
+  applyingRemoteCamera = true;
+  renderer.camera = { x: camera.x, y: camera.y, zoom: camera.zoom };
+  applyingRemoteCamera = false;
+}
+
 const channel = createSyncChannel();
 if (channel) {
   channel.onMessage((msg) => {
@@ -89,12 +109,21 @@ if (channel) {
       store.loadState(deserializeState(msg.state));
     } else if (msg.type === 'patch') {
       store.applyPatch(fromSerializablePatch(msg.patch));
+    } else if (msg.type === 'camera') {
+      applyRemoteCamera(msg.camera);
     }
   });
   channel.send({ type: 'hello', from: 'spectator' });
 } else {
   showSyncWarning();
 }
+
+preferences.subscribe((prefs) => {
+  if (prefs.followGmCamera && channel) {
+    pauseFollowUntil = 0;
+    channel.send({ type: 'request-camera' });
+  }
+});
 
 window.addEventListener('keydown', (e) => {
   if (isEditableFocus(e.target)) return;

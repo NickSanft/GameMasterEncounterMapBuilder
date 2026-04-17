@@ -1,5 +1,6 @@
 import type {
   Background,
+  Camera,
   GridConfig,
   SessionState,
   StatePatch,
@@ -22,7 +23,9 @@ export type SyncMessage =
   | { type: 'hello'; from: 'gm' | 'spectator' }
   | { type: 'full-state'; state: SerializedSessionState }
   | { type: 'patch'; patch: SerializablePatch }
-  | { type: 'request-full-state' };
+  | { type: 'request-full-state' }
+  | { type: 'camera'; camera: Camera }
+  | { type: 'request-camera' };
 
 export function serializeState(s: SessionState): SerializedSessionState {
   return {

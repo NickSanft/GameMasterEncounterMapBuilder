@@ -646,6 +646,15 @@ body.view {
   font-size: 0.85rem;
 }
 
+.settings-hint {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--fg-muted);
+  line-height: 1.4;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
 /* Reduced motion: zero out transitions and animations */
 body.reduced-motion *,
 body.reduced-motion *::before,

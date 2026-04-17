@@ -25,7 +25,7 @@ import { loadPersistedState, saveState } from '../state/persistence.js';
 import { exportSession, importSession } from '../state/export.js';
 import { createPreferences } from '../state/preferences.js';
 import { loadCamera, saveCamera, clearCamera } from '../state/camera-persistence.js';
-import { debounce } from '../util/debounce.js';
+import { debounce, rafThrottle } from '../util/debounce.js';
 import { createImageLoader } from '../images/loader.js';
 import { putImage } from '../images/store.js';
 import { hitTestToken } from '../input/hit-test.js';
@@ -225,16 +225,30 @@ canvas.addEventListener('contextmenu', (e) => {
 });
 
 const channel = createSyncChannel();
+
+function sendCameraIfBroadcasting() {
+  if (channel && preferences.get().broadcastCamera) {
+    channel.send({ type: 'camera', camera: renderer.camera });
+  }
+}
+
 if (channel) {
   channel.onMessage((msg) => {
     if (msg.type === 'hello' && msg.from === 'spectator') {
       channel.send({ type: 'full-state', state: serializeState(store.getState()) });
+      sendCameraIfBroadcasting();
     } else if (msg.type === 'request-full-state') {
       channel.send({ type: 'full-state', state: serializeState(store.getState()) });
+      sendCameraIfBroadcasting();
+    } else if (msg.type === 'request-camera') {
+      sendCameraIfBroadcasting();
     }
   });
   channel.send({ type: 'full-state', state: serializeState(store.getState()) });
 }
+
+const broadcastCameraThrottled = rafThrottle(sendCameraIfBroadcasting);
+renderer.onCameraChange(broadcastCameraThrottled);
 
 const persist = debounce(() => saveState(store.getState()), 200);
 

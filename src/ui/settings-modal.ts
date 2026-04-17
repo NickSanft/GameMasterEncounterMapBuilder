@@ -43,6 +43,8 @@ export function mountSettingsModal(
   const gmFogOpacityInput = modal.querySelector<HTMLInputElement>('[data-field="gmFogOpacity"]');
   const gmFogOpacityLabel = modal.querySelector<HTMLSpanElement>('[data-field="gmFogOpacityValue"]');
   const closeBtn = modal.querySelector<HTMLButtonElement>('.modal-close')!;
+  const broadcastCameraInput = modal.querySelector<HTMLInputElement>('[data-field="broadcastCamera"]');
+  const followGmCameraInput = modal.querySelector<HTMLInputElement>('[data-field="followGmCamera"]');
 
   function populate() {
     const state = store.getState();
@@ -59,6 +61,8 @@ export function mountSettingsModal(
     if (gmFogColorInput) gmFogColorInput.value = prefs.gmFogColor;
     if (gmFogOpacityInput) gmFogOpacityInput.value = String(Math.round(prefs.gmFogOpacity * 100));
     if (gmFogOpacityLabel) gmFogOpacityLabel.textContent = `${Math.round(prefs.gmFogOpacity * 100)}%`;
+    if (broadcastCameraInput) broadcastCameraInput.checked = prefs.broadcastCamera;
+    if (followGmCameraInput) followGmCameraInput.checked = prefs.followGmCamera;
   }
 
   function open() {
@@ -150,6 +154,18 @@ export function mountSettingsModal(
     });
   }
 
+  if (broadcastCameraInput) {
+    broadcastCameraInput.addEventListener('change', () => {
+      preferences.update({ broadcastCamera: broadcastCameraInput.checked });
+    });
+  }
+
+  if (followGmCameraInput) {
+    followGmCameraInput.addEventListener('change', () => {
+      preferences.update({ followGmCamera: followGmCameraInput.checked });
+    });
+  }
+
   closeBtn.addEventListener('click', close);
 
   backdrop.addEventListener('click', (e) => {
@@ -190,6 +206,26 @@ function renderModalHTML(viewMode: ViewMode): string {
           </div>
         </label>`
     : '';
+
+  const syncSection = viewMode === 'gm'
+    ? `
+      <section class="settings-section">
+        <h3>Sync</h3>
+        <label class="check">
+          <input type="checkbox" data-field="broadcastCamera" />
+          <span>Broadcast my camera to Spectator</span>
+        </label>
+        <p class="settings-hint">When on, your pan/zoom is mirrored to any Spectator tab that has "Follow GM camera" enabled.</p>
+      </section>`
+    : `
+      <section class="settings-section">
+        <h3>Sync</h3>
+        <label class="check">
+          <input type="checkbox" data-field="followGmCamera" />
+          <span>Follow GM's camera</span>
+        </label>
+        <p class="settings-hint">Requires the GM view to enable "Broadcast my camera". Panning or zooming here pauses following for 2 seconds.</p>
+      </section>`;
 
   return `
     <div class="modal-header">
@@ -245,6 +281,7 @@ function renderModalHTML(viewMode: ViewMode): string {
         </label>
         ${gmOnly}
       </section>
+      ${syncSection}
     </div>
   `;
 }

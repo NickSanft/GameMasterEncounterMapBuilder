@@ -44,3 +44,15 @@ export function debounce<Args extends unknown[]>(
 
   return debounced;
 }
+
+export function rafThrottle(fn: () => void): () => void {
+  let scheduled = false;
+  return () => {
+    if (scheduled) return;
+    scheduled = true;
+    requestAnimationFrame(() => {
+      scheduled = false;
+      fn();
+    });
+  };
+}
