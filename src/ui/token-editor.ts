@@ -4,6 +4,7 @@ import type { ID, Token } from '../state/types.js';
 import { putImage, getImageURL } from '../images/store.js';
 import type { ImageLoader } from '../images/loader.js';
 import { TEAM_PRESETS } from '../state/team-colors.js';
+import { attachFocusTrap, rememberFocus, restoreFocus } from '../util/focus.js';
 
 export interface TokenEditorHandle {
   openFor(token: Token): void;
@@ -26,6 +27,9 @@ export function mountTokenEditor(opts: TokenEditorOptions): TokenEditorHandle {
 
   const modal = document.createElement('div');
   modal.className = 'modal token-editor';
+  modal.setAttribute('role', 'dialog');
+  modal.setAttribute('aria-modal', 'true');
+  modal.setAttribute('aria-label', 'Edit Token');
   modal.innerHTML = `
     <div class="modal-header">
       <h2>Edit Token</h2>
@@ -56,13 +60,13 @@ export function mountTokenEditor(opts: TokenEditorOptions): TokenEditorHandle {
         </div>
       </label>
       <label>Border
-        <div class="border-row" data-field="border-swatches">
-          <button type="button" class="swatch swatch-none" data-border="" title="No border">×</button>
+        <div class="border-row" data-field="border-swatches" role="group" aria-label="Token border color">
+          <button type="button" class="swatch swatch-none" data-border="" title="No border" aria-label="No border">×</button>
           ${TEAM_PRESETS.map(
             (p) =>
-              `<button type="button" class="swatch" data-border="${p.color}" style="background:${p.color}" title="${p.label}"></button>`,
+              `<button type="button" class="swatch" data-border="${p.color}" style="background:${p.color}" title="${p.label}" aria-label="${p.label} border"></button>`,
           ).join('')}
-          <input type="color" class="border-color-input" data-field="borderColor" title="Custom color" />
+          <input type="color" class="border-color-input" data-field="borderColor" title="Custom color" aria-label="Custom border color" />
         </div>
       </label>
       <hr />
@@ -92,6 +96,9 @@ export function mountTokenEditor(opts: TokenEditorOptions): TokenEditorHandle {
   );
 
   let currentId: ID | null = null;
+  let triggerFocus: HTMLElement | null = null;
+
+  attachFocusTrap(modal);
 
   function currentToken(): Token | null {
     if (!currentId) return null;
@@ -114,6 +121,7 @@ export function mountTokenEditor(opts: TokenEditorOptions): TokenEditorHandle {
   }
 
   function openFor(token: Token) {
+    triggerFocus = rememberFocus();
     currentId = token.id;
     labelInput.value = token.label;
     colorInput.value = token.color;
@@ -141,6 +149,9 @@ export function mountTokenEditor(opts: TokenEditorOptions): TokenEditorHandle {
     currentId = null;
     backdrop.hidden = true;
     fileInput.value = '';
+    const prior = triggerFocus;
+    triggerFocus = null;
+    restoreFocus(prior);
   }
 
   function update(changes: Partial<Token>) {

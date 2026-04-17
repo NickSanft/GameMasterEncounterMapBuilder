@@ -252,10 +252,29 @@ renderer.onCameraChange(broadcastCameraThrottled);
 
 const persist = debounce(() => saveState(store.getState()), 200);
 
+function updateCanvasLabel() {
+  if (!canvas) return;
+  const state = store.getState();
+  const tokenCount = state.tokens.length;
+  const total = state.grid.cols * state.grid.rows;
+  let revealed = 0;
+  for (let i = 0; i < state.fog.length; i++) if (state.fog[i] === 1) revealed++;
+  const pct = total > 0 ? Math.round((revealed / total) * 100) : 0;
+  const tokenLabel = tokenCount === 1 ? '1 token' : `${tokenCount} tokens`;
+  canvas.setAttribute(
+    'aria-label',
+    `GM battle map. ${tokenLabel} placed. ${pct}% of fog revealed.`,
+  );
+}
+
+const updateCanvasLabelDebounced = debounce(updateCanvasLabel, 250);
+updateCanvasLabel();
+
 store.subscribe((patch) => {
   renderer.requestRender();
   persist();
   toolbarHandle.refreshActions();
+  updateCanvasLabelDebounced();
   if (!channel) return;
   if (patch) {
     channel.send({ type: 'patch', patch: toSerializablePatch(patch) });

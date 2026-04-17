@@ -12,6 +12,8 @@ export function mountSessionMenu(
 ): void {
   const menu = document.createElement('div');
   menu.className = 'session-menu';
+  menu.setAttribute('role', 'group');
+  menu.setAttribute('aria-label', 'Session menu');
 
   const uploadBtn = createButton('Upload Map', 'Upload a background image for this map');
   const bgFileInput = createFileInput('image/*');

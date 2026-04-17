@@ -61,9 +61,34 @@ mountZoomControls(document.body, {
 
 const persist = debounce(() => saveState(store.getState()), 200);
 
+function updateCanvasLabel() {
+  if (!canvas) return;
+  const state = store.getState();
+  const tokenCount = state.tokens.length;
+  const total = state.grid.cols * state.grid.rows;
+  let revealed = 0;
+  for (let i = 0; i < state.fog.length; i++) if (state.fog[i] === 1) revealed++;
+  const pct = total > 0 ? Math.round((revealed / total) * 100) : 0;
+  const visibleTokens = state.tokens.filter((t) => {
+    const gx = Math.floor(t.x);
+    const gy = Math.floor(t.y);
+    if (gx < 0 || gy < 0 || gx >= state.grid.cols || gy >= state.grid.rows) return false;
+    return state.fog[gy * state.grid.cols + gx] === 1;
+  }).length;
+  const tokenLabel = visibleTokens === 1 ? '1 token' : `${visibleTokens} tokens`;
+  canvas.setAttribute(
+    'aria-label',
+    `Spectator battle map. ${tokenLabel} visible. ${pct}% of map revealed. ${tokenCount} total tokens in session.`,
+  );
+}
+
+const updateCanvasLabelDebounced = debounce(updateCanvasLabel, 250);
+updateCanvasLabel();
+
 store.subscribe((patch) => {
   renderer.requestRender();
   persist();
+  updateCanvasLabelDebounced();
   if (patch?.kind === 'token-update' && patch.changes.imageId) {
     imageLoader.invalidate(patch.changes.imageId);
   } else if (patch?.kind === 'background-update' && patch.changes.imageId) {

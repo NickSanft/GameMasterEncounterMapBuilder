@@ -1,6 +1,7 @@
 import type { PreferencesStore, Preferences, LabelSize } from '../state/preferences.js';
 import type { Store } from '../state/store.js';
 import type { ViewMode } from '../state/types.js';
+import { attachFocusTrap, rememberFocus, restoreFocus, getFocusables } from '../util/focus.js';
 
 export interface SettingsModalHandle {
   open(): void;
@@ -24,9 +25,16 @@ export function mountSettingsModal(
 
   const modal = document.createElement('div');
   modal.className = 'modal settings-modal';
+  modal.setAttribute('role', 'dialog');
+  modal.setAttribute('aria-modal', 'true');
+  modal.setAttribute('aria-label', 'Settings');
   modal.innerHTML = renderModalHTML(viewMode);
   backdrop.appendChild(modal);
   document.body.appendChild(backdrop);
+
+  attachFocusTrap(modal);
+
+  let triggerFocus: HTMLElement | null = null;
 
   const colsInput = modal.querySelector<HTMLInputElement>('[data-field="cols"]')!;
   const rowsInput = modal.querySelector<HTMLInputElement>('[data-field="rows"]')!;
@@ -66,12 +74,20 @@ export function mountSettingsModal(
   }
 
   function open() {
+    triggerFocus = rememberFocus();
     populate();
     backdrop.hidden = false;
+    window.setTimeout(() => {
+      const focusables = getFocusables(modal);
+      if (focusables.length > 0) focusables[0]!.focus();
+    }, 0);
   }
 
   function close() {
     backdrop.hidden = true;
+    const prior = triggerFocus;
+    triggerFocus = null;
+    restoreFocus(prior);
   }
 
   function dispatchGrid(changes: Partial<Preferences>, gridChanges: Record<string, unknown>) {

@@ -11,12 +11,14 @@ export function mountZoomControls(
 ): void {
   const panel = document.createElement('div');
   panel.className = 'zoom-controls';
+  panel.setAttribute('role', 'group');
+  panel.setAttribute('aria-label', 'Camera controls');
 
-  const entries: Array<{ label: string; title: string; onClick: () => void }> = [
-    { label: '+', title: 'Zoom in (+ or =)', onClick: actions.onZoomIn },
-    { label: '−', title: 'Zoom out (−)', onClick: actions.onZoomOut },
-    { label: 'Fit', title: 'Fit content to screen (F)', onClick: actions.onFit },
-    { label: 'Reset', title: 'Reset camera (0)', onClick: actions.onReset },
+  const entries: Array<{ label: string; aria: string; title: string; onClick: () => void }> = [
+    { label: '+', aria: 'Zoom in', title: 'Zoom in (+ or =)', onClick: actions.onZoomIn },
+    { label: '−', aria: 'Zoom out', title: 'Zoom out (−)', onClick: actions.onZoomOut },
+    { label: 'Fit', aria: 'Fit content to screen', title: 'Fit content to screen (F)', onClick: actions.onFit },
+    { label: 'Reset', aria: 'Reset camera', title: 'Reset camera (0)', onClick: actions.onReset },
   ];
 
   for (const e of entries) {
@@ -24,6 +26,7 @@ export function mountZoomControls(
     btn.type = 'button';
     btn.textContent = e.label;
     btn.title = e.title;
+    btn.setAttribute('aria-label', e.aria);
     btn.addEventListener('click', () => {
       e.onClick();
       btn.blur();

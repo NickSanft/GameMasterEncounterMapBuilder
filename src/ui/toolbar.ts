@@ -26,6 +26,8 @@ export function mountToolbar(
 ): ToolbarHandle {
   const bar = document.createElement('div');
   bar.className = 'gm-toolbar';
+  bar.setAttribute('role', 'toolbar');
+  bar.setAttribute('aria-label', 'GM tools');
 
   const actionButtons = new Map<string, HTMLButtonElement>();
   if (actions.length > 0) {
@@ -35,7 +37,10 @@ export function mountToolbar(
       const btn = document.createElement('button');
       btn.type = 'button';
       btn.textContent = action.label;
-      if (action.title) btn.title = action.title;
+      if (action.title) {
+        btn.title = action.title;
+        btn.setAttribute('aria-label', action.title);
+      }
       btn.addEventListener('click', () => {
         action.onClick();
         btn.blur();
@@ -56,7 +61,11 @@ export function mountToolbar(
     btn.type = 'button';
     btn.textContent = entry.label;
     btn.dataset.tool = entry.id;
-    if (entry.title) btn.title = entry.title;
+    btn.setAttribute('aria-pressed', 'false');
+    if (entry.title) {
+      btn.title = entry.title;
+      btn.setAttribute('aria-label', entry.title);
+    }
     btn.addEventListener('click', () => {
       manager.setActive(entry.id);
       btn.blur();
@@ -69,7 +78,9 @@ export function mountToolbar(
 
   function syncTools(name: string | null) {
     for (const [id, btn] of toolButtons) {
-      btn.classList.toggle('active', id === name);
+      const active = id === name;
+      btn.classList.toggle('active', active);
+      btn.setAttribute('aria-pressed', active ? 'true' : 'false');
     }
   }
 
