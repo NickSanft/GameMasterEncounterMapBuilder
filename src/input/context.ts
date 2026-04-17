@@ -10,6 +10,7 @@ export interface InputContext {
   isSpaceHeld(): boolean;
   setWheelEnabled(enabled: boolean): void;
   selection: SelectionState;
+  dragOverlay: DragOverlayRef;
 }
 
 export interface SelectionState {
@@ -18,6 +19,20 @@ export interface SelectionState {
 
 export function createSelectionState(): SelectionState {
   return { ids: new Set<ID>() };
+}
+
+export interface DragOverlay {
+  id: ID;
+  deltaX: number;
+  deltaY: number;
+}
+
+export interface DragOverlayRef {
+  current: DragOverlay | null;
+}
+
+export function createDragOverlayRef(): DragOverlayRef {
+  return { current: null };
 }
 
 export function pointerToWorld(

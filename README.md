@@ -30,6 +30,7 @@ From the landing page, open the **GM View** on your own screen and the **Spectat
 - **Right-click a token** — open the token editor (label, color, size, image, delete).
 - **Ctrl/Cmd+Z** — undo (up to 50 steps). **Ctrl/Cmd+Shift+Z** or **Ctrl/Cmd+Y** — redo.
 - **Ctrl/Cmd+C / V / X** — copy, paste, cut selected tokens. **Ctrl/Cmd+D** — duplicate selection in place (offset one cell).
+- **Arrow keys / WASD** — move selected tokens by one cell (hold **Shift** for five). Drag/drop moves broadcast only on release.
 - **Escape** — close the token editor.
 
 ### Token editor

@@ -4,7 +4,7 @@ import { hitTestToken } from './hit-test.js';
 import { pointerToWorld } from './context.js';
 
 export function createSelectTool(ctx: InputContext): Tool {
-  const { canvas, renderer, store, selection } = ctx;
+  const { canvas, renderer, store, selection, dragOverlay } = ctx;
   let draggingId: string | null = null;
   let dragOffsetX = 0;
   let dragOffsetY = 0;
@@ -13,18 +13,18 @@ export function createSelectTool(ctx: InputContext): Tool {
   function onPointerDown(e: PointerEvent) {
     if (e.button !== 0 || ctx.isSpaceHeld()) return;
     const world = pointerToWorld(canvas, renderer, e);
-    const grid = store.getState().grid;
-    const tokens = store.getState().tokens;
-    const hit = hitTestToken(tokens, grid, world.x, world.y);
+    const state = store.getState();
+    const hit = hitTestToken(state.tokens, state.grid, world.x, world.y);
 
     if (hit) {
       selection.ids = new Set([hit.id]);
       draggingId = hit.id;
       activePointerId = e.pointerId;
-      const gridX = world.x / grid.cellSize;
-      const gridY = world.y / grid.cellSize;
+      const gridX = world.x / state.grid.cellSize;
+      const gridY = world.y / state.grid.cellSize;
       dragOffsetX = gridX - hit.x;
       dragOffsetY = gridY - hit.y;
+      dragOverlay.current = { id: hit.id, deltaX: 0, deltaY: 0 };
       canvas.setPointerCapture(e.pointerId);
       renderer.requestRender();
       e.preventDefault();
@@ -37,37 +37,47 @@ export function createSelectTool(ctx: InputContext): Tool {
   function onPointerMove(e: PointerEvent) {
     if (draggingId === null || e.pointerId !== activePointerId) return;
     const world = pointerToWorld(canvas, renderer, e);
-    const grid = store.getState().grid;
-    const gridX = world.x / grid.cellSize - dragOffsetX;
-    const gridY = world.y / grid.cellSize - dragOffsetY;
-    store.applyPatch({
-      kind: 'token-update',
+    const state = store.getState();
+    const token = state.tokens.find((t) => t.id === draggingId);
+    if (!token) return;
+    const targetGridX = world.x / state.grid.cellSize - dragOffsetX;
+    const targetGridY = world.y / state.grid.cellSize - dragOffsetY;
+    dragOverlay.current = {
       id: draggingId,
-      changes: { x: gridX, y: gridY },
-    });
+      deltaX: targetGridX - token.x,
+      deltaY: targetGridY - token.y,
+    };
+    renderer.requestRender();
   }
 
   function endDrag(e: PointerEvent) {
     if (draggingId === null || e.pointerId !== activePointerId) return;
-    const token = store.getState().tokens.find((t) => t.id === draggingId);
-    if (token) {
-      const snappedX = Math.round(token.x);
-      const snappedY = Math.round(token.y);
-      if (snappedX !== token.x || snappedY !== token.y) {
-        store.applyPatch({
-          kind: 'token-update',
-          id: draggingId,
-          changes: { x: snappedX, y: snappedY },
-        });
-      }
-    }
+    const id = draggingId;
+    const overlay = dragOverlay.current;
     draggingId = null;
     activePointerId = null;
+    dragOverlay.current = null;
     try {
       canvas.releasePointerCapture(e.pointerId);
     } catch {
       /* no-op */
     }
+
+    if (overlay && (overlay.deltaX !== 0 || overlay.deltaY !== 0)) {
+      const token = store.getState().tokens.find((t) => t.id === id);
+      if (token) {
+        const snappedX = Math.round(token.x + overlay.deltaX);
+        const snappedY = Math.round(token.y + overlay.deltaY);
+        if (snappedX !== token.x || snappedY !== token.y) {
+          store.applyPatch({
+            kind: 'token-update',
+            id,
+            changes: { x: snappedX, y: snappedY },
+          });
+        }
+      }
+    }
+    renderer.requestRender();
   }
 
   function onKeyDown(e: KeyboardEvent) {
@@ -108,6 +118,10 @@ export function createSelectTool(ctx: InputContext): Tool {
       window.removeEventListener('keydown', onKeyDown);
       if (selection.ids.size > 0) {
         selection.ids = new Set();
+        renderer.requestRender();
+      }
+      if (dragOverlay.current) {
+        dragOverlay.current = null;
         renderer.requestRender();
       }
       draggingId = null;

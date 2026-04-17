@@ -15,6 +15,7 @@ import {
 } from './layer-fog.js';
 import { drawBackground, type ImageProvider } from './layer-background.js';
 import type { Preferences } from '../state/preferences.js';
+import type { DragOverlay } from '../input/context.js';
 
 export interface Renderer {
   readonly canvas: HTMLCanvasElement;
@@ -36,6 +37,7 @@ interface CreateRendererOptions {
   getFogHoverPreview?(): FogHoverPreview | null;
   getImage?: ImageProvider;
   getPreferences?(): Preferences;
+  getDragOverlay?(): DragOverlay | null;
 }
 
 const EMPTY_HIGHLIGHT: ReadonlySet<ID> = new Set();
@@ -58,6 +60,7 @@ export function createRenderer(opts: CreateRendererOptions): Renderer {
     getFogHoverPreview,
     getImage = NO_IMAGE,
     getPreferences,
+    getDragOverlay,
   } = opts;
   const maybeCtx = canvas.getContext('2d');
   if (!maybeCtx) throw new Error('2D canvas context unavailable');
@@ -101,10 +104,12 @@ export function createRenderer(opts: CreateRendererOptions): Renderer {
     ctx.scale(camera.zoom, camera.zoom);
     drawBackground(ctx, state.background, state.grid, getImage);
     drawGrid(ctx, state.grid, { highContrast });
+    const dragOverlay = getDragOverlay ? getDragOverlay() : null;
     drawTokens(ctx, state, highlights, getImage, {
       labelSize,
       showColorblindMarkers,
       mode,
+      dragOverlay,
     });
     drawFog(ctx, state, mode, { gmColor: gmFogColor, gmOpacity: gmFogOpacity });
     const preview = getFogPreview ? getFogPreview() : null;

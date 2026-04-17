@@ -2,7 +2,7 @@ import { createRenderer } from '../render/renderer.js';
 import { attachPanZoom } from '../input/pan-zoom.js';
 import { createStore } from '../state/store.js';
 import { DEFAULT_CAMERA } from '../state/types.js';
-import { createSelectionState } from '../input/context.js';
+import { createSelectionState, createDragOverlayRef } from '../input/context.js';
 import { createToolManager } from '../input/tool-manager.js';
 import { createSelectTool } from '../input/tool-select.js';
 import { createTokenTool } from '../input/tool-token.js';
@@ -53,6 +53,7 @@ applyPrefsToBody(preferences.get());
 const initial = loadPersistedState();
 const store = createStore(initial ?? undefined);
 const selection = createSelectionState();
+const dragOverlayRef = createDragOverlayRef();
 const fogPreviewRef = createFogPreviewRef();
 const fogOptionsRef = createFogOptionsRef();
 const fogHoverRef = createFogHoverRef();
@@ -73,6 +74,7 @@ const renderer = createRenderer({
   getFogHoverPreview: () => fogHoverRef.current,
   getImage: (id) => imageLoader.get(id),
   getPreferences: () => preferences.get(),
+  getDragOverlay: () => dragOverlayRef.current,
 });
 
 panZoomRef.handle = attachPanZoom(renderer);
@@ -94,6 +96,7 @@ const inputContext = {
   renderer,
   store,
   selection,
+  dragOverlay: dragOverlayRef,
   isSpaceHeld: () => panZoomRef.handle?.isSpaceHeld() ?? false,
   setWheelEnabled: (enabled: boolean) => panZoomRef.handle?.setWheelEnabled(enabled),
 };
@@ -354,6 +357,24 @@ function duplicateSelection(): boolean {
   return true;
 }
 
+function moveSelection(dx: number, dy: number): boolean {
+  if (selection.ids.size === 0) return false;
+  const tokens = store.getState().tokens;
+  let moved = false;
+  for (const id of selection.ids) {
+    const t = tokens.find((t) => t.id === id);
+    if (!t) continue;
+    store.applyPatch({
+      kind: 'token-update',
+      id,
+      changes: { x: t.x + dx, y: t.y + dy },
+    });
+    moved = true;
+  }
+  if (moved) renderer.requestRender();
+  return moved;
+}
+
 window.addEventListener('keydown', (e) => {
   if (isEditableFocus(e.target)) return;
 
@@ -408,6 +429,28 @@ window.addEventListener('keydown', (e) => {
     fitToContent(renderer, store.getState(), (id) => imageLoader.get(id));
     e.preventDefault();
     return;
+  }
+
+  // Move selected tokens with arrow keys or WASD (shift = 5 cells).
+  if (selection.ids.size > 0 && !e.altKey) {
+    const step = e.shiftKey ? 5 : 1;
+    const key = e.key.toLowerCase();
+    if (e.key === 'ArrowUp' || key === 'w') {
+      if (moveSelection(0, -step)) e.preventDefault();
+      return;
+    }
+    if (e.key === 'ArrowDown' || key === 's') {
+      if (moveSelection(0, step)) e.preventDefault();
+      return;
+    }
+    if (e.key === 'ArrowLeft' || key === 'a') {
+      if (moveSelection(-step, 0)) e.preventDefault();
+      return;
+    }
+    if (e.key === 'ArrowRight' || key === 'd') {
+      if (moveSelection(step, 0)) e.preventDefault();
+      return;
+    }
   }
 
   if (e.altKey || e.shiftKey) return;

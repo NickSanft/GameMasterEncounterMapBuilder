@@ -3,6 +3,7 @@ import type { ImageProvider } from './layer-background.js';
 import type { LabelSize } from '../state/preferences.js';
 import { shapeForBorderColor, type MarkerShape } from '../state/team-colors.js';
 import { isTokenFullyHidden } from './fog-visibility.js';
+import type { DragOverlay } from '../input/context.js';
 
 const NO_IMAGE: ImageProvider = () => null;
 
@@ -16,6 +17,7 @@ export interface TokenRenderOptions {
   labelSize: LabelSize;
   showColorblindMarkers: boolean;
   mode: ViewMode;
+  dragOverlay?: DragOverlay | null;
 }
 
 const DEFAULT_OPTIONS: TokenRenderOptions = {
@@ -23,6 +25,12 @@ const DEFAULT_OPTIONS: TokenRenderOptions = {
   showColorblindMarkers: false,
   mode: 'gm',
 };
+
+function withOverlay(token: Token, overlay: DragOverlay | null | undefined): Token {
+  if (!overlay || overlay.id !== token.id) return token;
+  if (overlay.deltaX === 0 && overlay.deltaY === 0) return token;
+  return { ...token, x: token.x + overlay.deltaX, y: token.y + overlay.deltaY };
+}
 
 export function drawTokens(
   ctx: CanvasRenderingContext2D,
@@ -33,13 +41,15 @@ export function drawTokens(
 ): void {
   const { cellSize } = state.grid;
   const labelScale = LABEL_SIZE_MULTIPLIER[options.labelSize];
+  const overlay = options.dragOverlay ?? null;
 
   const unselected: Token[] = [];
   const selected: Token[] = [];
   for (const t of state.tokens) {
     if (options.mode === 'spectator' && isTokenFullyHidden(t, state)) continue;
-    if (highlightIds.has(t.id)) selected.push(t);
-    else unselected.push(t);
+    const display = withOverlay(t, overlay);
+    if (highlightIds.has(t.id)) selected.push(display);
+    else unselected.push(display);
   }
 
   for (const t of unselected) {
