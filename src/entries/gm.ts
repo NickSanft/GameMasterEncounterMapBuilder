@@ -30,6 +30,8 @@ import { createImageLoader } from '../images/loader.js';
 import { putImage } from '../images/store.js';
 import { hitTestToken } from '../input/hit-test.js';
 import { screenToWorld } from '../render/coords.js';
+import { duplicateTokens } from '../state/token-clipboard.js';
+import type { Token } from '../state/types.js';
 import {
   zoomBy,
   fitToContent,
@@ -283,6 +285,53 @@ store.subscribe((patch) => {
   }
 });
 
+let tokenClipboard: Token[] = [];
+
+function selectedTokens(): Token[] {
+  const state = store.getState();
+  return state.tokens.filter((t) => selection.ids.has(t.id));
+}
+
+function copySelection(): boolean {
+  const sel = selectedTokens();
+  if (sel.length === 0) return false;
+  tokenClipboard = sel.map((t) => ({ ...t }));
+  return true;
+}
+
+function pasteClipboard(): boolean {
+  if (tokenClipboard.length === 0) return false;
+  const copies = duplicateTokens(tokenClipboard);
+  for (const token of copies) {
+    store.applyPatch({ kind: 'token-add', token });
+  }
+  selection.ids = new Set(copies.map((t) => t.id));
+  renderer.requestRender();
+  return true;
+}
+
+function cutSelection(): boolean {
+  if (!copySelection()) return false;
+  for (const id of selection.ids) {
+    store.applyPatch({ kind: 'token-remove', id });
+  }
+  selection.ids = new Set();
+  renderer.requestRender();
+  return true;
+}
+
+function duplicateSelection(): boolean {
+  const sel = selectedTokens();
+  if (sel.length === 0) return false;
+  const copies = duplicateTokens(sel);
+  for (const token of copies) {
+    store.applyPatch({ kind: 'token-add', token });
+  }
+  selection.ids = new Set(copies.map((t) => t.id));
+  renderer.requestRender();
+  return true;
+}
+
 window.addEventListener('keydown', (e) => {
   if (isEditableFocus(e.target)) return;
 
@@ -297,6 +346,22 @@ window.addEventListener('keydown', (e) => {
     if (key === 'y') {
       store.redo();
       e.preventDefault();
+      return;
+    }
+    if (key === 'c') {
+      if (copySelection()) e.preventDefault();
+      return;
+    }
+    if (key === 'v') {
+      if (pasteClipboard()) e.preventDefault();
+      return;
+    }
+    if (key === 'x') {
+      if (cutSelection()) e.preventDefault();
+      return;
+    }
+    if (key === 'd') {
+      if (duplicateSelection()) e.preventDefault();
       return;
     }
     return;
