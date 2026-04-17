@@ -9,10 +9,14 @@ import { createTokenTool } from '../input/tool-token.js';
 import { createFogTool, createFogPreviewRef } from '../input/tool-fog.js';
 import { mountToolbar } from '../ui/toolbar.js';
 import { mountSessionMenu } from '../ui/session-menu.js';
+import { mountTokenEditor } from '../ui/token-editor.js';
 import { createSyncChannel } from '../sync/channel.js';
 import { serializeState, toSerializablePatch } from '../sync/messages.js';
 import { loadPersistedState, saveState } from '../state/persistence.js';
 import { debounce } from '../util/debounce.js';
+import { createImageLoader } from '../images/loader.js';
+import { hitTestToken } from '../input/hit-test.js';
+import { screenToWorld } from '../render/coords.js';
 
 const canvas = document.getElementById('canvas') as HTMLCanvasElement | null;
 if (!canvas) throw new Error('Canvas element #canvas not found');
@@ -24,6 +28,8 @@ const fogPreviewRef = createFogPreviewRef();
 
 const panZoomRef: { handle: { isSpaceHeld(): boolean } | null } = { handle: null };
 
+const imageLoader = createImageLoader(() => renderer.requestRender());
+
 const renderer = createRenderer({
   canvas,
   mode: 'gm',
@@ -31,6 +37,7 @@ const renderer = createRenderer({
   getState: () => store.getState(),
   getHighlightIds: () => selection.ids,
   getFogPreview: () => fogPreviewRef.current,
+  getTokenImage: (id) => imageLoader.get(id),
 });
 
 panZoomRef.handle = attachPanZoom(renderer);
@@ -50,7 +57,7 @@ toolManager.register(createFogTool(inputContext, 'reveal', fogPreviewRef));
 toolManager.register(createFogTool(inputContext, 'hide', fogPreviewRef));
 
 mountToolbar(document.body, toolManager, [
-  { id: 'select', label: 'Select', title: 'Click tokens to select. Drag to move.' },
+  { id: 'select', label: 'Select', title: 'Click tokens to select. Drag to move. Right-click to edit.' },
   { id: 'token', label: 'Token', title: 'Click a cell to place a token.' },
   { id: 'fog-reveal', label: 'Reveal', title: 'Drag a rectangle to reveal cells.' },
   { id: 'fog-hide', label: 'Hide', title: 'Drag a rectangle to hide cells.' },
@@ -62,6 +69,29 @@ mountSessionMenu(document.body, {
   onNewSession: () => {
     store.resetSession();
   },
+});
+
+const tokenEditor = mountTokenEditor({
+  store,
+  selection,
+  imageLoader,
+});
+
+canvas.addEventListener('contextmenu', (e) => {
+  e.preventDefault();
+  const rect = canvas.getBoundingClientRect();
+  const world = screenToWorld(
+    renderer.camera,
+    e.clientX - rect.left,
+    e.clientY - rect.top,
+  );
+  const state = store.getState();
+  const hit = hitTestToken(state.tokens, state.grid, world.x, world.y);
+  if (hit) {
+    selection.ids = new Set([hit.id]);
+    renderer.requestRender();
+    tokenEditor.openFor(hit);
+  }
 });
 
 const channel = createSyncChannel();

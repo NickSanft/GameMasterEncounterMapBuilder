@@ -6,6 +6,7 @@ import { createSyncChannel } from '../sync/channel.js';
 import { deserializeState, fromSerializablePatch } from '../sync/messages.js';
 import { loadPersistedState, saveState } from '../state/persistence.js';
 import { debounce } from '../util/debounce.js';
+import { createImageLoader } from '../images/loader.js';
 
 const canvas = document.getElementById('canvas') as HTMLCanvasElement | null;
 if (!canvas) throw new Error('Canvas element #canvas not found');
@@ -13,20 +14,26 @@ if (!canvas) throw new Error('Canvas element #canvas not found');
 const initial = loadPersistedState();
 const store = createStore(initial ?? undefined);
 
+const imageLoader = createImageLoader(() => renderer.requestRender());
+
 const renderer = createRenderer({
   canvas,
   mode: 'spectator',
   camera: { ...DEFAULT_CAMERA },
   getState: () => store.getState(),
+  getTokenImage: (id) => imageLoader.get(id),
 });
 
 attachPanZoom(renderer);
 
 const persist = debounce(() => saveState(store.getState()), 200);
 
-store.subscribe(() => {
+store.subscribe((patch) => {
   renderer.requestRender();
   persist();
+  if (patch?.kind === 'token-update' && patch.changes.imageId) {
+    imageLoader.invalidate(patch.changes.imageId);
+  }
 });
 
 const channel = createSyncChannel();

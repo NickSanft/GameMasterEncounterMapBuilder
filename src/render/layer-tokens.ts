@@ -1,13 +1,18 @@
 import type { ID, SessionState, Token } from '../state/types.js';
 
+export type TokenImageProvider = (id: ID) => HTMLImageElement | null;
+
+const NO_IMAGE: TokenImageProvider = () => null;
+
 export function drawTokens(
   ctx: CanvasRenderingContext2D,
   state: SessionState,
   highlightIds: ReadonlySet<ID>,
+  getImage: TokenImageProvider = NO_IMAGE,
 ): void {
   const { cellSize } = state.grid;
   for (const token of state.tokens) {
-    drawToken(ctx, token, cellSize, highlightIds.has(token.id));
+    drawToken(ctx, token, cellSize, highlightIds.has(token.id), getImage);
   }
 }
 
@@ -16,16 +21,30 @@ function drawToken(
   t: Token,
   cellSize: number,
   highlighted: boolean,
+  getImage: TokenImageProvider,
 ): void {
   const cx = (t.x + t.size / 2) * cellSize;
   const cy = (t.y + t.size / 2) * cellSize;
   const r = (t.size * cellSize) / 2 - 4;
 
+  const img = t.imageId ? getImage(t.imageId) : null;
+
+  if (img) {
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.clip();
+    ctx.drawImage(img, cx - r, cy - r, r * 2, r * 2);
+    ctx.restore();
+  } else {
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.fillStyle = t.color;
+    ctx.fill();
+  }
+
   ctx.beginPath();
   ctx.arc(cx, cy, r, 0, Math.PI * 2);
-  ctx.fillStyle = t.color;
-  ctx.fill();
-
   ctx.lineWidth = 2;
   ctx.strokeStyle = 'rgba(0, 0, 0, 0.45)';
   ctx.stroke();
