@@ -1,14 +1,13 @@
 import type { ID, SessionState, Token } from '../state/types.js';
+import type { ImageProvider } from './layer-background.js';
 
-export type TokenImageProvider = (id: ID) => HTMLImageElement | null;
-
-const NO_IMAGE: TokenImageProvider = () => null;
+const NO_IMAGE: ImageProvider = () => null;
 
 export function drawTokens(
   ctx: CanvasRenderingContext2D,
   state: SessionState,
   highlightIds: ReadonlySet<ID>,
-  getImage: TokenImageProvider = NO_IMAGE,
+  getImage: ImageProvider = NO_IMAGE,
 ): void {
   const { cellSize } = state.grid;
   for (const token of state.tokens) {
@@ -21,7 +20,7 @@ function drawToken(
   t: Token,
   cellSize: number,
   highlighted: boolean,
-  getImage: TokenImageProvider,
+  getImage: ImageProvider,
 ): void {
   const cx = (t.x + t.size / 2) * cellSize;
   const cy = (t.y + t.size / 2) * cellSize;

@@ -21,7 +21,8 @@ export interface Background {
   imageId: ID | null;
   offsetX: number;
   offsetY: number;
-  scale: number;
+  scaleX: number;
+  scaleY: number;
 }
 
 export interface SessionState {
@@ -60,7 +61,8 @@ export const DEFAULT_BACKGROUND: Background = {
   imageId: null,
   offsetX: 0,
   offsetY: 0,
-  scale: 1,
+  scaleX: 1,
+  scaleY: 1,
 };
 
 export const DEFAULT_CAMERA: Camera = {

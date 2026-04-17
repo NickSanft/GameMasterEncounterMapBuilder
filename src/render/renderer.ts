@@ -5,8 +5,9 @@ import type {
   ViewMode,
 } from '../state/types.js';
 import { drawGrid } from './layer-grid.js';
-import { drawTokens, type TokenImageProvider } from './layer-tokens.js';
+import { drawTokens } from './layer-tokens.js';
 import { drawFog, drawFogPreview, type FogPreview } from './layer-fog.js';
+import { drawBackground, type ImageProvider } from './layer-background.js';
 
 export interface Renderer {
   readonly canvas: HTMLCanvasElement;
@@ -24,10 +25,11 @@ interface CreateRendererOptions {
   getState(): SessionState;
   getHighlightIds?(): ReadonlySet<ID>;
   getFogPreview?(): FogPreview | null;
-  getTokenImage?: TokenImageProvider;
+  getImage?: ImageProvider;
 }
 
 const EMPTY_HIGHLIGHT: ReadonlySet<ID> = new Set();
+const NO_IMAGE: ImageProvider = () => null;
 
 export function createRenderer(opts: CreateRendererOptions): Renderer {
   const {
@@ -36,7 +38,7 @@ export function createRenderer(opts: CreateRendererOptions): Renderer {
     getState,
     getHighlightIds,
     getFogPreview,
-    getTokenImage,
+    getImage = NO_IMAGE,
   } = opts;
   const maybeCtx = canvas.getContext('2d');
   if (!maybeCtx) throw new Error('2D canvas context unavailable');
@@ -71,8 +73,9 @@ export function createRenderer(opts: CreateRendererOptions): Renderer {
     ctx.save();
     ctx.translate(-camera.x * camera.zoom, -camera.y * camera.zoom);
     ctx.scale(camera.zoom, camera.zoom);
+    drawBackground(ctx, state.background, state.grid, getImage);
     drawGrid(ctx, state.grid);
-    drawTokens(ctx, state, highlights, getTokenImage);
+    drawTokens(ctx, state, highlights, getImage);
     drawFog(ctx, state, mode);
     const preview = getFogPreview ? getFogPreview() : null;
     if (preview) drawFogPreview(ctx, preview, state.grid.cellSize);

@@ -9,12 +9,14 @@ export interface PanZoomHandle {
   destroy(): void;
   isPanning(): boolean;
   isSpaceHeld(): boolean;
+  setWheelEnabled(enabled: boolean): void;
 }
 
 export function attachPanZoom(renderer: Renderer): PanZoomHandle {
   const canvas = renderer.canvas;
   let spaceHeld = false;
   let panning = false;
+  let wheelEnabled = true;
   let lastX = 0;
   let lastY = 0;
   let activePointerId: number | null = null;
@@ -25,6 +27,7 @@ export function attachPanZoom(renderer: Renderer): PanZoomHandle {
   }
 
   function onWheel(e: WheelEvent) {
+    if (!wheelEnabled) return;
     e.preventDefault();
     const { x: sx, y: sy } = canvasPoint(e);
     const camera = renderer.camera;
@@ -124,6 +127,9 @@ export function attachPanZoom(renderer: Renderer): PanZoomHandle {
     },
     isSpaceHeld() {
       return spaceHeld;
+    },
+    setWheelEnabled(enabled: boolean) {
+      wheelEnabled = enabled;
     },
   };
 }

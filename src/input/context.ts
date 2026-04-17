@@ -8,6 +8,7 @@ export interface InputContext {
   renderer: Renderer;
   store: Store;
   isSpaceHeld(): boolean;
+  setWheelEnabled(enabled: boolean): void;
   selection: SelectionState;
 }
 

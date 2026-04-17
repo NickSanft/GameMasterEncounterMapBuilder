@@ -21,7 +21,7 @@ const renderer = createRenderer({
   mode: 'spectator',
   camera: { ...DEFAULT_CAMERA },
   getState: () => store.getState(),
-  getTokenImage: (id) => imageLoader.get(id),
+  getImage: (id) => imageLoader.get(id),
 });
 
 attachPanZoom(renderer);
@@ -32,6 +32,8 @@ store.subscribe((patch) => {
   renderer.requestRender();
   persist();
   if (patch?.kind === 'token-update' && patch.changes.imageId) {
+    imageLoader.invalidate(patch.changes.imageId);
+  } else if (patch?.kind === 'background-update' && patch.changes.imageId) {
     imageLoader.invalidate(patch.changes.imageId);
   }
 });

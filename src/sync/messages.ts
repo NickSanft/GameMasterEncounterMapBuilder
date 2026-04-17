@@ -35,10 +35,21 @@ export function serializeState(s: SessionState): SerializedSessionState {
 }
 
 export function deserializeState(s: SerializedSessionState): SessionState {
+  const bg = s.background as Background & { scale?: number };
+  const scaleX =
+    typeof bg.scaleX === 'number' ? bg.scaleX : typeof bg.scale === 'number' ? bg.scale : 1;
+  const scaleY =
+    typeof bg.scaleY === 'number' ? bg.scaleY : typeof bg.scale === 'number' ? bg.scale : 1;
   return {
     version: s.version,
     grid: { ...s.grid },
-    background: { ...s.background },
+    background: {
+      imageId: bg.imageId ?? null,
+      offsetX: bg.offsetX ?? 0,
+      offsetY: bg.offsetY ?? 0,
+      scaleX,
+      scaleY,
+    },
     tokens: s.tokens.map((t) => ({ ...t })),
     fog: Uint8Array.from(s.fog),
   };

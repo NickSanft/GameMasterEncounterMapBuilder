@@ -7,10 +7,12 @@ export function drawGrid(
   const mapW = grid.cols * grid.cellSize;
   const mapH = grid.rows * grid.cellSize;
 
-  ctx.fillStyle = '#2a2d34';
-  ctx.fillRect(0, 0, mapW, mapH);
-
-  if (!grid.showGridLines) return;
+  if (!grid.showGridLines) {
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
+    ctx.strokeRect(0, 0, mapW, mapH);
+    return;
+  }
 
   ctx.lineWidth = 1;
   ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';

@@ -7,6 +7,7 @@ import { createToolManager } from '../input/tool-manager.js';
 import { createSelectTool } from '../input/tool-select.js';
 import { createTokenTool } from '../input/tool-token.js';
 import { createFogTool, createFogPreviewRef } from '../input/tool-fog.js';
+import { createBackgroundTool } from '../input/tool-background.js';
 import { mountToolbar } from '../ui/toolbar.js';
 import { mountSessionMenu } from '../ui/session-menu.js';
 import { mountTokenEditor } from '../ui/token-editor.js';
@@ -15,8 +16,10 @@ import { serializeState, toSerializablePatch } from '../sync/messages.js';
 import { loadPersistedState, saveState } from '../state/persistence.js';
 import { debounce } from '../util/debounce.js';
 import { createImageLoader } from '../images/loader.js';
+import { putImage } from '../images/store.js';
 import { hitTestToken } from '../input/hit-test.js';
 import { screenToWorld } from '../render/coords.js';
+import type { PanZoomHandle } from '../input/pan-zoom.js';
 
 const canvas = document.getElementById('canvas') as HTMLCanvasElement | null;
 if (!canvas) throw new Error('Canvas element #canvas not found');
@@ -26,7 +29,7 @@ const store = createStore(initial ?? undefined);
 const selection = createSelectionState();
 const fogPreviewRef = createFogPreviewRef();
 
-const panZoomRef: { handle: { isSpaceHeld(): boolean } | null } = { handle: null };
+const panZoomRef: { handle: PanZoomHandle | null } = { handle: null };
 
 const imageLoader = createImageLoader(() => renderer.requestRender());
 
@@ -37,7 +40,7 @@ const renderer = createRenderer({
   getState: () => store.getState(),
   getHighlightIds: () => selection.ids,
   getFogPreview: () => fogPreviewRef.current,
-  getTokenImage: (id) => imageLoader.get(id),
+  getImage: (id) => imageLoader.get(id),
 });
 
 panZoomRef.handle = attachPanZoom(renderer);
@@ -48,6 +51,7 @@ const inputContext = {
   store,
   selection,
   isSpaceHeld: () => panZoomRef.handle?.isSpaceHeld() ?? false,
+  setWheelEnabled: (enabled: boolean) => panZoomRef.handle?.setWheelEnabled(enabled),
 };
 
 const toolManager = createToolManager(canvas);
@@ -55,12 +59,14 @@ toolManager.register(createSelectTool(inputContext));
 toolManager.register(createTokenTool(inputContext));
 toolManager.register(createFogTool(inputContext, 'reveal', fogPreviewRef));
 toolManager.register(createFogTool(inputContext, 'hide', fogPreviewRef));
+toolManager.register(createBackgroundTool(inputContext));
 
 mountToolbar(document.body, toolManager, [
   { id: 'select', label: 'Select', title: 'Click tokens to select. Drag to move. Right-click to edit.' },
   { id: 'token', label: 'Token', title: 'Click a cell to place a token.' },
   { id: 'fog-reveal', label: 'Reveal', title: 'Drag a rectangle to reveal cells.' },
   { id: 'fog-hide', label: 'Hide', title: 'Drag a rectangle to hide cells.' },
+  { id: 'background', label: 'Map', title: 'Drag to move the background, wheel to scale.' },
 ]);
 
 toolManager.setActive('select');
@@ -68,6 +74,25 @@ toolManager.setActive('select');
 mountSessionMenu(document.body, {
   onNewSession: () => {
     store.resetSession();
+  },
+  onUploadBackground: async (file) => {
+    try {
+      const { width, height } = await readImageDimensions(file);
+      const id = await putImage(file, file.type || 'image/png');
+      imageLoader.invalidate(id);
+      const { grid } = store.getState();
+      const gridW = grid.cols * grid.cellSize;
+      const gridH = grid.rows * grid.cellSize;
+      const scaleX = gridW / width;
+      const scaleY = gridH / height;
+      store.applyPatch({
+        kind: 'background-update',
+        changes: { imageId: id, offsetX: 0, offsetY: 0, scaleX, scaleY },
+      });
+    } catch (err) {
+      console.error('[gm] upload background failed', err);
+      window.alert('Failed to upload background image.');
+    }
   },
 });
 
@@ -117,3 +142,20 @@ store.subscribe((patch) => {
 });
 
 window.addEventListener('beforeunload', () => persist.flush());
+
+function readImageDimensions(file: File): Promise<{ width: number; height: number }> {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      const dims = { width: img.naturalWidth, height: img.naturalHeight };
+      URL.revokeObjectURL(url);
+      resolve(dims);
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error('Could not read image dimensions'));
+    };
+    img.src = url;
+  });
+}
