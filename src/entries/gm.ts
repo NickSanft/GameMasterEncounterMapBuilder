@@ -18,6 +18,7 @@ import { mountSessionMenu } from '../ui/session-menu.js';
 import { mountTokenEditor } from '../ui/token-editor.js';
 import { mountFogSettings } from '../ui/fog-settings.js';
 import { mountSettingsModal } from '../ui/settings-modal.js';
+import { mountZoomControls } from '../ui/zoom-controls.js';
 import { createSyncChannel } from '../sync/channel.js';
 import { serializeState, toSerializablePatch } from '../sync/messages.js';
 import { loadPersistedState, saveState } from '../state/persistence.js';
@@ -29,8 +30,15 @@ import { createImageLoader } from '../images/loader.js';
 import { putImage } from '../images/store.js';
 import { hitTestToken } from '../input/hit-test.js';
 import { screenToWorld } from '../render/coords.js';
+import {
+  zoomBy,
+  fitToContent,
+  resetCamera,
+  ZOOM_BUTTON_STEP,
+} from '../render/camera-controls.js';
 import type { PanZoomHandle } from '../input/pan-zoom.js';
 import { EXPORT_FILENAME_PREFIX } from '../util/constants.js';
+import { isEditableFocus } from '../util/focus.js';
 
 const canvas = document.getElementById('canvas') as HTMLCanvasElement | null;
 if (!canvas) throw new Error('Canvas element #canvas not found');
@@ -93,17 +101,44 @@ toolManager.register(createFogTool(inputContext, 'reveal', fogPreviewRef, fogOpt
 toolManager.register(createFogTool(inputContext, 'hide', fogPreviewRef, fogOptionsRef, fogHoverRef));
 toolManager.register(createBackgroundTool(inputContext));
 
-mountToolbar(document.body, toolManager, [
-  { id: 'select', label: 'Select (S)', title: 'Click tokens to select. Drag to move. Right-click to edit.' },
-  { id: 'token', label: 'Token (T)', title: 'Click a cell to place a token.' },
-  { id: 'fog-reveal', label: 'Reveal (R)', title: 'Drag to reveal cells.' },
-  { id: 'fog-hide', label: 'Hide (H)', title: 'Drag to hide cells.' },
-  { id: 'background', label: 'Map (M)', title: 'Drag to move the background, wheel to scale.' },
-]);
+const toolbarHandle = mountToolbar(
+  document.body,
+  toolManager,
+  [
+    { id: 'select', label: 'Select (S)', title: 'Click tokens to select. Drag to move. Right-click to edit.' },
+    { id: 'token', label: 'Token (T)', title: 'Click a cell to place a token.' },
+    { id: 'fog-reveal', label: 'Reveal (R)', title: 'Drag to reveal cells.' },
+    { id: 'fog-hide', label: 'Hide (H)', title: 'Drag to hide cells.' },
+    { id: 'background', label: 'Map (M)', title: 'Drag to move the background, wheel to scale.' },
+  ],
+  [
+    {
+      id: 'undo',
+      label: '↶ Undo',
+      title: 'Undo (Ctrl/Cmd+Z)',
+      onClick: () => store.undo(),
+      isEnabled: () => store.canUndo(),
+    },
+    {
+      id: 'redo',
+      label: '↷ Redo',
+      title: 'Redo (Ctrl/Cmd+Shift+Z or Ctrl/Cmd+Y)',
+      onClick: () => store.redo(),
+      isEnabled: () => store.canRedo(),
+    },
+  ],
+);
 
 toolManager.setActive('select');
 
 mountFogSettings(document.body, fogOptionsRef, toolManager);
+
+mountZoomControls(document.body, {
+  onZoomIn: () => zoomBy(renderer, ZOOM_BUTTON_STEP),
+  onZoomOut: () => zoomBy(renderer, 1 / ZOOM_BUTTON_STEP),
+  onFit: () => fitToContent(renderer, store.getState(), (id) => imageLoader.get(id)),
+  onReset: () => resetCamera(renderer),
+});
 
 const settingsModal = mountSettingsModal({
   viewMode: 'gm',
@@ -206,6 +241,7 @@ const persist = debounce(() => saveState(store.getState()), 200);
 store.subscribe((patch) => {
   renderer.requestRender();
   persist();
+  toolbarHandle.refreshActions();
   if (!channel) return;
   if (patch) {
     channel.send({ type: 'patch', patch: toSerializablePatch(patch) });
@@ -230,6 +266,27 @@ window.addEventListener('keydown', (e) => {
       e.preventDefault();
       return;
     }
+    return;
+  }
+
+  if (e.key === '+' || e.key === '=') {
+    zoomBy(renderer, ZOOM_BUTTON_STEP);
+    e.preventDefault();
+    return;
+  }
+  if (e.key === '-' || e.key === '_') {
+    zoomBy(renderer, 1 / ZOOM_BUTTON_STEP);
+    e.preventDefault();
+    return;
+  }
+  if (e.key === '0') {
+    resetCamera(renderer);
+    e.preventDefault();
+    return;
+  }
+  if (e.key.toLowerCase() === 'f') {
+    fitToContent(renderer, store.getState(), (id) => imageLoader.get(id));
+    e.preventDefault();
     return;
   }
 
@@ -263,14 +320,6 @@ window.addEventListener('beforeunload', () => {
   persist.flush();
   persistCameraDebounced.flush();
 });
-
-function isEditableFocus(target: EventTarget | null): boolean {
-  if (!(target instanceof HTMLElement)) return false;
-  const tag = target.tagName;
-  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true;
-  if (target.isContentEditable) return true;
-  return false;
-}
 
 function applyPrefsToBody(prefs: { reducedMotion: boolean; highContrast: boolean }) {
   document.body.classList.toggle('reduced-motion', prefs.reducedMotion);

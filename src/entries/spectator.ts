@@ -10,6 +10,14 @@ import { createImageLoader } from '../images/loader.js';
 import { createPreferences } from '../state/preferences.js';
 import { loadCamera, saveCamera, clearCamera } from '../state/camera-persistence.js';
 import { mountSettingsModal } from '../ui/settings-modal.js';
+import { mountZoomControls } from '../ui/zoom-controls.js';
+import {
+  zoomBy,
+  fitToContent,
+  resetCamera,
+  ZOOM_BUTTON_STEP,
+} from '../render/camera-controls.js';
+import { isEditableFocus } from '../util/focus.js';
 
 const canvas = document.getElementById('canvas') as HTMLCanvasElement | null;
 if (!canvas) throw new Error('Canvas element #canvas not found');
@@ -55,6 +63,13 @@ const settingsModal = mountSettingsModal({
 
 mountSpectatorMenu(() => settingsModal.open());
 
+mountZoomControls(document.body, {
+  onZoomIn: () => zoomBy(renderer, ZOOM_BUTTON_STEP),
+  onZoomOut: () => zoomBy(renderer, 1 / ZOOM_BUTTON_STEP),
+  onFit: () => fitToContent(renderer, store.getState(), (id) => imageLoader.get(id)),
+  onReset: () => resetCamera(renderer),
+});
+
 const persist = debounce(() => saveState(store.getState()), 200);
 
 store.subscribe((patch) => {
@@ -80,6 +95,31 @@ if (channel) {
 } else {
   showSyncWarning();
 }
+
+window.addEventListener('keydown', (e) => {
+  if (isEditableFocus(e.target)) return;
+  if (e.ctrlKey || e.metaKey) return;
+  if (e.key === '+' || e.key === '=') {
+    zoomBy(renderer, ZOOM_BUTTON_STEP);
+    e.preventDefault();
+    return;
+  }
+  if (e.key === '-' || e.key === '_') {
+    zoomBy(renderer, 1 / ZOOM_BUTTON_STEP);
+    e.preventDefault();
+    return;
+  }
+  if (e.key === '0') {
+    resetCamera(renderer);
+    e.preventDefault();
+    return;
+  }
+  if (e.key.toLowerCase() === 'f') {
+    fitToContent(renderer, store.getState(), (id) => imageLoader.get(id));
+    e.preventDefault();
+    return;
+  }
+});
 
 window.addEventListener('beforeunload', () => {
   persist.flush();
