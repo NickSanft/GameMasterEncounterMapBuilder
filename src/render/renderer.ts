@@ -104,6 +104,7 @@ export function createRenderer(opts: CreateRendererOptions): Renderer {
     drawTokens(ctx, state, highlights, getImage, {
       labelSize,
       showColorblindMarkers,
+      mode,
     });
     drawFog(ctx, state, mode, { gmColor: gmFogColor, gmOpacity: gmFogOpacity });
     const preview = getFogPreview ? getFogPreview() : null;

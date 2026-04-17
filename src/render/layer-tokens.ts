@@ -1,7 +1,8 @@
-import type { ID, SessionState, Token } from '../state/types.js';
+import type { ID, SessionState, Token, ViewMode } from '../state/types.js';
 import type { ImageProvider } from './layer-background.js';
 import type { LabelSize } from '../state/preferences.js';
 import { shapeForBorderColor, type MarkerShape } from '../state/team-colors.js';
+import { isTokenFullyHidden } from './fog-visibility.js';
 
 const NO_IMAGE: ImageProvider = () => null;
 
@@ -14,11 +15,13 @@ const LABEL_SIZE_MULTIPLIER: Record<LabelSize, number> = {
 export interface TokenRenderOptions {
   labelSize: LabelSize;
   showColorblindMarkers: boolean;
+  mode: ViewMode;
 }
 
 const DEFAULT_OPTIONS: TokenRenderOptions = {
   labelSize: 'medium',
   showColorblindMarkers: false,
+  mode: 'gm',
 };
 
 export function drawTokens(
@@ -34,6 +37,7 @@ export function drawTokens(
   const unselected: Token[] = [];
   const selected: Token[] = [];
   for (const t of state.tokens) {
+    if (options.mode === 'spectator' && isTokenFullyHidden(t, state)) continue;
     if (highlightIds.has(t.id)) selected.push(t);
     else unselected.push(t);
   }

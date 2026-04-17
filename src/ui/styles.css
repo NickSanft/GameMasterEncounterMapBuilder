@@ -236,11 +236,11 @@ body.view {
   background: rgba(255, 255, 255, 0.06);
 }
 
-/* Fog settings panel (below toolbar, only when fog tool is active) */
+/* Fog settings panel — to the right of the toolbar when fog tool is active */
 .fog-settings {
   position: absolute;
-  top: 15.5rem;
-  left: 0.75rem;
+  top: 3.25rem;
+  left: 8.75rem;
   padding: 0.5rem;
   background: rgba(27, 29, 34, 0.92);
   border: 1px solid var(--border);
