@@ -32,6 +32,8 @@ import { hitTestToken } from '../input/hit-test.js';
 import { screenToWorld } from '../render/coords.js';
 import { duplicateTokens } from '../state/token-clipboard.js';
 import type { Token } from '../state/types.js';
+import { mountPresetBackgroundsModal } from '../ui/preset-backgrounds-modal.js';
+import { resolvePresetUrl } from '../state/preset-backgrounds.js';
 import {
   zoomBy,
   fitToContent,
@@ -148,29 +150,49 @@ const settingsModal = mountSettingsModal({
   store,
 });
 
+async function applyBackgroundBlob(blob: Blob, mimeType: string) {
+  const { width, height } = await readBlobImageDimensions(blob);
+  const id = await putImage(blob, mimeType);
+  imageLoader.invalidate(id);
+  const { grid } = store.getState();
+  const gridW = grid.cols * grid.cellSize;
+  const gridH = grid.rows * grid.cellSize;
+  const scaleX = gridW / width;
+  const scaleY = gridH / height;
+  store.applyPatch({
+    kind: 'background-update',
+    changes: { imageId: id, offsetX: 0, offsetY: 0, scaleX, scaleY },
+  });
+}
+
+const presetBackgroundsModal = mountPresetBackgroundsModal({
+  onPick: async (preset) => {
+    try {
+      const url = resolvePresetUrl(preset);
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const blob = await res.blob();
+      await applyBackgroundBlob(blob, blob.type || 'image/svg+xml');
+    } catch (err) {
+      console.error('[gm] preset background load failed', err);
+      window.alert('Failed to load preset map.');
+    }
+  },
+});
+
 mountSessionMenu(document.body, {
   onNewSession: () => {
     store.resetSession();
   },
   onUploadBackground: async (file) => {
     try {
-      const { width, height } = await readImageDimensions(file);
-      const id = await putImage(file, file.type || 'image/png');
-      imageLoader.invalidate(id);
-      const { grid } = store.getState();
-      const gridW = grid.cols * grid.cellSize;
-      const gridH = grid.rows * grid.cellSize;
-      const scaleX = gridW / width;
-      const scaleY = gridH / height;
-      store.applyPatch({
-        kind: 'background-update',
-        changes: { imageId: id, offsetX: 0, offsetY: 0, scaleX, scaleY },
-      });
+      await applyBackgroundBlob(file, file.type || 'image/png');
     } catch (err) {
       console.error('[gm] upload background failed', err);
       window.alert('Failed to upload background image.');
     }
   },
+  onPresetBackground: () => presetBackgroundsModal.open(),
   onExport: async () => {
     try {
       const json = await exportSession(store.getState());
@@ -424,9 +446,9 @@ function applyPrefsToBody(prefs: { reducedMotion: boolean; highContrast: boolean
   document.body.classList.toggle('high-contrast', prefs.highContrast);
 }
 
-function readImageDimensions(file: File): Promise<{ width: number; height: number }> {
+function readBlobImageDimensions(blob: Blob): Promise<{ width: number; height: number }> {
   return new Promise((resolve, reject) => {
-    const url = URL.createObjectURL(file);
+    const url = URL.createObjectURL(blob);
     const img = new Image();
     img.onload = () => {
       const dims = { width: img.naturalWidth, height: img.naturalHeight };

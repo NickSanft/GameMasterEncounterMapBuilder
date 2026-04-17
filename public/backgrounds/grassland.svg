@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1500" height="1000" viewBox="0 0 1500 1000" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <linearGradient id="gr-base" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#7fa55c"/>
+      <stop offset="100%" stop-color="#6b8f4a"/>
+    </linearGradient>
+    <symbol id="boulder" overflow="visible">
+      <ellipse rx="26" ry="20" fill="#8a8680" stroke="#4a4640" stroke-width="2"/>
+      <ellipse rx="20" ry="14" cx="6" cy="4" fill="#a6a29b" opacity="0.65"/>
+      <ellipse rx="8" ry="5" cx="-6" cy="-6" fill="#6c6862" opacity="0.8"/>
+    </symbol>
+    <symbol id="flower-red" overflow="visible">
+      <circle r="8" fill="#c7503a"/>
+      <circle r="3" fill="#f0c040"/>
+    </symbol>
+    <symbol id="flower-yellow" overflow="visible">
+      <circle r="7" fill="#e9b141"/>
+      <circle r="2.5" fill="#9b5a16"/>
+    </symbol>
+  </defs>
+
+  <rect width="1500" height="1000" fill="url(#gr-base)"/>
+
+  <g fill="#5e8443" opacity="0.55">
+    <ellipse cx="250" cy="180" rx="210" ry="100"/>
+    <ellipse cx="1100" cy="280" rx="240" ry="110"/>
+    <ellipse cx="450" cy="750" rx="260" ry="120"/>
+    <ellipse cx="1200" cy="820" rx="230" ry="100"/>
+    <ellipse cx="700" cy="580" rx="180" ry="80"/>
+  </g>
+
+  <!-- River -->
+  <path d="M -60 400 Q 300 350 600 450 T 1200 420 T 1560 480" stroke="#3d7aa3" stroke-width="64" fill="none" opacity="0.85"/>
+  <path d="M -60 400 Q 300 350 600 450 T 1200 420 T 1560 480" stroke="#568fba" stroke-width="44" fill="none"/>
+  <path d="M -60 400 Q 300 350 600 450 T 1200 420 T 1560 480" stroke="#7bb0d0" stroke-width="20" fill="none" opacity="0.6"/>
+
+  <!-- Dirt trail along bottom -->
+  <path d="M 0 850 Q 400 820 800 860 T 1500 830" stroke="#9c764a" stroke-width="38" fill="none" opacity="0.72"/>
+  <path d="M 0 850 Q 400 820 800 860 T 1500 830" stroke="#b89369" stroke-width="16" fill="none" opacity="0.7"/>
+
+  <!-- Boulders -->
+  <use href="#boulder" x="320" y="220"/>
+  <use href="#boulder" x="1050" y="670"/>
+  <use href="#boulder" x="680" y="250"/>
+  <use href="#boulder" x="780" y="650"/>
+  <use href="#boulder" x="250" y="580"/>
+  <use href="#boulder" x="1270" y="560"/>
+
+  <!-- Grass tufts -->
+  <g stroke="#4a6e2e" stroke-width="2.5" fill="none" opacity="0.75" stroke-linecap="round">
+    <path d="M 150 550 L 153 540 L 156 550 M 158 548 L 160 538"/>
+    <path d="M 450 620 L 453 610 L 456 620"/>
+    <path d="M 900 580 L 903 568 L 906 580"/>
+    <path d="M 1200 570 L 1203 560 L 1206 570"/>
+    <path d="M 300 920 L 303 910 L 306 920"/>
+    <path d="M 700 900 L 703 890 L 706 900"/>
+    <path d="M 1050 940 L 1053 930 L 1056 940"/>
+    <path d="M 200 720 L 203 710 L 206 720"/>
+    <path d="M 1380 680 L 1383 670 L 1386 680"/>
+    <path d="M 560 150 L 563 140 L 566 150"/>
+  </g>
+
+  <!-- Flowers -->
+  <use href="#flower-red" x="250" y="750"/>
+  <use href="#flower-yellow" x="950" y="220"/>
+  <use href="#flower-red" x="1250" y="480"/>
+  <use href="#flower-yellow" x="420" y="900"/>
+  <use href="#flower-red" x="880" y="750"/>
+  <use href="#flower-yellow" x="1380" y="210"/>
+</svg>

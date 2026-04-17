@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1500" height="1000" viewBox="0 0 1500 1000" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <radialGradient id="cv-base" cx="50%" cy="50%" r="80%">
+      <stop offset="0%" stop-color="#4a4046"/>
+      <stop offset="70%" stop-color="#2a2528"/>
+      <stop offset="100%" stop-color="#18161a"/>
+    </radialGradient>
+    <radialGradient id="cv-water" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#4b8aab"/>
+      <stop offset="100%" stop-color="#1e3a4e"/>
+    </radialGradient>
+  </defs>
+
+  <rect width="1500" height="1000" fill="url(#cv-base)"/>
+
+  <!-- Cavern wall silhouettes along edges -->
+  <path d="M 0 0 L 1500 0 L 1500 140 Q 1300 115 1150 160 Q 950 220 800 180 Q 650 140 500 200 Q 300 260 150 210 Q 50 180 0 190 Z" fill="#0c0a0c"/>
+  <path d="M 0 1000 L 1500 1000 L 1500 850 Q 1350 880 1180 840 Q 1000 820 850 870 Q 700 905 550 865 Q 350 825 200 875 Q 80 895 0 875 Z" fill="#0c0a0c"/>
+  <path d="M 0 0 L 0 1000 L 85 1000 Q 65 700 110 400 Q 95 200 85 0 Z" fill="#0c0a0c"/>
+  <path d="M 1500 0 L 1500 1000 L 1415 1000 Q 1445 700 1395 400 Q 1410 200 1420 0 Z" fill="#0c0a0c"/>
+
+  <!-- Rocky floor patches -->
+  <g fill="#3a3338" opacity="0.5">
+    <ellipse cx="400" cy="300" rx="90" ry="60"/>
+    <ellipse cx="1100" cy="400" rx="110" ry="70"/>
+    <ellipse cx="700" cy="700" rx="100" ry="70"/>
+    <ellipse cx="300" cy="570" rx="80" ry="50"/>
+    <ellipse cx="1200" cy="600" rx="70" ry="45"/>
+    <ellipse cx="900" cy="250" rx="85" ry="55"/>
+  </g>
+
+  <!-- Water pool -->
+  <ellipse cx="750" cy="500" rx="180" ry="85" fill="url(#cv-water)" opacity="0.9"/>
+  <ellipse cx="750" cy="495" rx="168" ry="70" fill="none" stroke="#5e9ec0" stroke-width="1.5" opacity="0.8"/>
+  <ellipse cx="720" cy="490" rx="80" ry="30" fill="none" stroke="#7eb5d1" stroke-width="1" opacity="0.6"/>
+
+  <!-- Stalagmites (pointing up) -->
+  <g fill="#3a333a" stroke="#1a1618" stroke-width="1.5">
+    <polygon points="200,480 222,420 244,480"/>
+    <polygon points="515,300 540,240 565,300"/>
+    <polygon points="1155,680 1180,610 1205,680"/>
+    <polygon points="1310,370 1330,320 1350,370"/>
+    <polygon points="310,870 335,810 360,870"/>
+    <polygon points="1010,820 1030,780 1050,820"/>
+    <polygon points="420,770 445,720 470,770"/>
+    <polygon points="1250,500 1270,450 1290,500"/>
+  </g>
+
+  <!-- Stalactites (pointing down from top) -->
+  <g fill="#3a333a" stroke="#1a1618" stroke-width="1.5">
+    <polygon points="250,160 280,160 265,220"/>
+    <polygon points="600,180 625,180 612,235"/>
+    <polygon points="1000,170 1025,170 1012,225"/>
+    <polygon points="1300,190 1325,190 1312,245"/>
+    <polygon points="450,180 472,180 461,240"/>
+    <polygon points="850,185 875,185 862,245"/>
+  </g>
+
+  <!-- Small rocks -->
+  <g fill="#4a4348" stroke="#1a1618" stroke-width="1">
+    <ellipse cx="300" cy="420" rx="14" ry="10"/>
+    <ellipse cx="600" cy="650" rx="11" ry="8"/>
+    <ellipse cx="970" cy="620" rx="13" ry="9"/>
+    <ellipse cx="1100" cy="800" rx="10" ry="8"/>
+    <ellipse cx="470" cy="650" rx="12" ry="9"/>
+  </g>
+</svg>

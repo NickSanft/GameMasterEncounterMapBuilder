@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1500" height="1000" viewBox="0 0 1500 1000" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <pattern id="stone-tile" x="0" y="0" width="100" height="100" patternUnits="userSpaceOnUse">
+      <rect width="100" height="100" fill="#4a4238"/>
+      <rect width="100" height="100" fill="none" stroke="#2e2a23" stroke-width="3"/>
+      <circle cx="25" cy="30" r="3" fill="#3a342b" opacity="0.7"/>
+      <circle cx="70" cy="65" r="2" fill="#3a342b" opacity="0.55"/>
+      <circle cx="50" cy="80" r="2.5" fill="#3a342b" opacity="0.6"/>
+      <circle cx="85" cy="20" r="1.5" fill="#5a5143" opacity="0.4"/>
+    </pattern>
+  </defs>
+
+  <rect width="1500" height="1000" fill="#0e0b08"/>
+
+  <!-- Room 1 (top-left) -->
+  <rect x="100" y="100" width="400" height="300" fill="url(#stone-tile)" stroke="#1d1914" stroke-width="8"/>
+  <!-- Room 2 (top-right) -->
+  <rect x="900" y="100" width="500" height="350" fill="url(#stone-tile)" stroke="#1d1914" stroke-width="8"/>
+  <!-- Room 3 (bottom-left) -->
+  <rect x="200" y="600" width="500" height="300" fill="url(#stone-tile)" stroke="#1d1914" stroke-width="8"/>
+  <!-- Room 4 (bottom-right, small, altar) -->
+  <rect x="1050" y="650" width="350" height="250" fill="url(#stone-tile)" stroke="#1d1914" stroke-width="8"/>
+
+  <!-- Corridors -->
+  <rect x="500" y="200" width="400" height="100" fill="url(#stone-tile)" stroke="#1d1914" stroke-width="6"/>
+  <rect x="300" y="400" width="100" height="200" fill="url(#stone-tile)" stroke="#1d1914" stroke-width="6"/>
+  <rect x="700" y="700" width="350" height="100" fill="url(#stone-tile)" stroke="#1d1914" stroke-width="6"/>
+  <rect x="1100" y="450" width="100" height="200" fill="url(#stone-tile)" stroke="#1d1914" stroke-width="6"/>
+
+  <!-- Pillars -->
+  <g fill="#3a342a" stroke="#201d17" stroke-width="2">
+    <circle cx="170" cy="170" r="13"/>
+    <circle cx="430" cy="170" r="13"/>
+    <circle cx="170" cy="330" r="13"/>
+    <circle cx="430" cy="330" r="13"/>
+    <circle cx="970" cy="170" r="13"/>
+    <circle cx="1330" cy="170" r="13"/>
+    <circle cx="970" cy="380" r="13"/>
+    <circle cx="1330" cy="380" r="13"/>
+    <circle cx="270" cy="670" r="13"/>
+    <circle cx="630" cy="670" r="13"/>
+    <circle cx="270" cy="830" r="13"/>
+    <circle cx="630" cy="830" r="13"/>
+  </g>
+
+  <!-- Cracks / debris -->
+  <g stroke="#272119" stroke-width="2" fill="none" opacity="0.55">
+    <path d="M 300 700 L 320 720 L 340 715 L 355 735"/>
+    <path d="M 1200 750 L 1220 770 L 1235 760"/>
+    <path d="M 250 250 L 260 260 L 270 255"/>
+    <path d="M 1040 330 L 1055 345 L 1072 335"/>
+  </g>
+
+  <!-- Altar in bottom-right room -->
+  <rect x="1170" y="735" width="110" height="60" fill="#3f3a30" stroke="#1d1914" stroke-width="2"/>
+  <rect x="1180" y="745" width="90" height="40" fill="#4a4238"/>
+  <circle cx="1225" cy="765" r="6" fill="#8a2f1c"/>
+
+  <!-- Torches (yellow dots on walls) -->
+  <g>
+    <circle cx="100" cy="250" r="5" fill="#f4b642"/>
+    <circle cx="500" cy="250" r="5" fill="#f4b642"/>
+    <circle cx="900" cy="275" r="5" fill="#f4b642"/>
+    <circle cx="1400" cy="275" r="5" fill="#f4b642"/>
+    <circle cx="200" cy="750" r="5" fill="#f4b642"/>
+    <circle cx="700" cy="750" r="5" fill="#f4b642"/>
+  </g>
+</svg>

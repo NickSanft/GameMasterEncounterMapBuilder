@@ -1,6 +1,7 @@
 export interface SessionMenuActions {
   onNewSession(): void;
   onUploadBackground(file: File): void | Promise<void>;
+  onPresetBackground(): void;
   onExport(): void | Promise<void>;
   onImport(file: File): void | Promise<void>;
   onSettings(): void;
@@ -25,6 +26,12 @@ export function mountSessionMenu(
     const file = bgFileInput.files?.[0];
     bgFileInput.value = '';
     if (file) await actions.onUploadBackground(file);
+  });
+
+  const presetBtn = createButton('Preset Maps', 'Pick a pre-made background');
+  presetBtn.addEventListener('click', () => {
+    presetBtn.blur();
+    actions.onPresetBackground();
   });
 
   const exportBtn = createButton('Export', 'Download the session as a JSON file');
@@ -61,6 +68,7 @@ export function mountSessionMenu(
   });
 
   menu.appendChild(uploadBtn);
+  menu.appendChild(presetBtn);
   menu.appendChild(exportBtn);
   menu.appendChild(importBtn);
   menu.appendChild(settingsBtn);

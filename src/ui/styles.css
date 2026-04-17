@@ -681,6 +681,67 @@ body.reduced-motion *::after {
   animation-iteration-count: 1 !important;
 }
 
+/* Preset maps modal */
+.preset-maps-modal {
+  min-width: 580px;
+  max-width: min(780px, 92vw);
+}
+
+.preset-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.75rem;
+}
+
+.preset-card {
+  appearance: none;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0;
+  cursor: pointer;
+  overflow: hidden;
+  text-align: left;
+  color: var(--fg);
+  font-family: inherit;
+  display: flex;
+  flex-direction: column;
+  transition: border-color 100ms ease, transform 120ms ease, box-shadow 120ms ease;
+}
+
+.preset-card:hover {
+  border-color: var(--accent);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+}
+
+.preset-thumb {
+  aspect-ratio: 3 / 2;
+  background-size: cover;
+  background-position: center;
+  background-color: var(--bg);
+  border-bottom: 1px solid var(--border);
+}
+
+.preset-label {
+  padding: 0.55rem 0.7rem 0.65rem;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.preset-name {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--fg);
+}
+
+.preset-desc {
+  font-size: 0.78rem;
+  color: var(--fg-muted);
+  margin-top: 0.25rem;
+  line-height: 1.35;
+}
+
 /* Sync warning banner (Spectator, private mode) */
 .sync-warning {
   position: absolute;

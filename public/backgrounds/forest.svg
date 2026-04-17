@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1500" height="1000" viewBox="0 0 1500 1000" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <radialGradient id="fg-base" cx="50%" cy="50%" r="75%">
+      <stop offset="0%" stop-color="#5b7d47"/>
+      <stop offset="100%" stop-color="#3f5a31"/>
+    </radialGradient>
+    <symbol id="tree" overflow="visible">
+      <ellipse rx="40" ry="42" fill="#243c1a"/>
+      <ellipse rx="32" ry="34" cy="-6" fill="#385833"/>
+      <ellipse rx="18" ry="20" cx="-10" cy="-14" fill="#4c6f44" opacity="0.7"/>
+      <rect x="-6" y="30" width="12" height="20" fill="#3d2814"/>
+    </symbol>
+  </defs>
+
+  <rect width="1500" height="1000" fill="url(#fg-base)"/>
+
+  <g fill="#2d421f" opacity="0.5">
+    <ellipse cx="180" cy="150" rx="200" ry="130"/>
+    <ellipse cx="1180" cy="220" rx="210" ry="150"/>
+    <ellipse cx="320" cy="860" rx="240" ry="150"/>
+    <ellipse cx="1200" cy="820" rx="200" ry="140"/>
+    <ellipse cx="700" cy="100" rx="170" ry="100"/>
+    <ellipse cx="800" cy="930" rx="200" ry="90"/>
+  </g>
+
+  <path d="M -60 500 C 200 430 350 430 520 500 S 850 590 1020 500 S 1280 430 1560 500"
+        stroke="#7c5a35" stroke-width="78" fill="none" opacity="0.72"/>
+  <path d="M -60 500 C 200 430 350 430 520 500 S 850 590 1020 500 S 1280 430 1560 500"
+        stroke="#9c764a" stroke-width="50" fill="none"/>
+  <path d="M -60 500 C 200 430 350 430 520 500 S 850 590 1020 500 S 1280 430 1560 500"
+        stroke="#b89369" stroke-width="20" fill="none" opacity="0.8"/>
+
+  <g>
+    <use href="#tree" x="80" y="120"/>
+    <use href="#tree" x="180" y="80"/>
+    <use href="#tree" x="280" y="160"/>
+    <use href="#tree" x="100" y="260"/>
+    <use href="#tree" x="210" y="300"/>
+    <use href="#tree" x="340" y="260"/>
+    <use href="#tree" x="420" y="170"/>
+    <use href="#tree" x="560" y="110"/>
+    <use href="#tree" x="700" y="80"/>
+    <use href="#tree" x="830" y="130"/>
+    <use href="#tree" x="960" y="90"/>
+    <use href="#tree" x="1080" y="150"/>
+    <use href="#tree" x="1210" y="100"/>
+    <use href="#tree" x="1330" y="180"/>
+    <use href="#tree" x="1160" y="260"/>
+    <use href="#tree" x="1290" y="330"/>
+    <use href="#tree" x="1400" y="260"/>
+
+    <use href="#tree" x="90" y="770"/>
+    <use href="#tree" x="220" y="820"/>
+    <use href="#tree" x="360" y="860"/>
+    <use href="#tree" x="500" y="820"/>
+    <use href="#tree" x="170" y="920"/>
+    <use href="#tree" x="320" y="950"/>
+    <use href="#tree" x="670" y="880"/>
+    <use href="#tree" x="800" y="930"/>
+    <use href="#tree" x="950" y="880"/>
+    <use href="#tree" x="1090" y="800"/>
+    <use href="#tree" x="1220" y="860"/>
+    <use href="#tree" x="1360" y="910"/>
+    <use href="#tree" x="1180" y="950"/>
+  </g>
+</svg>
