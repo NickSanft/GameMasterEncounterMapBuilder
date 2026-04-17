@@ -1,0 +1,59 @@
+import type {
+  Background,
+  GridConfig,
+  SessionState,
+  StatePatch,
+  Token,
+} from '../state/types.js';
+
+export interface SerializedSessionState {
+  version: 1;
+  grid: GridConfig;
+  background: Background;
+  tokens: Token[];
+  fog: number[];
+}
+
+export type SerializablePatch =
+  | Exclude<StatePatch, { kind: 'session-reset' }>
+  | { kind: 'session-reset'; state: SerializedSessionState };
+
+export type SyncMessage =
+  | { type: 'hello'; from: 'gm' | 'spectator' }
+  | { type: 'full-state'; state: SerializedSessionState }
+  | { type: 'patch'; patch: SerializablePatch }
+  | { type: 'request-full-state' };
+
+export function serializeState(s: SessionState): SerializedSessionState {
+  return {
+    version: s.version,
+    grid: { ...s.grid },
+    background: { ...s.background },
+    tokens: s.tokens.map((t) => ({ ...t })),
+    fog: Array.from(s.fog),
+  };
+}
+
+export function deserializeState(s: SerializedSessionState): SessionState {
+  return {
+    version: s.version,
+    grid: { ...s.grid },
+    background: { ...s.background },
+    tokens: s.tokens.map((t) => ({ ...t })),
+    fog: Uint8Array.from(s.fog),
+  };
+}
+
+export function toSerializablePatch(p: StatePatch): SerializablePatch {
+  if (p.kind === 'session-reset') {
+    return { kind: 'session-reset', state: serializeState(p.state) };
+  }
+  return p;
+}
+
+export function fromSerializablePatch(p: SerializablePatch): StatePatch {
+  if (p.kind === 'session-reset') {
+    return { kind: 'session-reset', state: deserializeState(p.state) };
+  }
+  return p;
+}

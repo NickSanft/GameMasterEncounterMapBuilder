@@ -7,6 +7,8 @@ import { createToolManager } from '../input/tool-manager.js';
 import { createSelectTool } from '../input/tool-select.js';
 import { createTokenTool } from '../input/tool-token.js';
 import { mountToolbar } from '../ui/toolbar.js';
+import { createSyncChannel } from '../sync/channel.js';
+import { serializeState, toSerializablePatch } from '../sync/messages.js';
 
 const canvas = document.getElementById('canvas') as HTMLCanvasElement | null;
 if (!canvas) throw new Error('Canvas element #canvas not found');
@@ -45,4 +47,21 @@ mountToolbar(document.body, toolManager, [
 
 toolManager.setActive('select');
 
-store.subscribe(() => renderer.requestRender());
+const channel = createSyncChannel();
+if (channel) {
+  channel.onMessage((msg) => {
+    if (msg.type === 'hello' && msg.from === 'spectator') {
+      channel.send({ type: 'full-state', state: serializeState(store.getState()) });
+    } else if (msg.type === 'request-full-state') {
+      channel.send({ type: 'full-state', state: serializeState(store.getState()) });
+    }
+  });
+  channel.send({ type: 'full-state', state: serializeState(store.getState()) });
+}
+
+store.subscribe((patch) => {
+  renderer.requestRender();
+  if (patch && channel) {
+    channel.send({ type: 'patch', patch: toSerializablePatch(patch) });
+  }
+});
