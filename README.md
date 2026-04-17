@@ -1,6 +1,6 @@
-# D&D Maps
+# GM Encounter Maps
 
-A lightweight, browser-based virtual tabletop inspired by D&D Beyond Maps. Grid-based battle maps with player/enemy tokens and fog of war, split across a Game Master view and a Spectator view running on the same device. Deploys as a static site.
+A lightweight, browser-based virtual tabletop for Game Masters. Grid-based battle maps with player/enemy tokens and fog of war, split across a GM view and a Spectator view running on the same device. Deploys as a static site.
 
 ## Usage
 
@@ -63,11 +63,11 @@ Push to `main`; `.github/workflows/deploy.yml` builds and publishes `dist/` to G
 - **Vite** multi-page build — three independent HTML entries, no client-side router.
 - **TypeScript**, vanilla DOM, no framework.
 - **HTML5 Canvas** renderer with layered draws: background → grid → tokens → fog → fog-preview.
-- **BroadcastChannel** (`dnd-maps-session`) for same-origin cross-tab sync. GM is authoritative; Spectator listens.
+- **BroadcastChannel** (`gm-encounter-maps-session`) for same-origin cross-tab sync. GM is authoritative; Spectator listens.
 - **localStorage** holds the serialized session state (debounced 200ms). **IndexedDB** holds image blobs.
 - Session export is JSON + base64 image data, fully self-contained and portable.
 
-See `src/state/types.ts` for the full state contract.
+See `src/state/types.ts` for the full state contract and `src/util/constants.ts` for storage identifiers.
 
 ## Known limitations
 
@@ -75,3 +75,8 @@ See `src/state/types.ts` for the full state contract.
 - No dice, initiative, measurement, or drawing tools. By design.
 - `BroadcastChannel` is disabled in some private-browsing modes; the Spectator shows a warning banner when that's the case.
 - IndexedDB has a per-origin quota; large libraries of uploaded maps will eventually hit it.
+
+## Changelog
+
+### Rename to GM Encounter Maps
+Storage identifiers were renamed from `dnd-maps-*` to `gm-encounter-maps-*`. Sessions saved before the rename won't load automatically; import an exported JSON to restore them, or start fresh.

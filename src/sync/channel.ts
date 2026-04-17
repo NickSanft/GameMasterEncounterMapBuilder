@@ -1,6 +1,7 @@
 import type { SyncMessage } from './messages.js';
+import { BROADCAST_CHANNEL_NAME as CHANNEL_NAME } from '../util/constants.js';
 
-export const CHANNEL_NAME = 'dnd-maps-session';
+export { CHANNEL_NAME };
 
 export interface SyncChannel {
   send(msg: SyncMessage): void;

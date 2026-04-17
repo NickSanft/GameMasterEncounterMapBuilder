@@ -26,6 +26,7 @@ import { putImage } from '../images/store.js';
 import { hitTestToken } from '../input/hit-test.js';
 import { screenToWorld } from '../render/coords.js';
 import type { PanZoomHandle } from '../input/pan-zoom.js';
+import { EXPORT_FILENAME_PREFIX } from '../util/constants.js';
 
 const canvas = document.getElementById('canvas') as HTMLCanvasElement | null;
 if (!canvas) throw new Error('Canvas element #canvas not found');
@@ -110,7 +111,7 @@ mountSessionMenu(document.body, {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `dnd-maps-${new Date().toISOString().slice(0, 10)}.json`;
+      a.download = `${EXPORT_FILENAME_PREFIX}-${new Date().toISOString().slice(0, 10)}.json`;
       document.body.appendChild(a);
       a.click();
       a.remove();

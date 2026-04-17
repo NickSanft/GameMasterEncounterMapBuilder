@@ -4,8 +4,7 @@ import {
   serializeState,
   type SerializedSessionState,
 } from '../sync/messages.js';
-
-const STORAGE_KEY = 'dnd-maps-state';
+import { STORAGE_KEY } from '../util/constants.js';
 
 export function saveState(state: SessionState): void {
   try {

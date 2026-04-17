@@ -1,7 +1,7 @@
 import type { ID } from '../state/types.js';
 import { nid } from '../util/id.js';
+import { IDB_DB_NAME as DB_NAME } from '../util/constants.js';
 
-const DB_NAME = 'dnd-maps';
 const DB_VERSION = 1;
 const STORE = 'images';
 
