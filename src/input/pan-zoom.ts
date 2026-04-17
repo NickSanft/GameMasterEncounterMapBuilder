@@ -8,6 +8,7 @@ const ZOOM_STEP = 1.1;
 export interface PanZoomHandle {
   destroy(): void;
   isPanning(): boolean;
+  isSpaceHeld(): boolean;
 }
 
 export function attachPanZoom(renderer: Renderer): PanZoomHandle {
@@ -120,6 +121,9 @@ export function attachPanZoom(renderer: Renderer): PanZoomHandle {
     },
     isPanning() {
       return panning;
+    },
+    isSpaceHeld() {
+      return spaceHeld;
     },
   };
 }

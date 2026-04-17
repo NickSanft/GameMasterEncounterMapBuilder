@@ -1,11 +1,16 @@
-import type { Camera, GridConfig, ViewMode } from '../state/types.js';
+import type {
+  Camera,
+  ID,
+  SessionState,
+  ViewMode,
+} from '../state/types.js';
 import { drawGrid } from './layer-grid.js';
+import { drawTokens } from './layer-tokens.js';
 
 export interface Renderer {
   readonly canvas: HTMLCanvasElement;
   readonly mode: ViewMode;
   camera: Camera;
-  grid: GridConfig;
   requestRender(): void;
   resize(): void;
   destroy(): void;
@@ -15,11 +20,14 @@ interface CreateRendererOptions {
   canvas: HTMLCanvasElement;
   mode: ViewMode;
   camera: Camera;
-  grid: GridConfig;
+  getState(): SessionState;
+  getHighlightIds?(): ReadonlySet<ID>;
 }
 
+const EMPTY_HIGHLIGHT: ReadonlySet<ID> = new Set();
+
 export function createRenderer(opts: CreateRendererOptions): Renderer {
-  const { canvas, mode } = opts;
+  const { canvas, mode, getState, getHighlightIds } = opts;
   const maybeCtx = canvas.getContext('2d');
   if (!maybeCtx) throw new Error('2D canvas context unavailable');
   const ctx: CanvasRenderingContext2D = maybeCtx;
@@ -27,11 +35,7 @@ export function createRenderer(opts: CreateRendererOptions): Renderer {
   let rafHandle = 0;
   let cssWidth = 0;
   let cssHeight = 0;
-
-  const state = {
-    camera: opts.camera,
-    grid: opts.grid,
-  };
+  let camera: Camera = opts.camera;
 
   function resize() {
     const dpr = window.devicePixelRatio || 1;
@@ -51,11 +55,14 @@ export function createRenderer(opts: CreateRendererOptions): Renderer {
     ctx.fillStyle = '#14161a';
     ctx.fillRect(0, 0, cssWidth, cssHeight);
 
-    const { camera, grid } = state;
+    const state = getState();
+    const highlights = getHighlightIds ? getHighlightIds() : EMPTY_HIGHLIGHT;
+
     ctx.save();
     ctx.translate(-camera.x * camera.zoom, -camera.y * camera.zoom);
     ctx.scale(camera.zoom, camera.zoom);
-    drawGrid(ctx, grid);
+    drawGrid(ctx, state.grid);
+    drawTokens(ctx, state, highlights);
     ctx.restore();
   }
 
@@ -73,17 +80,10 @@ export function createRenderer(opts: CreateRendererOptions): Renderer {
     canvas,
     mode,
     get camera() {
-      return state.camera;
+      return camera;
     },
     set camera(value: Camera) {
-      state.camera = value;
-      requestRender();
-    },
-    get grid() {
-      return state.grid;
-    },
-    set grid(value: GridConfig) {
-      state.grid = value;
+      camera = value;
       requestRender();
     },
     requestRender,

@@ -7,6 +7,31 @@ export interface GridConfig {
   showGridLines: boolean;
 }
 
+export interface Token {
+  id: ID;
+  x: number;
+  y: number;
+  label: string;
+  color: string;
+  imageId: ID | null;
+  size: number;
+}
+
+export interface Background {
+  imageId: ID | null;
+  offsetX: number;
+  offsetY: number;
+  scale: number;
+}
+
+export interface SessionState {
+  version: 1;
+  grid: GridConfig;
+  background: Background;
+  tokens: Token[];
+  fog: Uint8Array;
+}
+
 export interface Camera {
   x: number;
   y: number;
@@ -15,6 +40,15 @@ export interface Camera {
 
 export type ViewMode = 'gm' | 'spectator';
 
+export type StatePatch =
+  | { kind: 'token-add'; token: Token }
+  | { kind: 'token-update'; id: ID; changes: Partial<Token> }
+  | { kind: 'token-remove'; id: ID }
+  | { kind: 'fog-set'; cells: Array<{ x: number; y: number; value: 0 | 1 }> }
+  | { kind: 'grid-update'; changes: Partial<GridConfig> }
+  | { kind: 'background-update'; changes: Partial<Background> }
+  | { kind: 'session-reset'; state: SessionState };
+
 export const DEFAULT_GRID: GridConfig = {
   cols: 30,
   rows: 20,
@@ -22,8 +56,26 @@ export const DEFAULT_GRID: GridConfig = {
   showGridLines: true,
 };
 
+export const DEFAULT_BACKGROUND: Background = {
+  imageId: null,
+  offsetX: 0,
+  offsetY: 0,
+  scale: 1,
+};
+
 export const DEFAULT_CAMERA: Camera = {
   x: -50,
   y: -50,
   zoom: 1,
 };
+
+export function createDefaultState(): SessionState {
+  const grid = { ...DEFAULT_GRID };
+  return {
+    version: 1,
+    grid,
+    background: { ...DEFAULT_BACKGROUND },
+    tokens: [],
+    fog: new Uint8Array(grid.cols * grid.rows),
+  };
+}
