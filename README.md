@@ -1,6 +1,39 @@
 # D&D Maps
 
-A lightweight, browser-based virtual tabletop inspired by D&D Beyond Maps. Grid-based battle maps with player/enemy tokens and fog of war, split across a Game Master view and a Spectator view running on the same device.
+A lightweight, browser-based virtual tabletop inspired by D&D Beyond Maps. Grid-based battle maps with player/enemy tokens and fog of war, split across a Game Master view and a Spectator view running on the same device. Deploys as a static site.
+
+## Usage
+
+From the landing page, open the **GM View** on your own screen and the **Spectator View** on the screen facing your players. Both tabs share state live via `BroadcastChannel`; refresh-safe via `localStorage`.
+
+### GM toolbar
+
+| Tool | Shortcut | Purpose |
+|---|---|---|
+| Select | `S` | Click a token to select, drag to move. Right-click to edit. Delete/Backspace removes the selected token. |
+| Token | `T` | Click any grid cell to drop a token. |
+| Reveal | `R` | Drag to clear fog. Rect or freehand; brush size 1–3. |
+| Hide | `H` | Drag to re-cover fog. Same shape/size controls. |
+| Map | `M` | Drag to reposition the background, scroll to scale. |
+
+### Session menu (top-right)
+
+- **Upload Map** — drops an image under the grid (auto-stretched to grid bounds).
+- **Export** — downloads the current session (state + images) as JSON.
+- **Import** — restores a session from an exported JSON file.
+- **New Session** — clears tokens, fog, and background.
+
+### Global controls
+
+- **Space + drag** or **middle-mouse drag** — pan the camera.
+- **Mouse wheel** — zoom to cursor. (In Map tool mode the wheel scales the background image instead.)
+- **Right-click a token** — open the token editor (label, color, size, image, delete).
+- **Ctrl/Cmd+Z** — undo (up to 50 steps). **Ctrl/Cmd+Shift+Z** or **Ctrl/Cmd+Y** — redo.
+- **Escape** — close the token editor.
+
+### Token editor
+
+Triggered by right-clicking a token in the GM view. Edit its label, fill color, size (1/2/3 grid cells), upload a custom image, or delete the token. Changes sync live to the Spectator view.
 
 ## Development
 
@@ -9,11 +42,10 @@ npm install
 npm run dev
 ```
 
-Then open:
-
+Open:
 - `http://localhost:5173/` — landing page
 - `http://localhost:5173/gm.html` — GM view
-- `http://localhost:5173/spectator.html` — spectator view
+- `http://localhost:5173/spectator.html` — Spectator view
 
 ## Build
 
@@ -24,8 +56,22 @@ npm run preview
 
 ## Deploy
 
-Pushes to `main` deploy automatically to GitHub Pages via `.github/workflows/deploy.yml`. The `base` path in `vite.config.ts` must match the repository name.
+Push to `main`; `.github/workflows/deploy.yml` builds and publishes `dist/` to GitHub Pages. The `base` path in `vite.config.ts` must match the repository name.
 
 ## Architecture
 
-See the original implementation plan for the full design. Phases are tracked in git history — one commit per phase.
+- **Vite** multi-page build — three independent HTML entries, no client-side router.
+- **TypeScript**, vanilla DOM, no framework.
+- **HTML5 Canvas** renderer with layered draws: background → grid → tokens → fog → fog-preview.
+- **BroadcastChannel** (`dnd-maps-session`) for same-origin cross-tab sync. GM is authoritative; Spectator listens.
+- **localStorage** holds the serialized session state (debounced 200ms). **IndexedDB** holds image blobs.
+- Session export is JSON + base64 image data, fully self-contained and portable.
+
+See `src/state/types.ts` for the full state contract.
+
+## Known limitations
+
+- Single-device only — no network sync across browsers. By design.
+- No dice, initiative, measurement, or drawing tools. By design.
+- `BroadcastChannel` is disabled in some private-browsing modes; the Spectator shows a warning banner when that's the case.
+- IndexedDB has a per-origin quota; large libraries of uploaded maps will eventually hit it.

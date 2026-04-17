@@ -69,11 +69,11 @@ toolManager.register(createFogTool(inputContext, 'hide', fogPreviewRef, fogOptio
 toolManager.register(createBackgroundTool(inputContext));
 
 mountToolbar(document.body, toolManager, [
-  { id: 'select', label: 'Select', title: 'Click tokens to select. Drag to move. Right-click to edit.' },
-  { id: 'token', label: 'Token', title: 'Click a cell to place a token.' },
-  { id: 'fog-reveal', label: 'Reveal', title: 'Drag to reveal cells.' },
-  { id: 'fog-hide', label: 'Hide', title: 'Drag to hide cells.' },
-  { id: 'background', label: 'Map', title: 'Drag to move the background, wheel to scale.' },
+  { id: 'select', label: 'Select (S)', title: 'Click tokens to select. Drag to move. Right-click to edit.' },
+  { id: 'token', label: 'Token (T)', title: 'Click a cell to place a token.' },
+  { id: 'fog-reveal', label: 'Reveal (R)', title: 'Drag to reveal cells.' },
+  { id: 'fog-hide', label: 'Hide (H)', title: 'Drag to hide cells.' },
+  { id: 'background', label: 'Map (M)', title: 'Drag to move the background, wheel to scale.' },
 ]);
 
 toolManager.setActive('select');
@@ -174,12 +174,68 @@ const persist = debounce(() => saveState(store.getState()), 200);
 store.subscribe((patch) => {
   renderer.requestRender();
   persist();
-  if (patch && channel) {
+  if (!channel) return;
+  if (patch) {
     channel.send({ type: 'patch', patch: toSerializablePatch(patch) });
+  } else {
+    channel.send({ type: 'full-state', state: serializeState(store.getState()) });
+  }
+});
+
+window.addEventListener('keydown', (e) => {
+  if (isEditableFocus(e.target)) return;
+
+  if (e.ctrlKey || e.metaKey) {
+    const key = e.key.toLowerCase();
+    if (key === 'z') {
+      if (e.shiftKey) store.redo();
+      else store.undo();
+      e.preventDefault();
+      return;
+    }
+    if (key === 'y') {
+      store.redo();
+      e.preventDefault();
+      return;
+    }
+    return;
+  }
+
+  if (e.altKey || e.shiftKey) return;
+
+  switch (e.key.toLowerCase()) {
+    case 's':
+      toolManager.setActive('select');
+      e.preventDefault();
+      break;
+    case 't':
+      toolManager.setActive('token');
+      e.preventDefault();
+      break;
+    case 'r':
+      toolManager.setActive('fog-reveal');
+      e.preventDefault();
+      break;
+    case 'h':
+      toolManager.setActive('fog-hide');
+      e.preventDefault();
+      break;
+    case 'm':
+      toolManager.setActive('background');
+      e.preventDefault();
+      break;
   }
 });
 
 window.addEventListener('beforeunload', () => persist.flush());
+
+function isEditableFocus(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  const tag = target.tagName;
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true;
+  if (target.isContentEditable) return true;
+  return false;
+}
 
 function readImageDimensions(file: File): Promise<{ width: number; height: number }> {
   return new Promise((resolve, reject) => {
