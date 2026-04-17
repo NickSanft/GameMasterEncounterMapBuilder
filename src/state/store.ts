@@ -110,7 +110,17 @@ export function createStore(initial?: SessionState): Store {
           patch.changes.cols !== undefined ||
           patch.changes.rows !== undefined
         ) {
-          fog = new Uint8Array(grid.cols * grid.rows);
+          const oldCols = state.grid.cols;
+          const oldRows = state.grid.rows;
+          const next = new Uint8Array(grid.cols * grid.rows);
+          const cols = Math.min(oldCols, grid.cols);
+          const rows = Math.min(oldRows, grid.rows);
+          for (let y = 0; y < rows; y++) {
+            for (let x = 0; x < cols; x++) {
+              next[y * grid.cols + x] = state.fog[y * oldCols + x]!;
+            }
+          }
+          fog = next;
         }
         state = { ...state, grid, fog };
         break;

@@ -8,6 +8,7 @@ import { drawGrid } from './layer-grid.js';
 import { drawTokens } from './layer-tokens.js';
 import { drawFog, drawFogPreview, type FogPreview } from './layer-fog.js';
 import { drawBackground, type ImageProvider } from './layer-background.js';
+import type { Preferences } from '../state/preferences.js';
 
 export interface Renderer {
   readonly canvas: HTMLCanvasElement;
@@ -16,6 +17,7 @@ export interface Renderer {
   requestRender(): void;
   resize(): void;
   destroy(): void;
+  onCameraChange(listener: () => void): () => void;
 }
 
 interface CreateRendererOptions {
@@ -26,10 +28,18 @@ interface CreateRendererOptions {
   getHighlightIds?(): ReadonlySet<ID>;
   getFogPreview?(): FogPreview | null;
   getImage?: ImageProvider;
+  getPreferences?(): Preferences;
 }
 
 const EMPTY_HIGHLIGHT: ReadonlySet<ID> = new Set();
 const NO_IMAGE: ImageProvider = () => null;
+
+const RENDER_DEFAULTS = {
+  highContrast: false,
+  labelSize: 'medium' as const,
+  gmFogColor: '#ff0000',
+  gmFogOpacity: 0.35,
+};
 
 export function createRenderer(opts: CreateRendererOptions): Renderer {
   const {
@@ -39,6 +49,7 @@ export function createRenderer(opts: CreateRendererOptions): Renderer {
     getHighlightIds,
     getFogPreview,
     getImage = NO_IMAGE,
+    getPreferences,
   } = opts;
   const maybeCtx = canvas.getContext('2d');
   if (!maybeCtx) throw new Error('2D canvas context unavailable');
@@ -48,6 +59,7 @@ export function createRenderer(opts: CreateRendererOptions): Renderer {
   let cssWidth = 0;
   let cssHeight = 0;
   let camera: Camera = opts.camera;
+  const cameraListeners = new Set<() => void>();
 
   function resize() {
     const dpr = window.devicePixelRatio || 1;
@@ -69,14 +81,19 @@ export function createRenderer(opts: CreateRendererOptions): Renderer {
 
     const state = getState();
     const highlights = getHighlightIds ? getHighlightIds() : EMPTY_HIGHLIGHT;
+    const prefs = getPreferences ? getPreferences() : null;
+    const highContrast = prefs?.highContrast ?? RENDER_DEFAULTS.highContrast;
+    const labelSize = prefs?.labelSize ?? RENDER_DEFAULTS.labelSize;
+    const gmFogColor = prefs?.gmFogColor ?? RENDER_DEFAULTS.gmFogColor;
+    const gmFogOpacity = prefs?.gmFogOpacity ?? RENDER_DEFAULTS.gmFogOpacity;
 
     ctx.save();
     ctx.translate(-camera.x * camera.zoom, -camera.y * camera.zoom);
     ctx.scale(camera.zoom, camera.zoom);
     drawBackground(ctx, state.background, state.grid, getImage);
-    drawGrid(ctx, state.grid);
-    drawTokens(ctx, state, highlights, getImage);
-    drawFog(ctx, state, mode);
+    drawGrid(ctx, state.grid, { highContrast });
+    drawTokens(ctx, state, highlights, getImage, { labelSize });
+    drawFog(ctx, state, mode, { gmColor: gmFogColor, gmOpacity: gmFogOpacity });
     const preview = getFogPreview ? getFogPreview() : null;
     if (preview) drawFogPreview(ctx, preview, state.grid.cellSize);
     ctx.restore();
@@ -101,12 +118,17 @@ export function createRenderer(opts: CreateRendererOptions): Renderer {
     set camera(value: Camera) {
       camera = value;
       requestRender();
+      for (const l of cameraListeners) l();
     },
     requestRender,
     resize,
     destroy() {
       window.removeEventListener('resize', onWindowResize);
       if (rafHandle !== 0) cancelAnimationFrame(rafHandle);
+    },
+    onCameraChange(listener: () => void): () => void {
+      cameraListeners.add(listener);
+      return () => cameraListeners.delete(listener);
     },
   };
 }

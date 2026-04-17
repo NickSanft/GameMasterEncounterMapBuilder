@@ -423,6 +423,99 @@ body.view {
   justify-content: flex-end;
 }
 
+/* Settings modal */
+.settings-modal {
+  min-width: 420px;
+  max-width: 520px;
+}
+
+.settings-body {
+  gap: 1.1rem;
+}
+
+.settings-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.settings-section h3 {
+  font-size: 0.75rem;
+  color: var(--fg-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin: 0 0 0.2rem;
+  font-weight: 700;
+}
+
+.settings-section input[type='number'] {
+  padding: 0.4rem 0.5rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--fg);
+  border-radius: 4px;
+  font-family: inherit;
+  font-size: 0.9rem;
+  width: 100%;
+}
+
+.settings-section input[type='number']:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.settings-section .grid-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 0.6rem;
+}
+
+.settings-section .check {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--fg);
+  text-transform: none;
+  font-size: 0.9rem;
+  letter-spacing: 0;
+  cursor: pointer;
+}
+
+.settings-section .check input[type='checkbox'] {
+  width: 1rem;
+  height: 1rem;
+  accent-color: var(--accent);
+}
+
+.slider-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  text-transform: none;
+}
+
+.slider-row input[type='range'] {
+  flex: 1;
+  accent-color: var(--accent);
+}
+
+.slider-row .slider-value {
+  min-width: 3rem;
+  text-align: right;
+  color: var(--fg);
+  font-variant-numeric: tabular-nums;
+  font-size: 0.85rem;
+}
+
+/* Reduced motion: zero out transitions and animations */
+body.reduced-motion *,
+body.reduced-motion *::before,
+body.reduced-motion *::after {
+  transition-duration: 0.001ms !important;
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+}
+
 /* Sync warning banner (Spectator, private mode) */
 .sync-warning {
   position: absolute;

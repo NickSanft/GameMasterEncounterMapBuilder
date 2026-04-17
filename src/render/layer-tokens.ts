@@ -1,17 +1,30 @@
 import type { ID, SessionState, Token } from '../state/types.js';
 import type { ImageProvider } from './layer-background.js';
+import type { LabelSize } from '../state/preferences.js';
 
 const NO_IMAGE: ImageProvider = () => null;
+
+const LABEL_SIZE_MULTIPLIER: Record<LabelSize, number> = {
+  small: 0.85,
+  medium: 1,
+  large: 1.2,
+};
+
+export interface TokenRenderOptions {
+  labelSize: LabelSize;
+}
 
 export function drawTokens(
   ctx: CanvasRenderingContext2D,
   state: SessionState,
   highlightIds: ReadonlySet<ID>,
   getImage: ImageProvider = NO_IMAGE,
+  options: TokenRenderOptions = { labelSize: 'medium' },
 ): void {
   const { cellSize } = state.grid;
+  const labelScale = LABEL_SIZE_MULTIPLIER[options.labelSize];
   for (const token of state.tokens) {
-    drawToken(ctx, token, cellSize, highlightIds.has(token.id), getImage);
+    drawToken(ctx, token, cellSize, highlightIds.has(token.id), getImage, labelScale);
   }
 }
 
@@ -21,6 +34,7 @@ function drawToken(
   cellSize: number,
   highlighted: boolean,
   getImage: ImageProvider,
+  labelScale: number,
 ): void {
   const cx = (t.x + t.size / 2) * cellSize;
   const cy = (t.y + t.size / 2) * cellSize;
@@ -56,7 +70,8 @@ function drawToken(
     ctx.stroke();
   }
 
-  const fontSize = Math.max(11, cellSize * 0.22);
+  const baseFontSize = Math.max(11, cellSize * 0.22);
+  const fontSize = baseFontSize * labelScale;
   ctx.font = `600 ${fontSize}px system-ui, -apple-system, Segoe UI, sans-serif`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'top';

@@ -10,15 +10,23 @@ export interface FogPreview {
   mode: FogMode;
 }
 
+export interface FogRenderOptions {
+  gmColor: string;
+  gmOpacity: number;
+}
+
 export function drawFog(
   ctx: CanvasRenderingContext2D,
   state: SessionState,
   mode: ViewMode,
+  options: FogRenderOptions,
 ): void {
   const { fog, grid } = state;
   const { cols, rows, cellSize } = grid;
 
-  ctx.fillStyle = mode === 'gm' ? 'rgba(255, 0, 0, 0.35)' : '#000000';
+  ctx.fillStyle = mode === 'gm'
+    ? hexToRgba(options.gmColor, options.gmOpacity)
+    : '#000000';
 
   for (let y = 0; y < rows; y++) {
     let runStart = -1;
@@ -71,4 +79,16 @@ export function drawFogPreview(
   ctx.fillRect(px, py, pw, ph);
   ctx.lineWidth = 2;
   ctx.strokeRect(px, py, pw, ph);
+}
+
+function hexToRgba(hex: string, alpha: number): string {
+  const normalized = hex.startsWith('#') ? hex.slice(1) : hex;
+  if (normalized.length !== 6) return `rgba(255, 0, 0, ${alpha})`;
+  const r = parseInt(normalized.slice(0, 2), 16);
+  const g = parseInt(normalized.slice(2, 4), 16);
+  const b = parseInt(normalized.slice(4, 6), 16);
+  if (Number.isNaN(r) || Number.isNaN(g) || Number.isNaN(b)) {
+    return `rgba(255, 0, 0, ${alpha})`;
+  }
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }

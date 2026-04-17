@@ -16,10 +16,13 @@ import { mountToolbar } from '../ui/toolbar.js';
 import { mountSessionMenu } from '../ui/session-menu.js';
 import { mountTokenEditor } from '../ui/token-editor.js';
 import { mountFogSettings } from '../ui/fog-settings.js';
+import { mountSettingsModal } from '../ui/settings-modal.js';
 import { createSyncChannel } from '../sync/channel.js';
 import { serializeState, toSerializablePatch } from '../sync/messages.js';
 import { loadPersistedState, saveState } from '../state/persistence.js';
 import { exportSession, importSession } from '../state/export.js';
+import { createPreferences } from '../state/preferences.js';
+import { loadCamera, saveCamera, clearCamera } from '../state/camera-persistence.js';
 import { debounce } from '../util/debounce.js';
 import { createImageLoader } from '../images/loader.js';
 import { putImage } from '../images/store.js';
@@ -31,6 +34,9 @@ import { EXPORT_FILENAME_PREFIX } from '../util/constants.js';
 const canvas = document.getElementById('canvas') as HTMLCanvasElement | null;
 if (!canvas) throw new Error('Canvas element #canvas not found');
 
+const preferences = createPreferences();
+applyPrefsToBody(preferences.get());
+
 const initial = loadPersistedState();
 const store = createStore(initial ?? undefined);
 const selection = createSelectionState();
@@ -41,17 +47,32 @@ const panZoomRef: { handle: PanZoomHandle | null } = { handle: null };
 
 const imageLoader = createImageLoader(() => renderer.requestRender());
 
+const initialCamera = (preferences.get().persistCamera && loadCamera('gm')) || { ...DEFAULT_CAMERA };
+
 const renderer = createRenderer({
   canvas,
   mode: 'gm',
-  camera: { ...DEFAULT_CAMERA },
+  camera: initialCamera,
   getState: () => store.getState(),
   getHighlightIds: () => selection.ids,
   getFogPreview: () => fogPreviewRef.current,
   getImage: (id) => imageLoader.get(id),
+  getPreferences: () => preferences.get(),
 });
 
 panZoomRef.handle = attachPanZoom(renderer);
+
+const persistCameraDebounced = debounce(() => {
+  if (preferences.get().persistCamera) saveCamera('gm', renderer.camera);
+}, 400);
+renderer.onCameraChange(persistCameraDebounced);
+
+preferences.subscribe((prefs) => {
+  applyPrefsToBody(prefs);
+  renderer.requestRender();
+  if (!prefs.persistCamera) clearCamera('gm');
+  else persistCameraDebounced();
+});
 
 const inputContext = {
   canvas,
@@ -80,6 +101,12 @@ mountToolbar(document.body, toolManager, [
 toolManager.setActive('select');
 
 mountFogSettings(document.body, fogOptionsRef, toolManager);
+
+const settingsModal = mountSettingsModal({
+  viewMode: 'gm',
+  preferences,
+  store,
+});
 
 mountSessionMenu(document.body, {
   onNewSession: () => {
@@ -130,9 +157,10 @@ mountSessionMenu(document.body, {
       store.applyPatch({ kind: 'session-reset', state });
     } catch (err) {
       console.error('[gm] import failed', err);
-      window.alert('Failed to import session. Check the file is a valid dnd-maps export.');
+      window.alert('Failed to import session. Check the file is a valid export.');
     }
   },
+  onSettings: () => settingsModal.open(),
 });
 
 const tokenEditor = mountTokenEditor({
@@ -228,7 +256,10 @@ window.addEventListener('keydown', (e) => {
   }
 });
 
-window.addEventListener('beforeunload', () => persist.flush());
+window.addEventListener('beforeunload', () => {
+  persist.flush();
+  persistCameraDebounced.flush();
+});
 
 function isEditableFocus(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
@@ -236,6 +267,11 @@ function isEditableFocus(target: EventTarget | null): boolean {
   if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true;
   if (target.isContentEditable) return true;
   return false;
+}
+
+function applyPrefsToBody(prefs: { reducedMotion: boolean; highContrast: boolean }) {
+  document.body.classList.toggle('reduced-motion', prefs.reducedMotion);
+  document.body.classList.toggle('high-contrast', prefs.highContrast);
 }
 
 function readImageDimensions(file: File): Promise<{ width: number; height: number }> {

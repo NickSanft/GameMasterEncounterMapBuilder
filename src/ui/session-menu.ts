@@ -3,6 +3,7 @@ export interface SessionMenuActions {
   onUploadBackground(file: File): void | Promise<void>;
   onExport(): void | Promise<void>;
   onImport(file: File): void | Promise<void>;
+  onSettings(): void;
 }
 
 export function mountSessionMenu(
@@ -51,9 +52,16 @@ export function mountSessionMenu(
     if (ok) actions.onNewSession();
   });
 
+  const settingsBtn = createButton('Settings', 'Open settings panel');
+  settingsBtn.addEventListener('click', () => {
+    settingsBtn.blur();
+    actions.onSettings();
+  });
+
   menu.appendChild(uploadBtn);
   menu.appendChild(exportBtn);
   menu.appendChild(importBtn);
+  menu.appendChild(settingsBtn);
   menu.appendChild(newBtn);
   menu.appendChild(bgFileInput);
   menu.appendChild(jsonInput);

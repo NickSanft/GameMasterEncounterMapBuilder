@@ -7,24 +7,53 @@ import { deserializeState, fromSerializablePatch } from '../sync/messages.js';
 import { loadPersistedState, saveState } from '../state/persistence.js';
 import { debounce } from '../util/debounce.js';
 import { createImageLoader } from '../images/loader.js';
+import { createPreferences } from '../state/preferences.js';
+import { loadCamera, saveCamera, clearCamera } from '../state/camera-persistence.js';
+import { mountSettingsModal } from '../ui/settings-modal.js';
 
 const canvas = document.getElementById('canvas') as HTMLCanvasElement | null;
 if (!canvas) throw new Error('Canvas element #canvas not found');
+
+const preferences = createPreferences();
+applyPrefsToBody(preferences.get());
 
 const initial = loadPersistedState();
 const store = createStore(initial ?? undefined);
 
 const imageLoader = createImageLoader(() => renderer.requestRender());
 
+const initialCamera = (preferences.get().persistCamera && loadCamera('spectator')) || { ...DEFAULT_CAMERA };
+
 const renderer = createRenderer({
   canvas,
   mode: 'spectator',
-  camera: { ...DEFAULT_CAMERA },
+  camera: initialCamera,
   getState: () => store.getState(),
   getImage: (id) => imageLoader.get(id),
+  getPreferences: () => preferences.get(),
 });
 
 attachPanZoom(renderer);
+
+const persistCameraDebounced = debounce(() => {
+  if (preferences.get().persistCamera) saveCamera('spectator', renderer.camera);
+}, 400);
+renderer.onCameraChange(persistCameraDebounced);
+
+preferences.subscribe((prefs) => {
+  applyPrefsToBody(prefs);
+  renderer.requestRender();
+  if (!prefs.persistCamera) clearCamera('spectator');
+  else persistCameraDebounced();
+});
+
+const settingsModal = mountSettingsModal({
+  viewMode: 'spectator',
+  preferences,
+  store,
+});
+
+mountSpectatorMenu(() => settingsModal.open());
 
 const persist = debounce(() => saveState(store.getState()), 200);
 
@@ -52,7 +81,30 @@ if (channel) {
   showSyncWarning();
 }
 
-window.addEventListener('beforeunload', () => persist.flush());
+window.addEventListener('beforeunload', () => {
+  persist.flush();
+  persistCameraDebounced.flush();
+});
+
+function mountSpectatorMenu(onSettings: () => void) {
+  const menu = document.createElement('div');
+  menu.className = 'session-menu';
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.textContent = 'Settings';
+  btn.title = 'Open settings panel';
+  btn.addEventListener('click', () => {
+    btn.blur();
+    onSettings();
+  });
+  menu.appendChild(btn);
+  document.body.appendChild(menu);
+}
+
+function applyPrefsToBody(prefs: { reducedMotion: boolean; highContrast: boolean }) {
+  document.body.classList.toggle('reduced-motion', prefs.reducedMotion);
+  document.body.classList.toggle('high-contrast', prefs.highContrast);
+}
 
 function showSyncWarning() {
   const banner = document.createElement('div');
