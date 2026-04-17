@@ -1,7 +1,7 @@
 import type { InputContext } from './context.js';
 import type { Tool } from './tool-manager.js';
 import { pointerToWorld } from './context.js';
-import type { FogMode, FogPreview } from '../render/layer-fog.js';
+import type { FogHoverPreview, FogMode, FogPreview } from '../render/layer-fog.js';
 
 export type FogShape = 'rectangle' | 'freehand';
 
@@ -26,11 +26,20 @@ export function createFogPreviewRef(): FogPreviewRef {
   return { current: null };
 }
 
+export interface FogHoverRef {
+  current: FogHoverPreview | null;
+}
+
+export function createFogHoverRef(): FogHoverRef {
+  return { current: null };
+}
+
 export function createFogTool(
   ctx: InputContext,
   mode: FogMode,
   previewRef: FogPreviewRef,
   optionsRef: FogOptionsRef,
+  hoverRef: FogHoverRef,
 ): Tool {
   const { canvas, renderer, store } = ctx;
   let startCell: { x: number; y: number } | null = null;
@@ -109,6 +118,27 @@ export function createFogTool(
     }
   }
 
+  function clearHover() {
+    if (hoverRef.current) {
+      hoverRef.current = null;
+      renderer.requestRender();
+    }
+  }
+
+  function updateHoverFrom(cell: { x: number; y: number }) {
+    if (optionsRef.current.shape !== 'freehand') {
+      clearHover();
+      return;
+    }
+    hoverRef.current = {
+      cx: cell.x,
+      cy: cell.y,
+      brushSize: optionsRef.current.brushSize,
+      mode,
+    };
+    renderer.requestRender();
+  }
+
   function onPointerDown(e: PointerEvent) {
     if (e.button !== 0 || ctx.isSpaceHeld()) return;
     const cell = cellOfPointer(e);
@@ -118,6 +148,7 @@ export function createFogTool(
     activeShape = optionsRef.current.shape;
     painted.clear();
     canvas.setPointerCapture(e.pointerId);
+    clearHover();
     if (activeShape === 'rectangle') {
       previewRef.current = { x1: cell.x, y1: cell.y, x2: cell.x, y2: cell.y, mode };
       renderer.requestRender();
@@ -128,7 +159,12 @@ export function createFogTool(
   }
 
   function onPointerMove(e: PointerEvent) {
-    if (!startCell || e.pointerId !== activePointerId) return;
+    if (!startCell || e.pointerId !== activePointerId) {
+      if (activePointerId === null) {
+        updateHoverFrom(cellOfPointer(e));
+      }
+      return;
+    }
     const cell = cellOfPointer(e);
     if (activeShape === 'rectangle') {
       previewRef.current = {
@@ -143,6 +179,10 @@ export function createFogTool(
       paintLine(lastCell, cell);
       lastCell = cell;
     }
+  }
+
+  function onPointerLeave() {
+    clearHover();
   }
 
   function endDrag(e: PointerEvent) {
@@ -174,10 +214,12 @@ export function createFogTool(
       }
       if (cells.length > 0) {
         store.applyPatch({ kind: 'fog-set', cells });
-        return;
+      } else {
+        renderer.requestRender();
       }
+    } else {
+      renderer.requestRender();
     }
-    renderer.requestRender();
   }
 
   return {
@@ -188,16 +230,19 @@ export function createFogTool(
       canvas.addEventListener('pointermove', onPointerMove);
       canvas.addEventListener('pointerup', endDrag);
       canvas.addEventListener('pointercancel', endDrag);
+      canvas.addEventListener('pointerleave', onPointerLeave);
     },
     deactivate() {
       canvas.removeEventListener('pointerdown', onPointerDown);
       canvas.removeEventListener('pointermove', onPointerMove);
       canvas.removeEventListener('pointerup', endDrag);
       canvas.removeEventListener('pointercancel', endDrag);
+      canvas.removeEventListener('pointerleave', onPointerLeave);
       if (previewRef.current) {
         previewRef.current = null;
         renderer.requestRender();
       }
+      clearHover();
       startCell = null;
       lastCell = null;
       activePointerId = null;

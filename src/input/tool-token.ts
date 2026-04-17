@@ -38,6 +38,7 @@ export function createTokenTool(ctx: InputContext): Tool {
         color: nextColor(),
         imageId: null,
         size: 1,
+        borderColor: null,
       },
     });
     e.preventDefault();

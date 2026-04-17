@@ -6,7 +6,13 @@ import type {
 } from '../state/types.js';
 import { drawGrid } from './layer-grid.js';
 import { drawTokens } from './layer-tokens.js';
-import { drawFog, drawFogPreview, type FogPreview } from './layer-fog.js';
+import {
+  drawFog,
+  drawFogPreview,
+  drawFogHoverPreview,
+  type FogPreview,
+  type FogHoverPreview,
+} from './layer-fog.js';
 import { drawBackground, type ImageProvider } from './layer-background.js';
 import type { Preferences } from '../state/preferences.js';
 
@@ -27,6 +33,7 @@ interface CreateRendererOptions {
   getState(): SessionState;
   getHighlightIds?(): ReadonlySet<ID>;
   getFogPreview?(): FogPreview | null;
+  getFogHoverPreview?(): FogHoverPreview | null;
   getImage?: ImageProvider;
   getPreferences?(): Preferences;
 }
@@ -48,6 +55,7 @@ export function createRenderer(opts: CreateRendererOptions): Renderer {
     getState,
     getHighlightIds,
     getFogPreview,
+    getFogHoverPreview,
     getImage = NO_IMAGE,
     getPreferences,
   } = opts;
@@ -86,16 +94,25 @@ export function createRenderer(opts: CreateRendererOptions): Renderer {
     const labelSize = prefs?.labelSize ?? RENDER_DEFAULTS.labelSize;
     const gmFogColor = prefs?.gmFogColor ?? RENDER_DEFAULTS.gmFogColor;
     const gmFogOpacity = prefs?.gmFogOpacity ?? RENDER_DEFAULTS.gmFogOpacity;
+    const showColorblindMarkers = prefs?.colorblindMarkers ?? false;
 
     ctx.save();
     ctx.translate(-camera.x * camera.zoom, -camera.y * camera.zoom);
     ctx.scale(camera.zoom, camera.zoom);
     drawBackground(ctx, state.background, state.grid, getImage);
     drawGrid(ctx, state.grid, { highContrast });
-    drawTokens(ctx, state, highlights, getImage, { labelSize });
+    drawTokens(ctx, state, highlights, getImage, {
+      labelSize,
+      showColorblindMarkers,
+    });
     drawFog(ctx, state, mode, { gmColor: gmFogColor, gmOpacity: gmFogOpacity });
     const preview = getFogPreview ? getFogPreview() : null;
-    if (preview) drawFogPreview(ctx, preview, state.grid.cellSize);
+    if (preview) {
+      drawFogPreview(ctx, preview, state.grid.cellSize);
+    } else {
+      const hover = getFogHoverPreview ? getFogHoverPreview() : null;
+      if (hover) drawFogHoverPreview(ctx, hover, state.grid.cellSize);
+    }
     ctx.restore();
   }
 

@@ -10,6 +10,13 @@ export interface FogPreview {
   mode: FogMode;
 }
 
+export interface FogHoverPreview {
+  cx: number;
+  cy: number;
+  brushSize: number;
+  mode: FogMode;
+}
+
 export interface FogRenderOptions {
   gmColor: string;
   gmOpacity: number;
@@ -53,6 +60,35 @@ export function drawFog(
       );
     }
   }
+}
+
+export function drawFogHoverPreview(
+  ctx: CanvasRenderingContext2D,
+  hover: FogHoverPreview,
+  cellSize: number,
+): void {
+  const n = hover.brushSize;
+  const half = Math.floor((n - 1) / 2);
+  const x1 = hover.cx - half;
+  const y1 = hover.cy - half;
+  const px = x1 * cellSize;
+  const py = y1 * cellSize;
+  const pw = n * cellSize;
+  const ph = n * cellSize;
+
+  if (hover.mode === 'reveal') {
+    ctx.fillStyle = 'rgba(129, 199, 132, 0.18)';
+    ctx.strokeStyle = 'rgba(129, 199, 132, 0.7)';
+  } else {
+    ctx.fillStyle = 'rgba(239, 83, 80, 0.2)';
+    ctx.strokeStyle = 'rgba(239, 83, 80, 0.7)';
+  }
+  ctx.fillRect(px, py, pw, ph);
+  ctx.save();
+  ctx.setLineDash([4, 3]);
+  ctx.lineWidth = 1.5;
+  ctx.strokeRect(px + 0.5, py + 0.5, pw - 1, ph - 1);
+  ctx.restore();
 }
 
 export function drawFogPreview(

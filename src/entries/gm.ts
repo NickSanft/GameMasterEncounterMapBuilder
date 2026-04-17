@@ -10,6 +10,7 @@ import {
   createFogTool,
   createFogPreviewRef,
   createFogOptionsRef,
+  createFogHoverRef,
 } from '../input/tool-fog.js';
 import { createBackgroundTool } from '../input/tool-background.js';
 import { mountToolbar } from '../ui/toolbar.js';
@@ -42,6 +43,7 @@ const store = createStore(initial ?? undefined);
 const selection = createSelectionState();
 const fogPreviewRef = createFogPreviewRef();
 const fogOptionsRef = createFogOptionsRef();
+const fogHoverRef = createFogHoverRef();
 
 const panZoomRef: { handle: PanZoomHandle | null } = { handle: null };
 
@@ -56,6 +58,7 @@ const renderer = createRenderer({
   getState: () => store.getState(),
   getHighlightIds: () => selection.ids,
   getFogPreview: () => fogPreviewRef.current,
+  getFogHoverPreview: () => fogHoverRef.current,
   getImage: (id) => imageLoader.get(id),
   getPreferences: () => preferences.get(),
 });
@@ -86,8 +89,8 @@ const inputContext = {
 const toolManager = createToolManager(canvas);
 toolManager.register(createSelectTool(inputContext));
 toolManager.register(createTokenTool(inputContext));
-toolManager.register(createFogTool(inputContext, 'reveal', fogPreviewRef, fogOptionsRef));
-toolManager.register(createFogTool(inputContext, 'hide', fogPreviewRef, fogOptionsRef));
+toolManager.register(createFogTool(inputContext, 'reveal', fogPreviewRef, fogOptionsRef, fogHoverRef));
+toolManager.register(createFogTool(inputContext, 'hide', fogPreviewRef, fogOptionsRef, fogHoverRef));
 toolManager.register(createBackgroundTool(inputContext));
 
 mountToolbar(document.body, toolManager, [

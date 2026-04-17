@@ -50,7 +50,7 @@ export function deserializeState(s: SerializedSessionState): SessionState {
       scaleX,
       scaleY,
     },
-    tokens: s.tokens.map((t) => ({ ...t })),
+    tokens: s.tokens.map((t) => ({ ...t, borderColor: t.borderColor ?? null })),
     fog: Uint8Array.from(s.fog),
   };
 }

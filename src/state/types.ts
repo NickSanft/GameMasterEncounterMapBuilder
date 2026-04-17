@@ -15,6 +15,7 @@ export interface Token {
   color: string;
   imageId: ID | null;
   size: number;
+  borderColor: string | null;
 }
 
 export interface Background {

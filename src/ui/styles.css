@@ -380,6 +380,77 @@ body.view {
   gap: 0.3rem;
 }
 
+/* Token editor border swatches */
+.border-row {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+  text-transform: none;
+  flex-wrap: wrap;
+}
+
+.border-row .swatch {
+  appearance: none;
+  width: 1.9rem;
+  height: 1.9rem;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  cursor: pointer;
+  padding: 0;
+  background-color: transparent;
+  color: var(--fg);
+  font-size: 0.9rem;
+  font-family: inherit;
+  transition: transform 90ms ease, border-color 90ms ease;
+}
+
+.border-row .swatch:hover {
+  transform: scale(1.08);
+}
+
+.border-row .swatch.active {
+  border-color: var(--fg);
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.12);
+}
+
+.border-row .swatch-none {
+  background: var(--bg);
+  background-image: linear-gradient(
+    to top right,
+    transparent calc(50% - 1.5px),
+    var(--fg-muted) calc(50% - 1.5px),
+    var(--fg-muted) calc(50% + 1.5px),
+    transparent calc(50% + 1.5px)
+  );
+  color: transparent;
+}
+
+.border-row .border-color-input {
+  appearance: none;
+  width: 1.9rem;
+  height: 1.9rem;
+  padding: 0;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  overflow: hidden;
+  cursor: pointer;
+  background: var(--bg);
+}
+
+.border-row .border-color-input::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+.border-row .border-color-input::-webkit-color-swatch {
+  border: none;
+  border-radius: 50%;
+}
+
+.border-row .border-color-input.active {
+  border-color: var(--fg);
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.12);
+}
+
 .modal button {
   appearance: none;
   background: transparent;

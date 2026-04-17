@@ -3,6 +3,7 @@ import type { SelectionState } from '../input/context.js';
 import type { ID, Token } from '../state/types.js';
 import { putImage, getImageURL } from '../images/store.js';
 import type { ImageLoader } from '../images/loader.js';
+import { TEAM_PRESETS } from '../state/team-colors.js';
 
 export interface TokenEditorHandle {
   openFor(token: Token): void;
@@ -54,6 +55,16 @@ export function mountTokenEditor(opts: TokenEditorOptions): TokenEditorHandle {
           <input type="file" accept="image/*" data-field="file" hidden />
         </div>
       </label>
+      <label>Border
+        <div class="border-row" data-field="border-swatches">
+          <button type="button" class="swatch swatch-none" data-border="" title="No border">×</button>
+          ${TEAM_PRESETS.map(
+            (p) =>
+              `<button type="button" class="swatch" data-border="${p.color}" style="background:${p.color}" title="${p.label}"></button>`,
+          ).join('')}
+          <input type="color" class="border-color-input" data-field="borderColor" title="Custom color" />
+        </div>
+      </label>
       <hr />
       <div class="modal-footer">
         <button type="button" class="danger" data-action="delete">Delete Token</button>
@@ -75,6 +86,10 @@ export function mountTokenEditor(opts: TokenEditorOptions): TokenEditorHandle {
   const removeImageBtn = modal.querySelector<HTMLButtonElement>('[data-action="remove-image"]')!;
   const deleteBtn = modal.querySelector<HTMLButtonElement>('[data-action="delete"]')!;
   const closeBtn = modal.querySelector<HTMLButtonElement>('.modal-close')!;
+  const borderInput = modal.querySelector<HTMLInputElement>('[data-field="borderColor"]')!;
+  const borderSwatches = Array.from(
+    modal.querySelectorAll<HTMLButtonElement>('[data-field="border-swatches"] .swatch'),
+  );
 
   let currentId: ID | null = null;
 
@@ -104,8 +119,22 @@ export function mountTokenEditor(opts: TokenEditorOptions): TokenEditorHandle {
     colorInput.value = token.color;
     for (const r of sizeRadios) r.checked = Number(r.value) === token.size;
     updatePreview(token.imageId);
+    syncBorderUI(token.borderColor);
     backdrop.hidden = false;
     window.setTimeout(() => labelInput.focus(), 0);
+  }
+
+  function syncBorderUI(borderColor: string | null) {
+    const normalized = (borderColor ?? '').toLowerCase();
+    let matched = false;
+    for (const s of borderSwatches) {
+      const swatchColor = (s.dataset.border ?? '').toLowerCase();
+      const isActive = swatchColor === normalized;
+      s.classList.toggle('active', isActive);
+      if (isActive) matched = true;
+    }
+    borderInput.value = borderColor ?? '#ffffff';
+    borderInput.classList.toggle('active', !matched && borderColor !== null);
   }
 
   function close() {
@@ -156,6 +185,21 @@ export function mountTokenEditor(opts: TokenEditorOptions): TokenEditorHandle {
   removeImageBtn.addEventListener('click', () => {
     update({ imageId: null });
     updatePreview(null);
+  });
+
+  for (const s of borderSwatches) {
+    s.addEventListener('click', () => {
+      const raw = s.dataset.border ?? '';
+      const next = raw === '' ? null : raw;
+      update({ borderColor: next });
+      syncBorderUI(next);
+      s.blur();
+    });
+  }
+
+  borderInput.addEventListener('change', () => {
+    update({ borderColor: borderInput.value });
+    syncBorderUI(borderInput.value);
   });
 
   deleteBtn.addEventListener('click', () => {
