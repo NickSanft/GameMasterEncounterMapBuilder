@@ -6,6 +6,7 @@ import type {
 } from '../state/types.js';
 import { drawGrid } from './layer-grid.js';
 import { drawTokens } from './layer-tokens.js';
+import { drawFog, drawFogPreview, type FogPreview } from './layer-fog.js';
 
 export interface Renderer {
   readonly canvas: HTMLCanvasElement;
@@ -22,12 +23,13 @@ interface CreateRendererOptions {
   camera: Camera;
   getState(): SessionState;
   getHighlightIds?(): ReadonlySet<ID>;
+  getFogPreview?(): FogPreview | null;
 }
 
 const EMPTY_HIGHLIGHT: ReadonlySet<ID> = new Set();
 
 export function createRenderer(opts: CreateRendererOptions): Renderer {
-  const { canvas, mode, getState, getHighlightIds } = opts;
+  const { canvas, mode, getState, getHighlightIds, getFogPreview } = opts;
   const maybeCtx = canvas.getContext('2d');
   if (!maybeCtx) throw new Error('2D canvas context unavailable');
   const ctx: CanvasRenderingContext2D = maybeCtx;
@@ -63,6 +65,9 @@ export function createRenderer(opts: CreateRendererOptions): Renderer {
     ctx.scale(camera.zoom, camera.zoom);
     drawGrid(ctx, state.grid);
     drawTokens(ctx, state, highlights);
+    drawFog(ctx, state, mode);
+    const preview = getFogPreview ? getFogPreview() : null;
+    if (preview) drawFogPreview(ctx, preview, state.grid.cellSize);
     ctx.restore();
   }
 

@@ -6,6 +6,7 @@ import { createSelectionState } from '../input/context.js';
 import { createToolManager } from '../input/tool-manager.js';
 import { createSelectTool } from '../input/tool-select.js';
 import { createTokenTool } from '../input/tool-token.js';
+import { createFogTool, createFogPreviewRef } from '../input/tool-fog.js';
 import { mountToolbar } from '../ui/toolbar.js';
 import { mountSessionMenu } from '../ui/session-menu.js';
 import { createSyncChannel } from '../sync/channel.js';
@@ -19,6 +20,7 @@ if (!canvas) throw new Error('Canvas element #canvas not found');
 const initial = loadPersistedState();
 const store = createStore(initial ?? undefined);
 const selection = createSelectionState();
+const fogPreviewRef = createFogPreviewRef();
 
 const panZoomRef: { handle: { isSpaceHeld(): boolean } | null } = { handle: null };
 
@@ -28,6 +30,7 @@ const renderer = createRenderer({
   camera: { ...DEFAULT_CAMERA },
   getState: () => store.getState(),
   getHighlightIds: () => selection.ids,
+  getFogPreview: () => fogPreviewRef.current,
 });
 
 panZoomRef.handle = attachPanZoom(renderer);
@@ -43,10 +46,14 @@ const inputContext = {
 const toolManager = createToolManager(canvas);
 toolManager.register(createSelectTool(inputContext));
 toolManager.register(createTokenTool(inputContext));
+toolManager.register(createFogTool(inputContext, 'reveal', fogPreviewRef));
+toolManager.register(createFogTool(inputContext, 'hide', fogPreviewRef));
 
 mountToolbar(document.body, toolManager, [
   { id: 'select', label: 'Select', title: 'Click tokens to select. Drag to move.' },
   { id: 'token', label: 'Token', title: 'Click a cell to place a token.' },
+  { id: 'fog-reveal', label: 'Reveal', title: 'Drag a rectangle to reveal cells.' },
+  { id: 'fog-hide', label: 'Hide', title: 'Drag a rectangle to hide cells.' },
 ]);
 
 toolManager.setActive('select');
