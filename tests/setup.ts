@@ -1,0 +1,54 @@
+import 'fake-indexeddb/auto';
+import { IDBFactory } from 'fake-indexeddb';
+import { beforeEach } from 'vitest';
+
+// Reset IndexedDB between tests so each test starts with a clean DB.
+beforeEach(() => {
+  (globalThis as unknown as { indexedDB: IDBFactory }).indexedDB = new IDBFactory();
+});
+
+// Provide a minimal BroadcastChannel polyfill for jsdom environments that
+// don't include one. The app's own channel wrapper checks for BroadcastChannel
+// existence before using it, so this ensures code paths that poke at it don't
+// blow up in unit tests.
+if (typeof (globalThis as { BroadcastChannel?: unknown }).BroadcastChannel === 'undefined') {
+  class MockBroadcastChannel {
+    readonly name: string;
+    onmessage: ((event: MessageEvent) => void) | null = null;
+    constructor(name: string) {
+      this.name = name;
+    }
+    postMessage(): void {}
+    close(): void {}
+    addEventListener(): void {}
+    removeEventListener(): void {}
+    dispatchEvent(): boolean {
+      return true;
+    }
+  }
+  (globalThis as unknown as { BroadcastChannel: typeof MockBroadcastChannel }).BroadcastChannel =
+    MockBroadcastChannel;
+}
+
+// Ensure localStorage is clean between tests so persisted state from one test
+// doesn't leak into the next.
+beforeEach(() => {
+  if (typeof localStorage !== 'undefined') localStorage.clear();
+});
+
+// jsdom doesn't implement URL.createObjectURL. The app uses it for image
+// previews, so we provide a minimal polyfill that produces unique fake URLs
+// and a matching revoker.
+if (typeof URL !== 'undefined') {
+  const urlCtor = URL as unknown as {
+    createObjectURL?: (obj: unknown) => string;
+    revokeObjectURL?: (url: string) => void;
+  };
+  if (typeof urlCtor.createObjectURL !== 'function') {
+    urlCtor.createObjectURL = () =>
+      `blob:mock/${Math.random().toString(36).slice(2)}`;
+  }
+  if (typeof urlCtor.revokeObjectURL !== 'function') {
+    urlCtor.revokeObjectURL = () => {};
+  }
+}

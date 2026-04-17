@@ -34,7 +34,7 @@ export async function exportSession(state: SessionState): Promise<string> {
   for (const id of imageIds) {
     const record = await getImage(id);
     if (!record) continue;
-    const dataUrl = await blobToDataURL(record.blob);
+    const dataUrl = await blobToDataURL(record.blob, record.mimeType);
     images.push({ id, mimeType: record.mimeType, dataUrl });
   }
 
