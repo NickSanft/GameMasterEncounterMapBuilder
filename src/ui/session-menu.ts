@@ -8,6 +8,8 @@ export interface SessionMenuActions {
   onToggleNotes(): void;
   onShortcuts(): void;
   onInitiative(): void;
+  onTokenLibrary(): void;
+  onTemplateLibrary(): void;
 }
 
 export function mountSessionMenu(
@@ -82,6 +84,18 @@ export function mountSessionMenu(
     actions.onInitiative();
   });
 
+  const tokenLibBtn = createButton('Token Library', 'Browse and place saved tokens');
+  tokenLibBtn.addEventListener('click', () => {
+    tokenLibBtn.blur();
+    actions.onTokenLibrary();
+  });
+
+  const templateLibBtn = createButton('Template Library', 'Browse and place saved token groups');
+  templateLibBtn.addEventListener('click', () => {
+    templateLibBtn.blur();
+    actions.onTemplateLibrary();
+  });
+
   const shortcutsBtn = createButton('Shortcuts', 'Show keyboard shortcuts (?)');
   shortcutsBtn.addEventListener('click', () => {
     shortcutsBtn.blur();
@@ -90,6 +104,8 @@ export function mountSessionMenu(
 
   menu.appendChild(uploadBtn);
   menu.appendChild(presetBtn);
+  menu.appendChild(tokenLibBtn);
+  menu.appendChild(templateLibBtn);
   menu.appendChild(initiativeBtn);
   menu.appendChild(exportBtn);
   menu.appendChild(importBtn);

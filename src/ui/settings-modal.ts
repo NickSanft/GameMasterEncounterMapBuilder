@@ -2,6 +2,7 @@ import type { PreferencesStore, LabelSize, Theme } from '../state/preferences.js
 import type { Store } from '../state/store.js';
 import type { ViewMode } from '../state/types.js';
 import { attachFocusTrap, rememberFocus, restoreFocus, getFocusables } from '../util/focus.js';
+import { scanUnusedImages, removeUnusedImages } from '../state/idb-cleanup.js';
 
 export interface SettingsModalHandle {
   open(): void;
@@ -68,6 +69,8 @@ export function mountSettingsModal(
   const broadcastCameraInput = modal.querySelector<HTMLInputElement>('[data-field="broadcastCamera"]');
   const followGmCameraInput = modal.querySelector<HTMLInputElement>('[data-field="followGmCamera"]');
   const resetBtn = modal.querySelector<HTMLButtonElement>('[data-action="reset-prefs"]')!;
+  const scanImagesBtn = modal.querySelector<HTMLButtonElement>('[data-action="scan-images"]');
+  const scanImagesStatus = modal.querySelector<HTMLDivElement>('[data-field="scan-images-status"]');
   const closeBtn = modal.querySelector<HTMLButtonElement>('.modal-close')!;
 
   // Tab refs
@@ -244,6 +247,41 @@ export function mountSettingsModal(
     preferences.reset();
   });
 
+  if (scanImagesBtn && scanImagesStatus) {
+    scanImagesBtn.addEventListener('click', async () => {
+      scanImagesBtn.disabled = true;
+      const originalLabel = scanImagesBtn.textContent ?? 'Scan';
+      try {
+        scanImagesStatus.textContent = 'Scanning…';
+        const report = await scanUnusedImages(store.getState());
+        const orphanCount = report.orphans.length;
+        scanImagesStatus.textContent =
+          `${report.total} image${report.total === 1 ? '' : 's'} stored, ${report.referenced} referenced, ` +
+          `${orphanCount} orphan${orphanCount === 1 ? '' : 's'}.`;
+        if (orphanCount === 0) {
+          scanImagesBtn.textContent = originalLabel;
+          return;
+        }
+        const ok = window.confirm(
+          `Found ${orphanCount} orphaned image${orphanCount === 1 ? '' : 's'} not referenced by any token, map, library entry, or template. Delete them from IndexedDB?`,
+        );
+        if (!ok) {
+          scanImagesBtn.textContent = originalLabel;
+          return;
+        }
+        scanImagesStatus.textContent = 'Deleting…';
+        const removed = await removeUnusedImages(report.orphans);
+        scanImagesStatus.textContent = `Removed ${removed} orphan${removed === 1 ? '' : 's'}.`;
+      } catch (err) {
+        console.error('[settings] scan-images failed', err);
+        scanImagesStatus.textContent = 'Scan failed — check the console.';
+      } finally {
+        scanImagesBtn.textContent = originalLabel;
+        scanImagesBtn.disabled = false;
+      }
+    });
+  }
+
   closeBtn.addEventListener('click', close);
 
   backdrop.addEventListener('click', (e) => {
@@ -413,10 +451,15 @@ function renderDiagnosticsPane(): string {
   return `
     <section ${paneAttrs('diagnostics', false)}>
       <div>
+        <button type="button" data-action="scan-images">Scan and remove unused images</button>
+      </div>
+      <p class="settings-hint">Finds images in IndexedDB that aren't referenced by any token, map, library entry, or template, and offers to delete them.</p>
+      <div class="settings-hint" data-field="scan-images-status" role="status" aria-live="polite"></div>
+      <hr />
+      <div>
         <button type="button" class="danger" data-action="reset-prefs">Reset preferences to defaults</button>
       </div>
       <p class="settings-hint">Restores every appearance, accessibility, and camera setting to its default. Session content (tokens, map, fog) is unaffected.</p>
-      <p class="settings-hint">Runtime overlays (FPS counter, Spectator viewport indicator) will appear here in a later update.</p>
     </section>
   `;
 }

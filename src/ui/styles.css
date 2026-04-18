@@ -787,6 +787,152 @@ body.reduced-motion *::after {
   padding-right: 0.4rem;
 }
 
+/* Token / Template library modals */
+.library-modal {
+  min-width: 560px;
+  max-width: min(820px, 94vw);
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.library-modal .modal-body {
+  overflow-y: auto;
+  padding-right: 0.4rem;
+}
+
+.library-hint {
+  font-size: 0.82rem;
+  color: var(--fg-muted);
+  margin: 0 0 0.8rem;
+  text-transform: none;
+  letter-spacing: 0;
+  line-height: 1.4;
+}
+
+.library-empty {
+  padding: 1.2rem;
+  text-align: center;
+  color: var(--fg-muted);
+  border: 1px dashed var(--border);
+  border-radius: 6px;
+}
+
+.library-empty p {
+  margin: 0.25rem 0;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.library-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 0.65rem;
+}
+
+.library-card {
+  position: relative;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+  transition: border-color 100ms ease, transform 120ms ease, box-shadow 120ms ease;
+}
+
+.library-card:hover {
+  border-color: var(--accent);
+  transform: translateY(-2px);
+  box-shadow: var(--panel-shadow);
+}
+
+.library-card-main {
+  appearance: none;
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  color: var(--fg);
+  font-family: inherit;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  text-align: left;
+}
+
+.library-thumb {
+  aspect-ratio: 1 / 1;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--bg);
+  border-bottom: 1px solid var(--border);
+  position: relative;
+}
+
+.library-thumb-label {
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: rgba(0, 0, 0, 0.65);
+  letter-spacing: 0.02em;
+  text-shadow: 0 1px 2px rgba(255, 255, 255, 0.35);
+}
+
+.template-thumb {
+  background-color: var(--bg);
+}
+
+.library-meta {
+  padding: 0.5rem 0.65rem 0.6rem;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.library-name {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.library-sub {
+  font-size: 0.76rem;
+  color: var(--fg-muted);
+  margin-top: 0.2rem;
+}
+
+.library-delete {
+  position: absolute;
+  top: 0.25rem;
+  right: 0.25rem;
+  width: 1.45rem;
+  height: 1.45rem;
+  border-radius: 50%;
+  background: rgba(20, 20, 20, 0.65);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  font-size: 0.9rem;
+  line-height: 1;
+  padding: 0;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 100ms ease, background-color 100ms ease;
+}
+
+.library-card:hover .library-delete,
+.library-card:focus-within .library-delete {
+  opacity: 1;
+}
+
+.library-delete:hover {
+  background: #a13b3b;
+}
+
 .preset-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);

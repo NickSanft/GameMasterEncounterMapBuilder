@@ -53,6 +53,17 @@ import { resolvePresetUrl } from '../state/preset-backgrounds.js';
 import { showContextMenu, type ContextMenuEntry } from '../ui/context-menu.js';
 import { nid } from '../util/id.js';
 import { nextTokenColor } from '../state/token-colors.js';
+import {
+  tokenFromCatalogEntry,
+  type TokenCatalogEntry,
+} from '../state/token-catalog.js';
+import {
+  saveTemplateToLibrary,
+  placeTemplate,
+  type TemplateCatalogEntry,
+} from '../state/template-catalog.js';
+import { mountTokenLibraryModal } from '../ui/token-library-modal.js';
+import { mountTemplateLibraryModal } from '../ui/template-library-modal.js';
 import { createPingManager } from '../state/ping-manager.js';
 import { mountNotesPanel } from '../ui/notes-panel.js';
 import { mountShortcutOverlay } from '../ui/shortcut-overlay.js';
@@ -234,6 +245,82 @@ const presetBackgroundsModal = mountPresetBackgroundsModal({
   },
 });
 
+function viewportCenterGrid(): { gx: number; gy: number } | null {
+  const state = store.getState();
+  if (!canvas) return null;
+  const rect = canvas.getBoundingClientRect();
+  const world = screenToWorld(
+    renderer.camera,
+    rect.width / 2,
+    rect.height / 2,
+  );
+  return {
+    gx: Math.floor(world.x / state.grid.cellSize),
+    gy: Math.floor(world.y / state.grid.cellSize),
+  };
+}
+
+function clampGridCell(gx: number, gy: number): { gx: number; gy: number } {
+  const { grid } = store.getState();
+  return {
+    gx: Math.max(0, Math.min(grid.cols - 1, gx)),
+    gy: Math.max(0, Math.min(grid.rows - 1, gy)),
+  };
+}
+
+function placeLibraryToken(entry: TokenCatalogEntry) {
+  const center = viewportCenterGrid();
+  const { gx, gy } = center ? clampGridCell(center.gx, center.gy) : { gx: 0, gy: 0 };
+  const token = tokenFromCatalogEntry(entry, gx, gy);
+  store.applyPatch({ kind: 'token-add', token });
+  lastPlacedRef.current = token;
+  selection.ids = new Set([token.id]);
+  renderer.requestRender();
+}
+
+function placeLibraryTemplate(entry: TemplateCatalogEntry) {
+  const center = viewportCenterGrid();
+  const { gx, gy } = center ? clampGridCell(center.gx, center.gy) : { gx: 0, gy: 0 };
+  const tokens = placeTemplate(entry, gx, gy);
+  if (tokens.length === 0) return;
+  store.batch(() => {
+    for (const t of tokens) {
+      store.applyPatch({ kind: 'token-add', token: t });
+    }
+  });
+  selection.ids = new Set(tokens.map((t) => t.id));
+  lastPlacedRef.current = tokens[tokens.length - 1] ?? lastPlacedRef.current;
+  renderer.requestRender();
+}
+
+const tokenLibraryModal = mountTokenLibraryModal({
+  onPlace: (entry) => placeLibraryToken(entry),
+});
+const templateLibraryModal = mountTemplateLibraryModal({
+  onPlace: (entry) => placeLibraryTemplate(entry),
+});
+
+async function saveSelectionAsTemplate() {
+  const sel = selectedTokens();
+  if (sel.length < 1) {
+    window.alert('Select at least one token to save as a template.');
+    return;
+  }
+  const defaultName = sel.length === 1
+    ? sel[0]!.label || 'Template'
+    : `Template (${sel.length} tokens)`;
+  const name = window.prompt('Template name:', defaultName);
+  if (name === null) return;
+  const trimmed = name.trim();
+  if (!trimmed) return;
+  try {
+    await saveTemplateToLibrary(trimmed, sel);
+  } catch (err) {
+    console.error('[gm] save template failed', err);
+    window.alert('Could not save the template.');
+  }
+}
+
 mountSessionMenu(document.body, {
   onNewSession: () => {
     store.resetSession();
@@ -280,6 +367,8 @@ mountSessionMenu(document.body, {
   onToggleNotes: () => notesPanel.toggle(),
   onShortcuts: () => shortcutOverlay.open(),
   onInitiative: () => initiativeModal.open(),
+  onTokenLibrary: () => tokenLibraryModal.open(),
+  onTemplateLibrary: () => templateLibraryModal.open(),
 });
 
 const tokenEditor = mountTokenEditor({
@@ -389,6 +478,13 @@ canvas.addEventListener('contextmenu', (e) => {
       { label: `Duplicate${suffix}`, shortcut: 'Ctrl+D', onClick: () => duplicateSelection() },
       { label: `Copy${suffix}`, shortcut: 'Ctrl+C', onClick: () => copySelection() },
       { label: `Cut${suffix}`, shortcut: 'Ctrl+X', onClick: () => cutSelection() },
+      { kind: 'separator' },
+      {
+        label: 'Save as template…',
+        onClick: () => {
+          void saveSelectionAsTemplate();
+        },
+      },
       { kind: 'separator' },
       {
         label: `Delete${suffix}`,

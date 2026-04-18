@@ -1,9 +1,6 @@
 import type { ID } from '../state/types.js';
 import { nid } from '../util/id.js';
-import { IDB_DB_NAME as DB_NAME } from '../util/constants.js';
-
-const DB_VERSION = 1;
-const STORE = 'images';
+import { runTx, IMAGES_STORE } from '../state/idb.js';
 
 export interface ImageRecord {
   id: ID;
@@ -12,43 +9,11 @@ export interface ImageRecord {
   createdAt: number;
 }
 
-let dbPromise: Promise<IDBDatabase> | null = null;
-
-function openDB(): Promise<IDBDatabase> {
-  if (dbPromise) return dbPromise;
-  dbPromise = new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, DB_VERSION);
-    req.onupgradeneeded = () => {
-      const db = req.result;
-      if (!db.objectStoreNames.contains(STORE)) {
-        db.createObjectStore(STORE, { keyPath: 'id' });
-      }
-    };
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
-    req.onblocked = () => reject(new Error('IndexedDB open blocked'));
-  });
-  return dbPromise;
-}
-
-async function runTx<T>(
+function run<T>(
   mode: IDBTransactionMode,
   fn: (store: IDBObjectStore) => IDBRequest<T>,
 ): Promise<T> {
-  const db = await openDB();
-  return new Promise((resolve, reject) => {
-    const t = db.transaction(STORE, mode);
-    const s = t.objectStore(STORE);
-    let result: T;
-    const req = fn(s);
-    req.onsuccess = () => {
-      result = req.result;
-    };
-    req.onerror = () => reject(req.error);
-    t.oncomplete = () => resolve(result);
-    t.onerror = () => reject(t.error ?? new Error('IDB transaction error'));
-    t.onabort = () => reject(t.error ?? new Error('IDB transaction aborted'));
-  });
+  return runTx<T>(IMAGES_STORE, mode, fn);
 }
 
 const urlCache = new Map<ID, string>();
@@ -70,7 +35,7 @@ export async function putImageAs(
     mimeType,
     createdAt: Date.now(),
   };
-  await runTx('readwrite', (s) => s.put(record));
+  await run('readwrite', (s) => s.put(record));
 }
 
 export async function blobToDataURL(blob: Blob, mimeTypeOverride?: string): Promise<string> {
@@ -125,7 +90,7 @@ export async function dataURLToBlob(dataUrl: string): Promise<Blob> {
 }
 
 export async function getImage(id: ID): Promise<ImageRecord | null> {
-  const record = await runTx<ImageRecord | undefined>('readonly', (s) => s.get(id));
+  const record = await run<ImageRecord | undefined>('readonly', (s) => s.get(id));
   return record ?? null;
 }
 
@@ -145,9 +110,14 @@ export async function deleteImage(id: ID): Promise<void> {
     URL.revokeObjectURL(url);
     urlCache.delete(id);
   }
-  await runTx('readwrite', (s) => s.delete(id));
+  await run('readwrite', (s) => s.delete(id));
 }
 
 export async function listImages(): Promise<ImageRecord[]> {
-  return runTx<ImageRecord[]>('readonly', (s) => s.getAll());
+  return run<ImageRecord[]>('readonly', (s) => s.getAll());
+}
+
+export async function listImageIds(): Promise<ID[]> {
+  const keys = await run<IDBValidKey[]>('readonly', (s) => s.getAllKeys());
+  return keys.map((k) => String(k));
 }

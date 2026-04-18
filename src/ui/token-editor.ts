@@ -4,6 +4,7 @@ import type { ID, Token } from '../state/types.js';
 import { putImage, getImageURL } from '../images/store.js';
 import type { ImageLoader } from '../images/loader.js';
 import { TEAM_PRESETS } from '../state/team-colors.js';
+import { saveTokenToLibrary } from '../state/token-catalog.js';
 import { attachFocusTrap, rememberFocus, restoreFocus } from '../util/focus.js';
 
 export interface TokenEditorHandle {
@@ -71,6 +72,7 @@ export function mountTokenEditor(opts: TokenEditorOptions): TokenEditorHandle {
       </label>
       <hr />
       <div class="modal-footer">
+        <button type="button" data-action="save-library" title="Save this token's appearance to the library for reuse">Save to Library</button>
         <button type="button" class="danger" data-action="delete">Delete Token</button>
       </div>
     </div>
@@ -89,6 +91,7 @@ export function mountTokenEditor(opts: TokenEditorOptions): TokenEditorHandle {
   const uploadBtn = modal.querySelector<HTMLButtonElement>('[data-action="upload"]')!;
   const removeImageBtn = modal.querySelector<HTMLButtonElement>('[data-action="remove-image"]')!;
   const deleteBtn = modal.querySelector<HTMLButtonElement>('[data-action="delete"]')!;
+  const saveLibraryBtn = modal.querySelector<HTMLButtonElement>('[data-action="save-library"]')!;
   const closeBtn = modal.querySelector<HTMLButtonElement>('.modal-close')!;
   const borderInput = modal.querySelector<HTMLInputElement>('[data-field="borderColor"]')!;
   const borderSwatches = Array.from(
@@ -222,6 +225,25 @@ export function mountTokenEditor(opts: TokenEditorOptions): TokenEditorHandle {
     }
     close();
     opts.onAfterChange?.();
+  });
+
+  saveLibraryBtn.addEventListener('click', async () => {
+    const token = currentToken();
+    if (!token) return;
+    saveLibraryBtn.disabled = true;
+    const originalLabel = saveLibraryBtn.textContent ?? 'Save to Library';
+    try {
+      await saveTokenToLibrary(token);
+      saveLibraryBtn.textContent = 'Saved ✓';
+      window.setTimeout(() => {
+        saveLibraryBtn.textContent = originalLabel;
+        saveLibraryBtn.disabled = false;
+      }, 1200);
+    } catch (err) {
+      console.error('[token-editor] save-to-library failed', err);
+      window.alert('Could not save token to the library.');
+      saveLibraryBtn.disabled = false;
+    }
   });
 
   closeBtn.addEventListener('click', close);
