@@ -6,10 +6,16 @@ import type { ImageLoader } from '../images/loader.js';
 import { TEAM_PRESETS } from '../state/team-colors.js';
 import { saveTokenToLibrary } from '../state/token-catalog.js';
 import { attachFocusTrap, rememberFocus, restoreFocus } from '../util/focus.js';
+import {
+  cycleTo,
+  tokensInSelectionOrder,
+} from './token-editor-cycle.js';
 
 export interface TokenEditorHandle {
   openFor(token: Token): void;
   close(): void;
+  /** True if the modal is currently visible. */
+  isOpen(): boolean;
 }
 
 export interface TokenEditorOptions {
@@ -33,22 +39,37 @@ export function mountTokenEditor(opts: TokenEditorOptions): TokenEditorHandle {
   modal.setAttribute('aria-label', 'Edit Token');
   modal.innerHTML = `
     <div class="modal-header">
-      <h2>Edit Token</h2>
+      <div class="token-editor-title">
+        <h2>Edit Token</h2>
+        <span class="token-editor-counter" data-field="counter" aria-live="polite"></span>
+      </div>
+      <div class="token-editor-cycle" data-field="cycle-group" role="group" aria-label="Cycle selection">
+        <button type="button" class="icon-btn" data-action="prev" title="Previous in selection (Ctrl+Left)" aria-label="Previous token in selection">‹</button>
+        <button type="button" class="icon-btn" data-action="next" title="Next in selection (Ctrl+Right)" aria-label="Next token in selection">›</button>
+      </div>
       <button type="button" class="modal-close" aria-label="Close">×</button>
     </div>
     <div class="modal-body">
       <label>Label
         <input type="text" data-field="label" maxlength="40" />
       </label>
+      <div class="grid-row">
+        <label>X (col)
+          <input type="number" data-field="x" step="1" />
+        </label>
+        <label>Y (row)
+          <input type="number" data-field="y" step="1" />
+        </label>
+        <label>Size
+          <div class="radio-group" data-field="size">
+            <label><input type="radio" name="te-size" value="1" /> 1</label>
+            <label><input type="radio" name="te-size" value="2" /> 2</label>
+            <label><input type="radio" name="te-size" value="3" /> 3</label>
+          </div>
+        </label>
+      </div>
       <label>Color
         <input type="color" data-field="color" />
-      </label>
-      <label>Size
-        <div class="radio-group" data-field="size">
-          <label><input type="radio" name="te-size" value="1" /> 1</label>
-          <label><input type="radio" name="te-size" value="2" /> 2</label>
-          <label><input type="radio" name="te-size" value="3" /> 3</label>
-        </div>
       </label>
       <label>Image
         <div class="image-row">
@@ -61,11 +82,11 @@ export function mountTokenEditor(opts: TokenEditorOptions): TokenEditorHandle {
         </div>
       </label>
       <label>Border
-        <div class="border-row" data-field="border-swatches" role="group" aria-label="Token border color">
-          <button type="button" class="swatch swatch-none" data-border="" title="No border" aria-label="No border">×</button>
+        <div class="border-row" data-field="border-swatches" role="radiogroup" aria-label="Token border color">
+          <button type="button" class="swatch swatch-none" role="radio" data-border="" title="No border" aria-label="No border">×</button>
           ${TEAM_PRESETS.map(
             (p) =>
-              `<button type="button" class="swatch" data-border="${p.color}" style="background:${p.color}" title="${p.label}" aria-label="${p.label} border"></button>`,
+              `<button type="button" class="swatch" role="radio" data-border="${p.color}" style="background:${p.color}" title="${p.label}" aria-label="${p.label} border"></button>`,
           ).join('')}
           <input type="color" class="border-color-input" data-field="borderColor" title="Custom color" aria-label="Custom border color" />
         </div>
@@ -83,6 +104,8 @@ export function mountTokenEditor(opts: TokenEditorOptions): TokenEditorHandle {
 
   const labelInput = modal.querySelector<HTMLInputElement>('[data-field="label"]')!;
   const colorInput = modal.querySelector<HTMLInputElement>('[data-field="color"]')!;
+  const xInput = modal.querySelector<HTMLInputElement>('[data-field="x"]')!;
+  const yInput = modal.querySelector<HTMLInputElement>('[data-field="y"]')!;
   const sizeRadios = Array.from(
     modal.querySelectorAll<HTMLInputElement>('input[name="te-size"]'),
   );
@@ -97,6 +120,10 @@ export function mountTokenEditor(opts: TokenEditorOptions): TokenEditorHandle {
   const borderSwatches = Array.from(
     modal.querySelectorAll<HTMLButtonElement>('[data-field="border-swatches"] .swatch'),
   );
+  const prevBtn = modal.querySelector<HTMLButtonElement>('[data-action="prev"]')!;
+  const nextBtn = modal.querySelector<HTMLButtonElement>('[data-action="next"]')!;
+  const cycleGroup = modal.querySelector<HTMLDivElement>('[data-field="cycle-group"]')!;
+  const counter = modal.querySelector<HTMLSpanElement>('[data-field="counter"]')!;
 
   let currentId: ID | null = null;
   let triggerFocus: HTMLElement | null = null;
@@ -123,18 +150,6 @@ export function mountTokenEditor(opts: TokenEditorOptions): TokenEditorHandle {
     });
   }
 
-  function openFor(token: Token) {
-    triggerFocus = rememberFocus();
-    currentId = token.id;
-    labelInput.value = token.label;
-    colorInput.value = token.color;
-    for (const r of sizeRadios) r.checked = Number(r.value) === token.size;
-    updatePreview(token.imageId);
-    syncBorderUI(token.borderColor);
-    backdrop.hidden = false;
-    window.setTimeout(() => labelInput.focus(), 0);
-  }
-
   function syncBorderUI(borderColor: string | null) {
     const normalized = (borderColor ?? '').toLowerCase();
     let matched = false;
@@ -142,10 +157,63 @@ export function mountTokenEditor(opts: TokenEditorOptions): TokenEditorHandle {
       const swatchColor = (s.dataset.border ?? '').toLowerCase();
       const isActive = swatchColor === normalized;
       s.classList.toggle('active', isActive);
+      s.setAttribute('aria-checked', isActive ? 'true' : 'false');
+      // Roving tabindex: only the active swatch is in the tab order; if
+      // nothing matches, the "no border" swatch gets the roving focus.
+      s.tabIndex = isActive ? 0 : -1;
       if (isActive) matched = true;
+    }
+    if (!matched) {
+      // No preset matched — put roving focus on the "no border" swatch so
+      // arrow keys have a predictable entry point.
+      const none = borderSwatches[0]!;
+      none.tabIndex = 0;
     }
     borderInput.value = borderColor ?? '#ffffff';
     borderInput.classList.toggle('active', !matched && borderColor !== null);
+  }
+
+  function syncCounter() {
+    const state = store.getState();
+    const order = tokensInSelectionOrder(state.tokens, selection.ids);
+    const multi = order.length > 1;
+    cycleGroup.hidden = !multi;
+    if (!multi) {
+      counter.textContent = '';
+      prevBtn.disabled = true;
+      nextBtn.disabled = true;
+      return;
+    }
+    const idx = currentId ? order.indexOf(currentId) : -1;
+    if (idx < 0) {
+      counter.textContent = '';
+    } else {
+      counter.textContent = `${idx + 1} of ${order.length}`;
+    }
+    prevBtn.disabled = false;
+    nextBtn.disabled = false;
+  }
+
+  function fillFromToken(token: Token) {
+    currentId = token.id;
+    labelInput.value = token.label;
+    colorInput.value = token.color;
+    xInput.value = String(token.x);
+    yInput.value = String(token.y);
+    for (const r of sizeRadios) r.checked = Number(r.value) === token.size;
+    updatePreview(token.imageId);
+    syncBorderUI(token.borderColor);
+    syncCounter();
+  }
+
+  function openFor(token: Token) {
+    triggerFocus = rememberFocus();
+    fillFromToken(token);
+    backdrop.hidden = false;
+    window.setTimeout(() => {
+      labelInput.focus();
+      labelInput.select();
+    }, 0);
   }
 
   function close() {
@@ -163,12 +231,65 @@ export function mountTokenEditor(opts: TokenEditorOptions): TokenEditorHandle {
     opts.onAfterChange?.();
   }
 
+  function cycle(delta: number) {
+    const state = store.getState();
+    const order = tokensInSelectionOrder(state.tokens, selection.ids);
+    if (order.length <= 1) return;
+    const nextId = cycleTo(order, currentId, delta);
+    if (!nextId) return;
+    const nextToken = state.tokens.find((t) => t.id === nextId);
+    if (!nextToken) return;
+    fillFromToken(nextToken);
+    // Keep focus on the label so rapid cycling feels keyboard-native.
+    labelInput.focus();
+    labelInput.select();
+  }
+
   labelInput.addEventListener('input', () => {
     update({ label: labelInput.value });
   });
 
   colorInput.addEventListener('change', () => {
     update({ color: colorInput.value });
+  });
+
+  function parseIntOr(v: string, fallback: number, min: number, max: number): number {
+    const n = parseInt(v, 10);
+    if (!Number.isFinite(n)) return fallback;
+    return Math.max(min, Math.min(max, n));
+  }
+
+  function commitX() {
+    const token = currentToken();
+    if (!token) return;
+    const grid = store.getState().grid;
+    const n = parseIntOr(xInput.value, token.x, 0, grid.cols - 1);
+    if (n !== token.x) update({ x: n });
+    xInput.value = String(n);
+  }
+  function commitY() {
+    const token = currentToken();
+    if (!token) return;
+    const grid = store.getState().grid;
+    const n = parseIntOr(yInput.value, token.y, 0, grid.rows - 1);
+    if (n !== token.y) update({ y: n });
+    yInput.value = String(n);
+  }
+
+  xInput.addEventListener('change', commitX);
+  yInput.addEventListener('change', commitY);
+  // Enter commits + keeps focus; blur also commits via 'change'.
+  xInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      commitX();
+      e.preventDefault();
+    }
+  });
+  yInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      commitY();
+      e.preventDefault();
+    }
   });
 
   for (const r of sizeRadios) {
@@ -207,7 +328,34 @@ export function mountTokenEditor(opts: TokenEditorOptions): TokenEditorHandle {
       const next = raw === '' ? null : raw;
       update({ borderColor: next });
       syncBorderUI(next);
-      s.blur();
+    });
+    s.addEventListener('keydown', (e) => {
+      const idx = borderSwatches.indexOf(s);
+      let nextIdx = -1;
+      if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+        nextIdx = (idx + 1) % borderSwatches.length;
+      } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+        nextIdx = (idx - 1 + borderSwatches.length) % borderSwatches.length;
+      } else if (e.key === 'Home') {
+        nextIdx = 0;
+      } else if (e.key === 'End') {
+        nextIdx = borderSwatches.length - 1;
+      } else if (e.key === ' ' || e.key === 'Enter') {
+        const raw = s.dataset.border ?? '';
+        const next = raw === '' ? null : raw;
+        update({ borderColor: next });
+        syncBorderUI(next);
+        e.preventDefault();
+        return;
+      } else {
+        return;
+      }
+      const target = borderSwatches[nextIdx]!;
+      // Update roving tabindex so the newly-focused swatch is tab-stoppable.
+      for (const other of borderSwatches) other.tabIndex = -1;
+      target.tabIndex = 0;
+      target.focus();
+      e.preventDefault();
     });
   }
 
@@ -221,7 +369,22 @@ export function mountTokenEditor(opts: TokenEditorOptions): TokenEditorHandle {
     const id = currentId;
     store.applyPatch({ kind: 'token-remove', id });
     if (selection.ids.has(id)) {
-      selection.ids = new Set();
+      const next = new Set(selection.ids);
+      next.delete(id);
+      selection.ids = next;
+    }
+    // If there's still a selection, cycle to the next token rather than
+    // closing the modal — keeps keyboard-only batch editing fast.
+    const order = tokensInSelectionOrder(store.getState().tokens, selection.ids);
+    if (order.length > 0) {
+      const nextToken = store.getState().tokens.find((t) => t.id === order[0]!);
+      if (nextToken) {
+        fillFromToken(nextToken);
+        labelInput.focus();
+        labelInput.select();
+        opts.onAfterChange?.();
+        return;
+      }
     }
     close();
     opts.onAfterChange?.();
@@ -246,10 +409,36 @@ export function mountTokenEditor(opts: TokenEditorOptions): TokenEditorHandle {
     }
   });
 
+  prevBtn.addEventListener('click', () => cycle(-1));
+  nextBtn.addEventListener('click', () => cycle(1));
+
   closeBtn.addEventListener('click', close);
 
   backdrop.addEventListener('click', (e) => {
     if (e.target === backdrop) close();
+  });
+
+  // Cycle + close shortcuts scoped to the modal so they don't interfere
+  // with the canvas keymap when the editor is hidden.
+  modal.addEventListener('keydown', (e) => {
+    if (backdrop.hidden) return;
+    if (e.ctrlKey || e.metaKey) {
+      if (e.key === 'ArrowLeft') {
+        cycle(-1);
+        e.preventDefault();
+        return;
+      }
+      if (e.key === 'ArrowRight') {
+        cycle(1);
+        e.preventDefault();
+        return;
+      }
+      if (e.key === 'Enter') {
+        close();
+        e.preventDefault();
+        return;
+      }
+    }
   });
 
   window.addEventListener('keydown', (e) => {
@@ -260,16 +449,40 @@ export function mountTokenEditor(opts: TokenEditorOptions): TokenEditorHandle {
   });
 
   store.subscribe((patch) => {
+    if (backdrop.hidden) {
+      return;
+    }
     if (!patch) {
       if (currentToken() === null) close();
+      else syncCounter();
       return;
     }
     if (patch.kind === 'token-remove' && patch.id === currentId) {
       close();
     } else if (patch.kind === 'session-reset') {
       close();
+    } else if (
+      patch.kind === 'token-add' ||
+      patch.kind === 'token-remove' ||
+      patch.kind === 'token-update'
+    ) {
+      syncCounter();
+      // If the currently-open token changed externally (e.g. arrow-key
+      // nudge on the canvas), re-sync position fields unless the user is
+      // actively editing them.
+      if (patch.kind === 'token-update' && patch.id === currentId) {
+        const t = currentToken();
+        if (t) {
+          if (document.activeElement !== xInput) xInput.value = String(t.x);
+          if (document.activeElement !== yInput) yInput.value = String(t.y);
+        }
+      }
     }
   });
 
-  return { openFor, close };
+  return {
+    openFor,
+    close,
+    isOpen: () => !backdrop.hidden,
+  };
 }

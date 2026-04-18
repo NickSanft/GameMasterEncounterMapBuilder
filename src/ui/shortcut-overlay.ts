@@ -40,11 +40,22 @@ const GM_SECTIONS: ShortcutSection[] = [
       { keys: 'Shift+drag empty', desc: 'Add to selection' },
       { keys: 'Right-click', desc: 'Contextual menu' },
       { keys: 'Arrow / WASD', desc: 'Move selection by 1 cell (+Shift = 5)' },
+      { keys: 'E', desc: 'Edit the first selected token' },
       { keys: 'Delete / Backspace', desc: 'Delete selection' },
       { keys: 'Ctrl/Cmd+C / V / X', desc: 'Copy, paste, cut' },
       { keys: 'Ctrl/Cmd+D', desc: 'Duplicate in place' },
       { keys: 'Ctrl/Cmd+Z', desc: 'Undo' },
       { keys: 'Ctrl/Cmd+Shift+Z or Ctrl+Y', desc: 'Redo' },
+    ],
+  },
+  {
+    title: 'Token editor',
+    entries: [
+      { keys: 'E', desc: 'Open editor for selected token' },
+      { keys: 'Ctrl/Cmd+←  /  →', desc: 'Cycle through multi-selection' },
+      { keys: 'Ctrl/Cmd+Enter', desc: 'Save and close' },
+      { keys: 'Arrow keys (on swatch)', desc: 'Navigate border colors' },
+      { keys: 'Enter (on X/Y)', desc: 'Commit position' },
     ],
   },
   {

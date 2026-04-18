@@ -404,6 +404,71 @@ body.view {
   font-weight: 600;
 }
 
+.token-editor-title {
+  display: flex;
+  align-items: baseline;
+  gap: 0.55rem;
+  flex: 1;
+}
+
+.token-editor-counter {
+  font-size: 0.78rem;
+  color: var(--fg-muted);
+  text-transform: none;
+  letter-spacing: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.token-editor-cycle {
+  display: flex;
+  gap: 0.25rem;
+  margin-right: 0.4rem;
+}
+
+.icon-btn {
+  appearance: none;
+  width: 1.65rem;
+  height: 1.65rem;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--fg);
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  font-family: inherit;
+}
+
+.icon-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+.icon-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.icon-btn:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+.token-editor .modal-body .grid-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.7rem;
+  align-items: start;
+}
+
+.token-editor .modal-body .grid-row > label {
+  margin: 0;
+}
+
 .modal-close {
   appearance: none;
   background: none;
@@ -447,6 +512,23 @@ body.view {
 }
 
 .modal input[type='text']:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.modal input[type='number'] {
+  padding: 0.45rem 0.55rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--fg);
+  border-radius: 4px;
+  font-family: inherit;
+  font-size: 0.9rem;
+  text-transform: none;
+  width: 5rem;
+}
+
+.modal input[type='number']:focus {
   outline: none;
   border-color: var(--accent);
 }
@@ -541,6 +623,12 @@ body.view {
 .border-row .swatch.active {
   border-color: var(--fg);
   box-shadow: 0 0 0 2px var(--active-glow);
+}
+
+.border-row .swatch:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent);
 }
 
 .border-row .swatch-none {

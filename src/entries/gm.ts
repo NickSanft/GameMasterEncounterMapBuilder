@@ -943,6 +943,15 @@ window.addEventListener('keydown', (e) => {
       toolManager.setActive('aoe');
       e.preventDefault();
       break;
+    case 'e': {
+      const state = store.getState();
+      const firstSelectedToken = state.tokens.find((t) => selection.ids.has(t.id));
+      if (firstSelectedToken && !tokenEditor.isOpen()) {
+        tokenEditor.openFor(firstSelectedToken);
+        e.preventDefault();
+      }
+      break;
+    }
   }
 });
 
