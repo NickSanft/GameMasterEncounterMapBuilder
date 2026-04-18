@@ -195,9 +195,14 @@ function mountSpectatorMenu(onSettings: () => void) {
   document.body.appendChild(menu);
 }
 
-function applyPrefsToBody(prefs: { reducedMotion: boolean; highContrast: boolean }) {
+function applyPrefsToBody(prefs: {
+  reducedMotion: boolean;
+  highContrast: boolean;
+  theme: 'dark' | 'light';
+}) {
   document.body.classList.toggle('reduced-motion', prefs.reducedMotion);
   document.body.classList.toggle('high-contrast', prefs.highContrast);
+  document.body.classList.toggle('theme-light', prefs.theme === 'light');
 }
 
 function showSyncWarning() {

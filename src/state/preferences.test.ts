@@ -8,6 +8,44 @@ describe('createPreferences', () => {
     expect(prefs.get().labelSize).toBe(DEFAULT_PREFERENCES.labelSize);
     expect(prefs.get().highContrast).toBe(DEFAULT_PREFERENCES.highContrast);
     expect(prefs.get().persistCamera).toBe(DEFAULT_PREFERENCES.persistCamera);
+    expect(prefs.get().theme).toBe('dark');
+  });
+
+  it('persists theme changes to localStorage', () => {
+    const prefs = createPreferences();
+    prefs.update({ theme: 'light' });
+    const raw = localStorage.getItem(PREFERENCES_KEY);
+    expect(raw).not.toBeNull();
+    expect(JSON.parse(raw!).theme).toBe('light');
+  });
+
+  it('reset() restores every field to defaults', () => {
+    const prefs = createPreferences();
+    prefs.update({
+      theme: 'light',
+      labelSize: 'large',
+      highContrast: true,
+      colorblindMarkers: true,
+      gmFogOpacity: 0.8,
+    });
+    prefs.reset();
+    expect(prefs.get().theme).toBe('dark');
+    expect(prefs.get().labelSize).toBe('medium');
+    expect(prefs.get().highContrast).toBe(false);
+    expect(prefs.get().colorblindMarkers).toBe(false);
+    expect(prefs.get().gmFogOpacity).toBe(DEFAULT_PREFERENCES.gmFogOpacity);
+  });
+
+  it('reset() notifies subscribers', () => {
+    const prefs = createPreferences();
+    let latest = prefs.get();
+    prefs.subscribe((p) => {
+      latest = p;
+    });
+    prefs.update({ theme: 'light' });
+    expect(latest.theme).toBe('light');
+    prefs.reset();
+    expect(latest.theme).toBe('dark');
   });
 
   it('persists updates to localStorage', () => {

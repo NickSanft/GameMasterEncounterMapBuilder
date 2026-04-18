@@ -27,7 +27,7 @@ const DEFAULT_OPTIONS: TokenRenderOptions = {
 };
 
 function withOverlay(token: Token, overlay: DragOverlay | null | undefined): Token {
-  if (!overlay || overlay.id !== token.id) return token;
+  if (!overlay || !overlay.ids.includes(token.id)) return token;
   if (overlay.deltaX === 0 && overlay.deltaY === 0) return token;
   return { ...token, x: token.x + overlay.deltaX, y: token.y + overlay.deltaY };
 }

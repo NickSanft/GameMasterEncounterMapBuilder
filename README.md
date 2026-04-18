@@ -27,7 +27,8 @@ From the landing page, open the **GM View** on your own screen and the **Spectat
 
 - **Space + drag** or **middle-mouse drag** — pan the camera.
 - **Mouse wheel** — zoom to cursor. (In Map tool mode the wheel scales the background image instead.)
-- **Right-click a token** — open the token editor (label, color, size, image, delete).
+- **Right-click** — contextual menu. On a token: Edit / Duplicate / Copy / Cut / Delete. On empty space: Place token / Paste / Reveal or Hide 5×5 / Fit / Reset camera.
+- **Shift+click** a token to add or remove it from the current selection; **click-drag on empty space** to rubber-band select multiple tokens (hold **Shift** to add to existing selection).
 - **Ctrl/Cmd+Z** — undo (up to 50 steps). **Ctrl/Cmd+Shift+Z** or **Ctrl/Cmd+Y** — redo.
 - **Ctrl/Cmd+C / V / X** — copy, paste, cut selected tokens. **Ctrl/Cmd+D** — duplicate selection in place (offset one cell).
 - **Arrow keys / WASD** — move selected tokens by one cell (hold **Shift** for five). Drag/drop moves broadcast only on release.

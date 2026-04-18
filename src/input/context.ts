@@ -11,6 +11,7 @@ export interface InputContext {
   setWheelEnabled(enabled: boolean): void;
   selection: SelectionState;
   dragOverlay: DragOverlayRef;
+  lassoOverlay: LassoOverlayRef;
 }
 
 export interface SelectionState {
@@ -22,7 +23,7 @@ export function createSelectionState(): SelectionState {
 }
 
 export interface DragOverlay {
-  id: ID;
+  ids: readonly ID[];
   deltaX: number;
   deltaY: number;
 }
@@ -32,6 +33,22 @@ export interface DragOverlayRef {
 }
 
 export function createDragOverlayRef(): DragOverlayRef {
+  return { current: null };
+}
+
+export interface LassoOverlay {
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+  additive: boolean;
+}
+
+export interface LassoOverlayRef {
+  current: LassoOverlay | null;
+}
+
+export function createLassoOverlayRef(): LassoOverlayRef {
   return { current: null };
 }
 

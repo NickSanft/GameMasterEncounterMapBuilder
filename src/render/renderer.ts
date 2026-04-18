@@ -14,8 +14,9 @@ import {
   type FogHoverPreview,
 } from './layer-fog.js';
 import { drawBackground, type ImageProvider } from './layer-background.js';
+import { drawLasso } from './layer-lasso.js';
 import type { Preferences } from '../state/preferences.js';
-import type { DragOverlay } from '../input/context.js';
+import type { DragOverlay, LassoOverlay } from '../input/context.js';
 
 export interface Renderer {
   readonly canvas: HTMLCanvasElement;
@@ -38,6 +39,7 @@ interface CreateRendererOptions {
   getImage?: ImageProvider;
   getPreferences?(): Preferences;
   getDragOverlay?(): DragOverlay | null;
+  getLassoOverlay?(): LassoOverlay | null;
 }
 
 const EMPTY_HIGHLIGHT: ReadonlySet<ID> = new Set();
@@ -48,6 +50,12 @@ const RENDER_DEFAULTS = {
   labelSize: 'medium' as const,
   gmFogColor: '#ff0000',
   gmFogOpacity: 0.35,
+  theme: 'dark' as const,
+};
+
+const CANVAS_BG = {
+  dark: '#14161a',
+  light: '#e6e7ec',
 };
 
 export function createRenderer(opts: CreateRendererOptions): Renderer {
@@ -61,6 +69,7 @@ export function createRenderer(opts: CreateRendererOptions): Renderer {
     getImage = NO_IMAGE,
     getPreferences,
     getDragOverlay,
+    getLassoOverlay,
   } = opts;
   const maybeCtx = canvas.getContext('2d');
   if (!maybeCtx) throw new Error('2D canvas context unavailable');
@@ -87,12 +96,13 @@ export function createRenderer(opts: CreateRendererOptions): Renderer {
     const dpr = window.devicePixelRatio || 1;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-    ctx.fillStyle = '#14161a';
+    const prefs = getPreferences ? getPreferences() : null;
+    const theme = prefs?.theme ?? RENDER_DEFAULTS.theme;
+    ctx.fillStyle = CANVAS_BG[theme];
     ctx.fillRect(0, 0, cssWidth, cssHeight);
 
     const state = getState();
     const highlights = getHighlightIds ? getHighlightIds() : EMPTY_HIGHLIGHT;
-    const prefs = getPreferences ? getPreferences() : null;
     const highContrast = prefs?.highContrast ?? RENDER_DEFAULTS.highContrast;
     const labelSize = prefs?.labelSize ?? RENDER_DEFAULTS.labelSize;
     const gmFogColor = prefs?.gmFogColor ?? RENDER_DEFAULTS.gmFogColor;
@@ -102,8 +112,8 @@ export function createRenderer(opts: CreateRendererOptions): Renderer {
     ctx.save();
     ctx.translate(-camera.x * camera.zoom, -camera.y * camera.zoom);
     ctx.scale(camera.zoom, camera.zoom);
-    drawBackground(ctx, state.background, state.grid, getImage);
-    drawGrid(ctx, state.grid, { highContrast });
+    drawBackground(ctx, state.background, state.grid, getImage, { theme });
+    drawGrid(ctx, state.grid, { highContrast, theme });
     const dragOverlay = getDragOverlay ? getDragOverlay() : null;
     drawTokens(ctx, state, highlights, getImage, {
       labelSize,
@@ -119,6 +129,8 @@ export function createRenderer(opts: CreateRendererOptions): Renderer {
       const hover = getFogHoverPreview ? getFogHoverPreview() : null;
       if (hover) drawFogHoverPreview(ctx, hover, state.grid.cellSize);
     }
+    const lasso = getLassoOverlay ? getLassoOverlay() : null;
+    if (lasso) drawLasso(ctx, lasso);
     ctx.restore();
   }
 

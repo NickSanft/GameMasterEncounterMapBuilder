@@ -6,7 +6,27 @@
   --accent: #c44a3a;
   --accent-hover: #d45a48;
   --border: #343841;
+  --panel-bg: rgba(27, 29, 34, 0.92);
+  --hover-overlay: rgba(255, 255, 255, 0.06);
+  --modal-backdrop: rgba(0, 0, 0, 0.55);
+  --active-glow: rgba(255, 255, 255, 0.12);
+  --panel-shadow: 0 8px 30px rgba(0, 0, 0, 0.45);
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+body.theme-light {
+  --bg: #f3f4f7;
+  --bg-elev: #ffffff;
+  --fg: #1d1f24;
+  --fg-muted: #5d636e;
+  --accent: #c44a3a;
+  --accent-hover: #a93c2f;
+  --border: #d4d6dc;
+  --panel-bg: rgba(255, 255, 255, 0.94);
+  --hover-overlay: rgba(0, 0, 0, 0.05);
+  --modal-backdrop: rgba(40, 42, 48, 0.45);
+  --active-glow: rgba(0, 0, 0, 0.1);
+  --panel-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
 }
 
 * {
@@ -113,7 +133,7 @@ body.view {
   top: 0.75rem;
   left: 0.75rem;
   padding: 0.35rem 0.65rem;
-  background: rgba(27, 29, 34, 0.85);
+  background: var(--panel-bg);
   border: 1px solid var(--border);
   border-radius: 4px;
   color: var(--fg-muted);
@@ -134,7 +154,7 @@ body.view {
   flex-direction: column;
   gap: 0.25rem;
   padding: 0.4rem;
-  background: rgba(27, 29, 34, 0.92);
+  background: var(--panel-bg);
   border: 1px solid var(--border);
   border-radius: 6px;
   z-index: 10;
@@ -156,7 +176,7 @@ body.view {
 }
 
 .gm-toolbar button:hover {
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--hover-overlay);
 }
 
 .gm-toolbar button.active {
@@ -189,7 +209,7 @@ body.view {
 }
 
 .gm-toolbar-actions button:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--hover-overlay);
 }
 
 .gm-toolbar-actions button:disabled {
@@ -212,7 +232,7 @@ body.view {
   flex-direction: column;
   gap: 0.25rem;
   padding: 0.4rem;
-  background: rgba(27, 29, 34, 0.92);
+  background: var(--panel-bg);
   border: 1px solid var(--border);
   border-radius: 6px;
   z-index: 10;
@@ -233,7 +253,7 @@ body.view {
 }
 
 .zoom-controls button:hover {
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--hover-overlay);
 }
 
 /* Fog settings panel — to the right of the toolbar when fog tool is active */
@@ -242,7 +262,7 @@ body.view {
   top: 3.25rem;
   left: 8.75rem;
   padding: 0.5rem;
-  background: rgba(27, 29, 34, 0.92);
+  background: var(--panel-bg);
   border: 1px solid var(--border);
   border-radius: 6px;
   z-index: 10;
@@ -279,7 +299,7 @@ body.view {
 }
 
 .fog-settings-row button:hover {
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--hover-overlay);
 }
 
 .fog-settings-row button.active {
@@ -297,7 +317,7 @@ body.view {
   flex-direction: column;
   gap: 0.3rem;
   padding: 0.4rem;
-  background: rgba(27, 29, 34, 0.92);
+  background: var(--panel-bg);
   border: 1px solid var(--border);
   border-radius: 6px;
   z-index: 10;
@@ -318,14 +338,14 @@ body.view {
 }
 
 .session-menu button:hover {
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--hover-overlay);
 }
 
 /* Modal (shared) */
 .modal-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.55);
+  background: var(--modal-backdrop);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -343,7 +363,7 @@ body.view {
   padding: 1rem 1.1rem 1.1rem;
   min-width: 340px;
   max-width: 90vw;
-  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.45);
+  box-shadow: var(--panel-shadow);
 }
 
 .modal-header {
@@ -495,7 +515,7 @@ body.view {
 
 .border-row .swatch.active {
   border-color: var(--fg);
-  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.12);
+  box-shadow: 0 0 0 2px var(--active-glow);
 }
 
 .border-row .swatch-none {
@@ -533,7 +553,7 @@ body.view {
 
 .border-row .border-color-input.active {
   border-color: var(--fg);
-  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.12);
+  box-shadow: 0 0 0 2px var(--active-glow);
 }
 
 .modal button {
@@ -550,7 +570,7 @@ body.view {
 }
 
 .modal button:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--hover-overlay);
 }
 
 .modal button:disabled {
@@ -581,18 +601,65 @@ body.view {
 
 /* Settings modal */
 .settings-modal {
-  min-width: 420px;
-  max-width: 520px;
+  min-width: 560px;
+  max-width: min(720px, 92vw);
 }
 
-.settings-body {
-  gap: 1.1rem;
+.settings-tabbed {
+  display: grid;
+  grid-template-columns: 10rem 1fr;
+  gap: 0;
+  min-height: 22rem;
+  padding: 0;
 }
 
-.settings-section {
+.settings-tabs {
   display: flex;
   flex-direction: column;
-  gap: 0.6rem;
+  gap: 0.15rem;
+  padding-right: 0.75rem;
+  border-right: 1px solid var(--border);
+}
+
+.settings-tabs button {
+  appearance: none;
+  background: transparent;
+  color: var(--fg-muted);
+  border: 1px solid transparent;
+  border-radius: 4px;
+  padding: 0.55rem 0.8rem;
+  text-align: left;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-family: inherit;
+  transition: background 100ms ease, color 100ms ease;
+}
+
+.settings-tabs button:hover {
+  background: var(--hover-overlay);
+  color: var(--fg);
+}
+
+.settings-tabs button[aria-selected='true'] {
+  background: var(--accent);
+  color: white;
+}
+
+.settings-panes {
+  padding-left: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.settings-panes > section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.settings-panes > section[hidden] {
+  display: none;
 }
 
 .settings-section h3 {
@@ -604,7 +671,7 @@ body.view {
   font-weight: 700;
 }
 
-.settings-section input[type='number'] {
+.settings-panes input[type='number'] {
   padding: 0.4rem 0.5rem;
   background: var(--bg);
   border: 1px solid var(--border);
@@ -615,18 +682,18 @@ body.view {
   width: 100%;
 }
 
-.settings-section input[type='number']:focus {
+.settings-panes input[type='number']:focus {
   outline: none;
   border-color: var(--accent);
 }
 
-.settings-section .grid-row {
+.settings-panes .grid-row {
   display: grid;
   grid-template-columns: 1fr 1fr 1fr;
   gap: 0.6rem;
 }
 
-.settings-section .check {
+.settings-panes .check {
   flex-direction: row;
   align-items: center;
   gap: 0.5rem;
@@ -637,7 +704,7 @@ body.view {
   cursor: pointer;
 }
 
-.settings-section .check input[type='checkbox'] {
+.settings-panes .check input[type='checkbox'] {
   width: 1rem;
   height: 1rem;
   accent-color: var(--accent);
@@ -712,7 +779,7 @@ body.reduced-motion *::after {
 .preset-card:hover {
   border-color: var(--accent);
   transform: translateY(-2px);
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+  box-shadow: var(--panel-shadow);
 }
 
 .preset-thumb {
@@ -740,6 +807,75 @@ body.reduced-motion *::after {
   color: var(--fg-muted);
   margin-top: 0.25rem;
   line-height: 1.35;
+}
+
+/* Right-click context menu */
+.context-menu {
+  position: fixed;
+  z-index: 200;
+  min-width: 13rem;
+  padding: 0.3rem;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: var(--panel-shadow);
+  display: flex;
+  flex-direction: column;
+  gap: 0.08rem;
+}
+
+.context-menu button {
+  appearance: none;
+  background: transparent;
+  color: var(--fg);
+  border: 1px solid transparent;
+  border-radius: 3px;
+  padding: 0.4rem 0.6rem;
+  text-align: left;
+  font-family: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1.5rem;
+}
+
+.context-menu button:hover:not(:disabled),
+.context-menu button:focus-visible {
+  background: var(--hover-overlay);
+  outline: none;
+}
+
+.context-menu button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.context-menu button.danger {
+  color: var(--accent);
+}
+
+.context-menu button.danger:hover:not(:disabled),
+.context-menu button.danger:focus-visible {
+  background: var(--accent);
+  color: white;
+}
+
+.context-menu button .shortcut {
+  color: var(--fg-muted);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.context-menu button.danger .shortcut {
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.context-menu-sep {
+  height: 1px;
+  margin: 0.25rem 0.15rem;
+  background: var(--border);
 }
 
 /* Sync warning banner (Spectator, private mode) */

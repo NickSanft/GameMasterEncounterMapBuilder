@@ -2,7 +2,11 @@ import { createRenderer } from '../render/renderer.js';
 import { attachPanZoom } from '../input/pan-zoom.js';
 import { createStore } from '../state/store.js';
 import { DEFAULT_CAMERA } from '../state/types.js';
-import { createSelectionState, createDragOverlayRef } from '../input/context.js';
+import {
+  createSelectionState,
+  createDragOverlayRef,
+  createLassoOverlayRef,
+} from '../input/context.js';
 import { createToolManager } from '../input/tool-manager.js';
 import { createSelectTool } from '../input/tool-select.js';
 import { createTokenTool } from '../input/tool-token.js';
@@ -34,6 +38,9 @@ import { duplicateTokens } from '../state/token-clipboard.js';
 import type { Token } from '../state/types.js';
 import { mountPresetBackgroundsModal } from '../ui/preset-backgrounds-modal.js';
 import { resolvePresetUrl } from '../state/preset-backgrounds.js';
+import { showContextMenu, type ContextMenuEntry } from '../ui/context-menu.js';
+import { nid } from '../util/id.js';
+import { nextTokenColor } from '../state/token-colors.js';
 import {
   zoomBy,
   fitToContent,
@@ -54,6 +61,7 @@ const initial = loadPersistedState();
 const store = createStore(initial ?? undefined);
 const selection = createSelectionState();
 const dragOverlayRef = createDragOverlayRef();
+const lassoOverlayRef = createLassoOverlayRef();
 const fogPreviewRef = createFogPreviewRef();
 const fogOptionsRef = createFogOptionsRef();
 const fogHoverRef = createFogHoverRef();
@@ -75,6 +83,7 @@ const renderer = createRenderer({
   getImage: (id) => imageLoader.get(id),
   getPreferences: () => preferences.get(),
   getDragOverlay: () => dragOverlayRef.current,
+  getLassoOverlay: () => lassoOverlayRef.current,
 });
 
 panZoomRef.handle = attachPanZoom(renderer);
@@ -97,6 +106,7 @@ const inputContext = {
   store,
   selection,
   dragOverlay: dragOverlayRef,
+  lassoOverlay: lassoOverlayRef,
   isSpaceHeld: () => panZoomRef.handle?.isSpaceHeld() ?? false,
   setWheelEnabled: (enabled: boolean) => panZoomRef.handle?.setWheelEnabled(enabled),
 };
@@ -244,11 +254,77 @@ canvas.addEventListener('contextmenu', (e) => {
   );
   const state = store.getState();
   const hit = hitTestToken(state.tokens, state.grid, world.x, world.y);
+  const gx = Math.floor(world.x / state.grid.cellSize);
+  const gy = Math.floor(world.y / state.grid.cellSize);
+  const onGrid =
+    gx >= 0 && gy >= 0 && gx < state.grid.cols && gy < state.grid.rows;
+
+  const items: ContextMenuEntry[] = [];
   if (hit) {
-    selection.ids = new Set([hit.id]);
-    renderer.requestRender();
-    tokenEditor.openFor(hit);
+    if (!selection.ids.has(hit.id)) {
+      selection.ids = new Set([hit.id]);
+      renderer.requestRender();
+    }
+    const count = selection.ids.size;
+    const suffix = count > 1 ? ` (${count})` : '';
+    items.push(
+      { label: 'Edit token…', onClick: () => tokenEditor.openFor(hit) },
+      { label: `Duplicate${suffix}`, shortcut: 'Ctrl+D', onClick: () => duplicateSelection() },
+      { label: `Copy${suffix}`, shortcut: 'Ctrl+C', onClick: () => copySelection() },
+      { label: `Cut${suffix}`, shortcut: 'Ctrl+X', onClick: () => cutSelection() },
+      { kind: 'separator' },
+      {
+        label: `Delete${suffix}`,
+        shortcut: 'Del',
+        variant: 'danger',
+        onClick: () => deleteSelection(),
+      },
+    );
+  } else {
+    items.push(
+      {
+        label: 'Place token here',
+        disabled: !onGrid,
+        onClick: () => placeTokenAt(gx, gy),
+      },
+      {
+        label: 'Paste here',
+        shortcut: 'Ctrl+V',
+        disabled: tokenClipboard.length === 0 || !onGrid,
+        onClick: () => pasteClipboardAt(gx, gy),
+      },
+      { kind: 'separator' },
+      {
+        label: 'Reveal 5×5 here',
+        disabled: !onGrid,
+        onClick: () => setFogArea(gx, gy, 5, 1),
+      },
+      {
+        label: 'Hide 5×5 here',
+        disabled: !onGrid,
+        onClick: () => setFogArea(gx, gy, 5, 0),
+      },
+      { kind: 'separator' },
+      {
+        label: 'Fit to screen',
+        shortcut: 'F',
+        onClick: () =>
+          fitToContent(renderer, store.getState(), (id) => imageLoader.get(id)),
+      },
+      {
+        label: 'Reset camera',
+        shortcut: '0',
+        onClick: () => resetCamera(renderer),
+      },
+    );
   }
+
+  showContextMenu({
+    x: e.clientX,
+    y: e.clientY,
+    items,
+    label: hit ? 'Token actions' : 'Map actions',
+  });
 });
 
 const channel = createSyncChannel();
@@ -375,6 +451,63 @@ function moveSelection(dx: number, dy: number): boolean {
   return moved;
 }
 
+function deleteSelection(): boolean {
+  if (selection.ids.size === 0) return false;
+  for (const id of selection.ids) {
+    store.applyPatch({ kind: 'token-remove', id });
+  }
+  selection.ids = new Set();
+  renderer.requestRender();
+  return true;
+}
+
+function placeTokenAt(gx: number, gy: number) {
+  const state = store.getState();
+  if (gx < 0 || gy < 0 || gx >= state.grid.cols || gy >= state.grid.rows) return;
+  const count = state.tokens.length;
+  store.applyPatch({
+    kind: 'token-add',
+    token: {
+      id: nid(),
+      x: gx,
+      y: gy,
+      label: `Token ${count + 1}`,
+      color: nextTokenColor(count),
+      imageId: null,
+      size: 1,
+      borderColor: null,
+    },
+  });
+}
+
+function pasteClipboardAt(gx: number, gy: number): boolean {
+  if (tokenClipboard.length === 0) return false;
+  const minX = Math.min(...tokenClipboard.map((t) => t.x));
+  const minY = Math.min(...tokenClipboard.map((t) => t.y));
+  const copies = duplicateTokens(tokenClipboard, gx - minX, gy - minY);
+  for (const token of copies) {
+    store.applyPatch({ kind: 'token-add', token });
+  }
+  selection.ids = new Set(copies.map((t) => t.id));
+  renderer.requestRender();
+  return true;
+}
+
+function setFogArea(gx: number, gy: number, size: number, value: 0 | 1) {
+  const state = store.getState();
+  const half = Math.floor(size / 2);
+  const cells: Array<{ x: number; y: number; value: 0 | 1 }> = [];
+  for (let dy = -half; dy <= half; dy++) {
+    for (let dx = -half; dx <= half; dx++) {
+      const x = gx + dx;
+      const y = gy + dy;
+      if (x < 0 || y < 0 || x >= state.grid.cols || y >= state.grid.rows) continue;
+      cells.push({ x, y, value });
+    }
+  }
+  if (cells.length > 0) store.applyPatch({ kind: 'fog-set', cells });
+}
+
 window.addEventListener('keydown', (e) => {
   if (isEditableFocus(e.target)) return;
 
@@ -484,9 +617,14 @@ window.addEventListener('beforeunload', () => {
   persistCameraDebounced.flush();
 });
 
-function applyPrefsToBody(prefs: { reducedMotion: boolean; highContrast: boolean }) {
+function applyPrefsToBody(prefs: {
+  reducedMotion: boolean;
+  highContrast: boolean;
+  theme: 'dark' | 'light';
+}) {
   document.body.classList.toggle('reduced-motion', prefs.reducedMotion);
   document.body.classList.toggle('high-contrast', prefs.highContrast);
+  document.body.classList.toggle('theme-light', prefs.theme === 'light');
 }
 
 function readBlobImageDimensions(blob: Blob): Promise<{ width: number; height: number }> {

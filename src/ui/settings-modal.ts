@@ -1,4 +1,4 @@
-import type { PreferencesStore, Preferences, LabelSize } from '../state/preferences.js';
+import type { PreferencesStore, LabelSize, Theme } from '../state/preferences.js';
 import type { Store } from '../state/store.js';
 import type { ViewMode } from '../state/types.js';
 import { attachFocusTrap, rememberFocus, restoreFocus, getFocusables } from '../util/focus.js';
@@ -13,6 +13,17 @@ export interface SettingsModalOptions {
   preferences: PreferencesStore;
   store: Store;
 }
+
+const TAB_IDS = ['grid', 'appearance', 'camera', 'accessibility', 'diagnostics'] as const;
+type TabId = (typeof TAB_IDS)[number];
+
+const TAB_LABELS: Record<TabId, string> = {
+  grid: 'Grid',
+  appearance: 'Appearance',
+  camera: 'Camera',
+  accessibility: 'Accessibility',
+  diagnostics: 'Diagnostics',
+};
 
 export function mountSettingsModal(
   opts: SettingsModalOptions,
@@ -36,6 +47,7 @@ export function mountSettingsModal(
 
   let triggerFocus: HTMLElement | null = null;
 
+  // Field refs
   const colsInput = modal.querySelector<HTMLInputElement>('[data-field="cols"]')!;
   const rowsInput = modal.querySelector<HTMLInputElement>('[data-field="rows"]')!;
   const cellSizeInput = modal.querySelector<HTMLInputElement>('[data-field="cellSize"]')!;
@@ -47,12 +59,50 @@ export function mountSettingsModal(
   const labelSizeRadios = Array.from(
     modal.querySelectorAll<HTMLInputElement>('input[name="settings-label-size"]'),
   );
+  const themeRadios = Array.from(
+    modal.querySelectorAll<HTMLInputElement>('input[name="settings-theme"]'),
+  );
   const gmFogColorInput = modal.querySelector<HTMLInputElement>('[data-field="gmFogColor"]');
   const gmFogOpacityInput = modal.querySelector<HTMLInputElement>('[data-field="gmFogOpacity"]');
   const gmFogOpacityLabel = modal.querySelector<HTMLSpanElement>('[data-field="gmFogOpacityValue"]');
-  const closeBtn = modal.querySelector<HTMLButtonElement>('.modal-close')!;
   const broadcastCameraInput = modal.querySelector<HTMLInputElement>('[data-field="broadcastCamera"]');
   const followGmCameraInput = modal.querySelector<HTMLInputElement>('[data-field="followGmCamera"]');
+  const resetBtn = modal.querySelector<HTMLButtonElement>('[data-action="reset-prefs"]')!;
+  const closeBtn = modal.querySelector<HTMLButtonElement>('.modal-close')!;
+
+  // Tab refs
+  const tabs = Array.from(modal.querySelectorAll<HTMLButtonElement>('[role="tab"]'));
+  const panels = Array.from(modal.querySelectorAll<HTMLElement>('[role="tabpanel"]'));
+
+  function activateTab(id: TabId, focus = false) {
+    for (const tab of tabs) {
+      const selected = tab.dataset.tab === id;
+      tab.setAttribute('aria-selected', selected ? 'true' : 'false');
+      tab.tabIndex = selected ? 0 : -1;
+      if (selected && focus) tab.focus();
+    }
+    for (const panel of panels) {
+      panel.hidden = panel.dataset.tab !== id;
+    }
+  }
+
+  for (const tab of tabs) {
+    tab.addEventListener('click', () => {
+      activateTab(tab.dataset.tab as TabId);
+    });
+    tab.addEventListener('keydown', (e) => {
+      const idx = tabs.indexOf(tab);
+      let nextIdx = -1;
+      if (e.key === 'ArrowDown' || e.key === 'ArrowRight') nextIdx = (idx + 1) % tabs.length;
+      else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') nextIdx = (idx - 1 + tabs.length) % tabs.length;
+      else if (e.key === 'Home') nextIdx = 0;
+      else if (e.key === 'End') nextIdx = tabs.length - 1;
+      else return;
+      const nextTab = tabs[nextIdx]!;
+      activateTab(nextTab.dataset.tab as TabId, true);
+      e.preventDefault();
+    });
+  }
 
   function populate() {
     const state = store.getState();
@@ -66,6 +116,7 @@ export function mountSettingsModal(
     highContrastInput.checked = prefs.highContrast;
     colorblindInput.checked = prefs.colorblindMarkers;
     for (const r of labelSizeRadios) r.checked = r.value === prefs.labelSize;
+    for (const r of themeRadios) r.checked = r.value === prefs.theme;
     if (gmFogColorInput) gmFogColorInput.value = prefs.gmFogColor;
     if (gmFogOpacityInput) gmFogOpacityInput.value = String(Math.round(prefs.gmFogOpacity * 100));
     if (gmFogOpacityLabel) gmFogOpacityLabel.textContent = `${Math.round(prefs.gmFogOpacity * 100)}%`;
@@ -75,6 +126,7 @@ export function mountSettingsModal(
 
   function open() {
     triggerFocus = rememberFocus();
+    activateTab('grid');
     populate();
     backdrop.hidden = false;
     window.setTimeout(() => {
@@ -90,13 +142,6 @@ export function mountSettingsModal(
     restoreFocus(prior);
   }
 
-  function dispatchGrid(changes: Partial<Preferences>, gridChanges: Record<string, unknown>) {
-    if (Object.keys(changes).length > 0) preferences.update(changes);
-    if (Object.keys(gridChanges).length > 0) {
-      store.applyPatch({ kind: 'grid-update', changes: gridChanges as never });
-    }
-  }
-
   function parseInt100(v: string, min: number, max: number): number | null {
     const n = parseInt(v, 10);
     if (Number.isNaN(n) || n < min || n > max) return null;
@@ -109,7 +154,7 @@ export function mountSettingsModal(
       populate();
       return;
     }
-    dispatchGrid({}, { cols: n });
+    store.applyPatch({ kind: 'grid-update', changes: { cols: n } });
   });
 
   rowsInput.addEventListener('change', () => {
@@ -118,7 +163,7 @@ export function mountSettingsModal(
       populate();
       return;
     }
-    dispatchGrid({}, { rows: n });
+    store.applyPatch({ kind: 'grid-update', changes: { rows: n } });
   });
 
   cellSizeInput.addEventListener('change', () => {
@@ -127,11 +172,14 @@ export function mountSettingsModal(
       populate();
       return;
     }
-    dispatchGrid({}, { cellSize: n });
+    store.applyPatch({ kind: 'grid-update', changes: { cellSize: n } });
   });
 
   showGridLinesInput.addEventListener('change', () => {
-    dispatchGrid({}, { showGridLines: showGridLinesInput.checked });
+    store.applyPatch({
+      kind: 'grid-update',
+      changes: { showGridLines: showGridLinesInput.checked },
+    });
   });
 
   persistCameraInput.addEventListener('change', () => {
@@ -153,6 +201,12 @@ export function mountSettingsModal(
   for (const r of labelSizeRadios) {
     r.addEventListener('change', () => {
       if (r.checked) preferences.update({ labelSize: r.value as LabelSize });
+    });
+  }
+
+  for (const r of themeRadios) {
+    r.addEventListener('change', () => {
+      if (r.checked) preferences.update({ theme: r.value as Theme });
     });
   }
 
@@ -182,6 +236,14 @@ export function mountSettingsModal(
     });
   }
 
+  resetBtn.addEventListener('click', () => {
+    const ok = window.confirm(
+      'Reset all local preferences (theme, label size, contrast, etc.) to defaults? Session state is unaffected.',
+    );
+    if (!ok) return;
+    preferences.reset();
+  });
+
   closeBtn.addEventListener('click', close);
 
   backdrop.addEventListener('click', (e) => {
@@ -210,6 +272,64 @@ export function mountSettingsModal(
 }
 
 function renderModalHTML(viewMode: ViewMode): string {
+  return `
+    <div class="modal-header">
+      <h2>Settings</h2>
+      <button type="button" class="modal-close" aria-label="Close">×</button>
+    </div>
+    <div class="modal-body settings-tabbed">
+      <div class="settings-tabs" role="tablist" aria-label="Settings categories">
+        ${TAB_IDS.map(
+          (id, i) => `<button
+            role="tab"
+            id="settings-tab-${id}"
+            aria-controls="settings-panel-${id}"
+            aria-selected="${i === 0 ? 'true' : 'false'}"
+            tabindex="${i === 0 ? 0 : -1}"
+            data-tab="${id}"
+            type="button"
+          >${TAB_LABELS[id]}</button>`,
+        ).join('')}
+      </div>
+      <div class="settings-panes">
+        ${renderGridPane()}
+        ${renderAppearancePane(viewMode)}
+        ${renderCameraPane(viewMode)}
+        ${renderAccessibilityPane()}
+        ${renderDiagnosticsPane()}
+      </div>
+    </div>
+  `;
+}
+
+function paneAttrs(id: TabId, first: boolean): string {
+  return `role="tabpanel" id="settings-panel-${id}" aria-labelledby="settings-tab-${id}" data-tab="${id}"${first ? '' : ' hidden'}`;
+}
+
+function renderGridPane(): string {
+  return `
+    <section ${paneAttrs('grid', true)}>
+      <div class="grid-row">
+        <label>Columns
+          <input type="number" data-field="cols" min="1" max="200" />
+        </label>
+        <label>Rows
+          <input type="number" data-field="rows" min="1" max="200" />
+        </label>
+        <label>Cell size (px)
+          <input type="number" data-field="cellSize" min="10" max="400" />
+        </label>
+      </div>
+      <label class="check">
+        <input type="checkbox" data-field="showGridLines" />
+        <span>Show grid lines</span>
+      </label>
+      <p class="settings-hint">Changing grid dimensions preserves fog state for cells that still exist after the resize.</p>
+    </section>
+  `;
+}
+
+function renderAppearancePane(viewMode: ViewMode): string {
   const gmOnly = viewMode === 'gm'
     ? `
         <label>Fog color (GM view)
@@ -223,81 +343,80 @@ function renderModalHTML(viewMode: ViewMode): string {
         </label>`
     : '';
 
-  const syncSection = viewMode === 'gm'
+  return `
+    <section ${paneAttrs('appearance', false)}>
+      <label>Theme
+        <div class="radio-group">
+          <label><input type="radio" name="settings-theme" value="dark" /> Dark</label>
+          <label><input type="radio" name="settings-theme" value="light" /> Light</label>
+        </div>
+      </label>
+      <label>Label size
+        <div class="radio-group">
+          <label><input type="radio" name="settings-label-size" value="small" /> Small</label>
+          <label><input type="radio" name="settings-label-size" value="medium" /> Medium</label>
+          <label><input type="radio" name="settings-label-size" value="large" /> Large</label>
+        </div>
+      </label>
+      ${gmOnly}
+    </section>
+  `;
+}
+
+function renderCameraPane(viewMode: ViewMode): string {
+  const syncRow = viewMode === 'gm'
     ? `
-      <section class="settings-section">
-        <h3>Sync</h3>
         <label class="check">
           <input type="checkbox" data-field="broadcastCamera" />
           <span>Broadcast my camera to Spectator</span>
         </label>
-        <p class="settings-hint">When on, your pan/zoom is mirrored to any Spectator tab that has "Follow GM camera" enabled.</p>
-      </section>`
+        <p class="settings-hint">When on, your pan/zoom is mirrored to any Spectator tab with "Follow GM camera" enabled.</p>`
     : `
-      <section class="settings-section">
-        <h3>Sync</h3>
         <label class="check">
           <input type="checkbox" data-field="followGmCamera" />
           <span>Follow GM's camera</span>
         </label>
-        <p class="settings-hint">Requires the GM view to enable "Broadcast my camera". Panning or zooming here pauses following for 2 seconds.</p>
-      </section>`;
+        <p class="settings-hint">Requires the GM view to enable "Broadcast my camera". Panning or zooming here pauses following for 2 seconds.</p>`;
 
   return `
-    <div class="modal-header">
-      <h2>Settings</h2>
-      <button type="button" class="modal-close" aria-label="Close">×</button>
-    </div>
-    <div class="modal-body settings-body">
-      <section class="settings-section">
-        <h3>Grid</h3>
-        <div class="grid-row">
-          <label>Columns
-            <input type="number" data-field="cols" min="1" max="200" />
-          </label>
-          <label>Rows
-            <input type="number" data-field="rows" min="1" max="200" />
-          </label>
-          <label>Cell size (px)
-            <input type="number" data-field="cellSize" min="10" max="400" />
-          </label>
-        </div>
-        <label class="check">
-          <input type="checkbox" data-field="showGridLines" />
-          <span>Show grid lines</span>
-        </label>
-      </section>
-      <section class="settings-section">
-        <h3>View</h3>
-        <label class="check">
-          <input type="checkbox" data-field="persistCamera" />
-          <span>Persist camera position on refresh</span>
-        </label>
-        <label class="check">
-          <input type="checkbox" data-field="reducedMotion" />
-          <span>Reduced motion</span>
-        </label>
-      </section>
-      <section class="settings-section">
-        <h3>Appearance</h3>
-        <label>Label size
-          <div class="radio-group">
-            <label><input type="radio" name="settings-label-size" value="small" /> Small</label>
-            <label><input type="radio" name="settings-label-size" value="medium" /> Medium</label>
-            <label><input type="radio" name="settings-label-size" value="large" /> Large</label>
-          </div>
-        </label>
-        <label class="check">
-          <input type="checkbox" data-field="highContrast" />
-          <span>High contrast grid</span>
-        </label>
-        <label class="check">
-          <input type="checkbox" data-field="colorblindMarkers" />
-          <span>Colorblind-friendly team markers</span>
-        </label>
-        ${gmOnly}
-      </section>
-      ${syncSection}
-    </div>
+    <section ${paneAttrs('camera', false)}>
+      <label class="check">
+        <input type="checkbox" data-field="persistCamera" />
+        <span>Persist camera position on refresh</span>
+      </label>
+      ${syncRow}
+    </section>
+  `;
+}
+
+function renderAccessibilityPane(): string {
+  return `
+    <section ${paneAttrs('accessibility', false)}>
+      <label class="check">
+        <input type="checkbox" data-field="reducedMotion" />
+        <span>Reduced motion</span>
+      </label>
+      <label class="check">
+        <input type="checkbox" data-field="highContrast" />
+        <span>High contrast grid</span>
+      </label>
+      <label class="check">
+        <input type="checkbox" data-field="colorblindMarkers" />
+        <span>Colorblind-friendly team markers</span>
+      </label>
+      <p class="settings-hint">Markers add a small shape badge to tokens with a preset team border color (Ally, Enemy, etc.).</p>
+    </section>
+  `;
+}
+
+function renderDiagnosticsPane(): string {
+  return `
+    <section ${paneAttrs('diagnostics', false)}>
+      <div>
+        <button type="button" class="danger" data-action="reset-prefs">Reset preferences to defaults</button>
+      </div>
+      <p class="settings-hint">Restores every appearance, accessibility, and camera setting to its default. Session content (tokens, map, fog) is unaffected.</p>
+      <p class="settings-hint">Runtime overlays (FPS counter, Spectator viewport indicator) will appear here in a later update.</p>
+    </section>
   `;
 }

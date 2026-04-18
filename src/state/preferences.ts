@@ -1,8 +1,10 @@
 import { PREFERENCES_KEY } from '../util/constants.js';
 
 export type LabelSize = 'small' | 'medium' | 'large';
+export type Theme = 'dark' | 'light';
 
 export interface Preferences {
+  theme: Theme;
   persistCamera: boolean;
   reducedMotion: boolean;
   highContrast: boolean;
@@ -15,6 +17,7 @@ export interface Preferences {
 }
 
 export const DEFAULT_PREFERENCES: Preferences = {
+  theme: 'dark',
   persistCamera: true,
   reducedMotion: false,
   highContrast: false,
@@ -29,6 +32,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
 export interface PreferencesStore {
   get(): Preferences;
   update(changes: Partial<Preferences>): void;
+  reset(): void;
   subscribe(listener: (prefs: Preferences) => void): () => void;
 }
 
@@ -44,12 +48,21 @@ export function createPreferences(): PreferencesStore {
     }
   }
 
+  function notify() {
+    for (const l of listeners) l(prefs);
+  }
+
   return {
     get: () => prefs,
     update(changes: Partial<Preferences>) {
       prefs = { ...prefs, ...changes };
       save();
-      for (const l of listeners) l(prefs);
+      notify();
+    },
+    reset() {
+      prefs = systemDefaults();
+      save();
+      notify();
     },
     subscribe(listener) {
       listeners.add(listener);
