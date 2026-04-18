@@ -3,6 +3,7 @@ import {
   type SessionState,
   type StatePatch,
 } from './types.js';
+import { sortByValue } from './initiative.js';
 
 export type StoreListener = (patch: StatePatch | null) => void;
 
@@ -31,6 +32,11 @@ function snapshot(s: SessionState): SessionState {
     fog: new Uint8Array(s.fog),
     annotations: s.annotations.map((a) => ({ ...a })),
     aoeTemplates: s.aoeTemplates.map((a) => ({ ...a })),
+    initiative: {
+      order: s.initiative.order.map((e) => ({ ...e })),
+      activeId: s.initiative.activeId,
+      round: s.initiative.round,
+    },
   };
 }
 
@@ -46,6 +52,8 @@ function coalesceKey(patch: StatePatch): string | null {
       return `annotation-update:${patch.id}`;
     case 'aoe-update':
       return `aoe-update:${patch.id}`;
+    case 'initiative-update':
+      return `initiative-update:${patch.id}`;
     default:
       return null;
   }
@@ -185,6 +193,52 @@ export function createStore(initial?: SessionState): Store {
           aoeTemplates: state.aoeTemplates.filter((a) => a.id !== patch.id),
         };
         break;
+      case 'initiative-add': {
+        const order = sortByValue([...state.initiative.order, patch.entry]);
+        state = {
+          ...state,
+          initiative: { ...state.initiative, order },
+        };
+        break;
+      }
+      case 'initiative-update': {
+        const idx = state.initiative.order.findIndex((e) => e.id === patch.id);
+        if (idx === -1) return;
+        const existing = state.initiative.order[idx]!;
+        const next = { ...existing, ...patch.changes };
+        let order = state.initiative.order.slice();
+        order[idx] = next;
+        if (patch.changes.value !== undefined) order = sortByValue(order);
+        state = {
+          ...state,
+          initiative: { ...state.initiative, order },
+        };
+        break;
+      }
+      case 'initiative-remove': {
+        const order = state.initiative.order.filter((e) => e.id !== patch.id);
+        const activeId =
+          state.initiative.activeId === patch.id
+            ? null
+            : state.initiative.activeId;
+        const round = order.length === 0 ? 0 : state.initiative.round;
+        state = {
+          ...state,
+          initiative: { order, activeId, round },
+        };
+        break;
+      }
+      case 'initiative-set-active': {
+        state = {
+          ...state,
+          initiative: {
+            ...state.initiative,
+            activeId: patch.activeId,
+            round: patch.round,
+          },
+        };
+        break;
+      }
       case 'session-reset':
         state = patch.state;
         break;

@@ -68,6 +68,19 @@ export interface AoeTemplate {
   visibility: AoeVisibility;
 }
 
+export interface InitiativeEntry {
+  id: ID;
+  tokenId: ID | null;
+  label: string;
+  value: number;
+}
+
+export interface InitiativeState {
+  order: InitiativeEntry[];
+  activeId: ID | null;
+  round: number;
+}
+
 export interface SessionState {
   version: 1;
   grid: GridConfig;
@@ -76,6 +89,7 @@ export interface SessionState {
   fog: Uint8Array;
   annotations: Annotation[];
   aoeTemplates: AoeTemplate[];
+  initiative: InitiativeState;
 }
 
 export interface Camera {
@@ -99,6 +113,14 @@ export type StatePatch =
   | { kind: 'aoe-add'; template: AoeTemplate }
   | { kind: 'aoe-update'; id: ID; changes: Partial<AoeTemplate> }
   | { kind: 'aoe-remove'; id: ID }
+  | { kind: 'initiative-add'; entry: InitiativeEntry }
+  | {
+      kind: 'initiative-update';
+      id: ID;
+      changes: Partial<Omit<InitiativeEntry, 'id'>>;
+    }
+  | { kind: 'initiative-remove'; id: ID }
+  | { kind: 'initiative-set-active'; activeId: ID | null; round: number }
   | { kind: 'session-reset'; state: SessionState };
 
 export const DEFAULT_GRID: GridConfig = {
@@ -132,5 +154,6 @@ export function createDefaultState(): SessionState {
     fog: new Uint8Array(grid.cols * grid.rows),
     annotations: [],
     aoeTemplates: [],
+    initiative: { order: [], activeId: null, round: 0 },
   };
 }

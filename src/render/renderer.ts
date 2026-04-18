@@ -126,11 +126,16 @@ export function createRenderer(opts: CreateRendererOptions): Renderer {
     drawBackground(ctx, state.background, state.grid, getImage, { theme });
     drawGrid(ctx, state.grid, { highContrast, theme });
     const dragOverlay = getDragOverlay ? getDragOverlay() : null;
+    const activeEntry = state.initiative.order.find(
+      (e) => e.id === state.initiative.activeId,
+    );
+    const activeTokenId = activeEntry?.tokenId ?? null;
     drawTokens(ctx, state, highlights, getImage, {
       labelSize,
       showColorblindMarkers,
       mode,
       dragOverlay,
+      activeInitiativeTokenId: activeTokenId,
     });
     drawAoeTemplates(ctx, state, {
       mode,

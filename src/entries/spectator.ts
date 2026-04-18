@@ -12,6 +12,7 @@ import { loadCamera, saveCamera, clearCamera } from '../state/camera-persistence
 import { mountSettingsModal } from '../ui/settings-modal.js';
 import { mountZoomControls } from '../ui/zoom-controls.js';
 import { mountShortcutOverlay } from '../ui/shortcut-overlay.js';
+import { mountInitiativeBar } from '../ui/initiative-bar.js';
 import { createPingManager } from '../state/ping-manager.js';
 import { createMeasurementOverlayRef } from '../input/context.js';
 import { createMeasureTool } from '../input/tool-measure.js';
@@ -102,6 +103,7 @@ const settingsModal = mountSettingsModal({
 });
 
 const shortcutOverlay = mountShortcutOverlay('spectator');
+mountInitiativeBar(store, 'spectator');
 
 let rulerActive = false;
 const rulerBtn = mountSpectatorToolbar(() => setRulerActive(!rulerActive));

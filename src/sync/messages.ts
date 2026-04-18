@@ -4,6 +4,7 @@ import type {
   Background,
   Camera,
   GridConfig,
+  InitiativeState,
   SessionState,
   StatePatch,
   Token,
@@ -17,6 +18,7 @@ export interface SerializedSessionState {
   fog: number[];
   annotations: Annotation[];
   aoeTemplates: AoeTemplate[];
+  initiative: InitiativeState;
 }
 
 export type SerializablePatch =
@@ -41,6 +43,11 @@ export function serializeState(s: SessionState): SerializedSessionState {
     fog: Array.from(s.fog),
     annotations: s.annotations.map((a) => ({ ...a })),
     aoeTemplates: s.aoeTemplates.map((a) => ({ ...a })),
+    initiative: {
+      order: s.initiative.order.map((e) => ({ ...e })),
+      activeId: s.initiative.activeId,
+      round: s.initiative.round,
+    },
   };
 }
 
@@ -81,6 +88,16 @@ export function deserializeState(s: SerializedSessionState): SessionState {
       color: t.color,
       visibility: t.visibility === 'gm' ? 'gm' : 'shared',
     })),
+    initiative: {
+      order: (s.initiative?.order ?? []).map((e) => ({
+        id: e.id,
+        tokenId: e.tokenId ?? null,
+        label: e.label ?? '',
+        value: Number(e.value) || 0,
+      })),
+      activeId: s.initiative?.activeId ?? null,
+      round: Number(s.initiative?.round) || 0,
+    },
   };
 }
 

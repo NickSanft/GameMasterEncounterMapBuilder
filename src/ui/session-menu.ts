@@ -7,6 +7,7 @@ export interface SessionMenuActions {
   onSettings(): void;
   onToggleNotes(): void;
   onShortcuts(): void;
+  onInitiative(): void;
 }
 
 export function mountSessionMenu(
@@ -75,6 +76,12 @@ export function mountSessionMenu(
     actions.onToggleNotes();
   });
 
+  const initiativeBtn = createButton('Initiative', 'Open the initiative tracker');
+  initiativeBtn.addEventListener('click', () => {
+    initiativeBtn.blur();
+    actions.onInitiative();
+  });
+
   const shortcutsBtn = createButton('Shortcuts', 'Show keyboard shortcuts (?)');
   shortcutsBtn.addEventListener('click', () => {
     shortcutsBtn.blur();
@@ -83,6 +90,7 @@ export function mountSessionMenu(
 
   menu.appendChild(uploadBtn);
   menu.appendChild(presetBtn);
+  menu.appendChild(initiativeBtn);
   menu.appendChild(exportBtn);
   menu.appendChild(importBtn);
   menu.appendChild(notesBtn);

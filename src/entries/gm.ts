@@ -56,6 +56,8 @@ import { nextTokenColor } from '../state/token-colors.js';
 import { createPingManager } from '../state/ping-manager.js';
 import { mountNotesPanel } from '../ui/notes-panel.js';
 import { mountShortcutOverlay } from '../ui/shortcut-overlay.js';
+import { mountInitiativeBar } from '../ui/initiative-bar.js';
+import { mountInitiativeModal } from '../ui/initiative-modal.js';
 import {
   zoomBy,
   fitToContent,
@@ -277,6 +279,7 @@ mountSessionMenu(document.body, {
   onSettings: () => settingsModal.open(),
   onToggleNotes: () => notesPanel.toggle(),
   onShortcuts: () => shortcutOverlay.open(),
+  onInitiative: () => initiativeModal.open(),
 });
 
 const tokenEditor = mountTokenEditor({
@@ -288,6 +291,10 @@ const annotationEditor = mountAnnotationEditor({ store });
 
 const notesPanel = mountNotesPanel();
 const shortcutOverlay = mountShortcutOverlay('gm');
+const initiativeModal = mountInitiativeModal({ store });
+mountInitiativeBar(store, 'gm', {
+  onOpenTracker: () => initiativeModal.open(),
+});
 
 function ping(worldX: number, worldY: number) {
   pingManager.add(worldX, worldY);

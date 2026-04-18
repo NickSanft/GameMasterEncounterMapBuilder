@@ -18,6 +18,7 @@ export interface TokenRenderOptions {
   showColorblindMarkers: boolean;
   mode: ViewMode;
   dragOverlay?: DragOverlay | null;
+  activeInitiativeTokenId?: ID | null;
 }
 
 const DEFAULT_OPTIONS: TokenRenderOptions = {
@@ -66,6 +67,8 @@ export function drawTokens(
     return draggedIds.includes(t.id);
   }
 
+  const activeId = options.activeInitiativeTokenId ?? null;
+
   for (const t of unselected) {
     drawTokenBody(
       ctx,
@@ -75,6 +78,7 @@ export function drawTokens(
       getImage,
       options.showColorblindMarkers,
       isDragged(t),
+      t.id === activeId,
     );
   }
   for (const t of selected) {
@@ -86,6 +90,7 @@ export function drawTokens(
       getImage,
       options.showColorblindMarkers,
       isDragged(t),
+      t.id === activeId,
     );
   }
   for (const t of unselected) {
@@ -106,6 +111,7 @@ function drawTokenBody(
   getImage: ImageProvider,
   showMarkers: boolean,
   isDragged: boolean,
+  activeTurn: boolean,
 ): void {
   const cx = (t.x + t.size / 2) * cellSize;
   const cy = (t.y + t.size / 2) * cellSize;
@@ -144,8 +150,21 @@ function drawTokenBody(
     ctx.stroke();
   }
 
+  if (activeTurn) {
+    const ar = r + (t.borderColor ? 7 : 4);
+    ctx.save();
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = '#ffb300';
+    ctx.shadowColor = 'rgba(255, 179, 0, 0.85)';
+    ctx.shadowBlur = 10;
+    ctx.beginPath();
+    ctx.arc(cx, cy, ar, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
+
   if (highlighted) {
-    const hr = r + (t.borderColor ? 6 : 3);
+    const hr = r + (t.borderColor ? 6 : 3) + (activeTurn ? 4 : 0);
     ctx.lineWidth = 3;
     ctx.strokeStyle = '#ffd966';
     ctx.beginPath();

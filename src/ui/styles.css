@@ -855,6 +855,269 @@ body.reduced-motion *::after {
   border-color: var(--accent);
 }
 
+/* Initiative tracker — compact top-center bar */
+.initiative-bar {
+  position: absolute;
+  top: 0.75rem;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.4rem 0.65rem;
+  background: var(--panel-bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--fg);
+  font-size: 0.88rem;
+  z-index: 15;
+  max-width: 80vw;
+}
+
+.initiative-bar[hidden] {
+  display: none;
+}
+
+.initiative-bar-round {
+  color: var(--fg-muted);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 700;
+}
+
+.initiative-bar-label {
+  appearance: none;
+  background: none;
+  border: none;
+  color: var(--fg);
+  font-weight: 700;
+  font-size: 0.95rem;
+  font-family: inherit;
+  cursor: pointer;
+  padding: 0.1rem 0.2rem;
+  border-radius: 3px;
+}
+
+.initiative-bar-label:hover {
+  background: var(--hover-overlay);
+}
+
+.initiative-bar-controls {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.initiative-bar-controls button {
+  appearance: none;
+  background: transparent;
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.15rem 0.55rem;
+  font-family: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.initiative-bar-controls button:hover {
+  background: var(--hover-overlay);
+}
+
+/* Initiative modal */
+.initiative-modal {
+  min-width: 520px;
+  max-width: min(680px, 92vw);
+}
+
+.initiative-body {
+  gap: 1rem;
+}
+
+.initiative-status {
+  font-weight: 600;
+  color: var(--fg);
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 0.9rem;
+}
+
+.initiative-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  max-height: 40vh;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.35rem;
+}
+
+.initiative-list-empty {
+  padding: 0.6rem;
+  color: var(--fg-muted);
+  font-style: italic;
+  text-align: center;
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 0.85rem;
+}
+
+.initiative-list-row {
+  display: grid;
+  grid-template-columns: 2.4rem 1fr auto;
+  gap: 0.6rem;
+  align-items: center;
+  padding: 0.35rem 0.5rem;
+  border-radius: 4px;
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 0.9rem;
+}
+
+.initiative-list-row.active {
+  background: rgba(255, 179, 0, 0.18);
+  border: 1px solid rgba(255, 179, 0, 0.45);
+  padding: calc(0.35rem - 1px) calc(0.5rem - 1px);
+}
+
+.initiative-list-value {
+  color: var(--fg);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.initiative-list-name {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--fg);
+}
+
+.initiative-list-swatch {
+  width: 0.75rem;
+  height: 0.75rem;
+  border-radius: 50%;
+  border: 1px solid rgba(0, 0, 0, 0.3);
+  flex-shrink: 0;
+}
+
+.initiative-list-actions {
+  display: flex;
+  gap: 0.3rem;
+}
+
+.initiative-list-actions button {
+  appearance: none;
+  background: transparent;
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 0.15rem 0.5rem;
+  font-family: inherit;
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+
+.initiative-list-actions button:hover {
+  background: var(--hover-overlay);
+}
+
+.initiative-list-actions button.danger {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.initiative-list-actions button.danger:hover {
+  background: var(--accent);
+  color: white;
+}
+
+.initiative-add {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.initiative-add-label {
+  font-size: 0.72rem;
+  color: var(--fg-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  flex-direction: row;
+}
+
+.initiative-add-row {
+  display: grid;
+  grid-template-columns: 1fr 5.5rem auto;
+  gap: 0.4rem;
+}
+
+.initiative-add-row input[type='text'],
+.initiative-add-row input[type='number'],
+.initiative-add-row select {
+  padding: 0.4rem 0.5rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--fg);
+  border-radius: 4px;
+  font-family: inherit;
+  font-size: 0.9rem;
+  text-transform: none;
+}
+
+.initiative-add-row input:focus,
+.initiative-add-row select:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.initiative-add-row button {
+  appearance: none;
+  background: transparent;
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.4rem 0.8rem;
+  font-family: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.initiative-add-row button:hover:not(:disabled) {
+  background: var(--hover-overlay);
+}
+
+.initiative-add-row button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.initiative-controls {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.initiative-controls button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: white;
+  font-weight: 600;
+}
+
+.initiative-controls button.primary:hover {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+
 /* Notes panel (GM, right drawer) */
 .notes-panel {
   position: absolute;
