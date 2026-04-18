@@ -15,8 +15,10 @@ import {
 } from './layer-fog.js';
 import { drawBackground, type ImageProvider } from './layer-background.js';
 import { drawLasso } from './layer-lasso.js';
+import { drawPings } from './layer-pings.js';
 import type { Preferences } from '../state/preferences.js';
 import type { DragOverlay, LassoOverlay } from '../input/context.js';
+import type { Ping } from '../state/ping-manager.js';
 
 export interface Renderer {
   readonly canvas: HTMLCanvasElement;
@@ -40,6 +42,7 @@ interface CreateRendererOptions {
   getPreferences?(): Preferences;
   getDragOverlay?(): DragOverlay | null;
   getLassoOverlay?(): LassoOverlay | null;
+  getPings?(): readonly Ping[];
 }
 
 const EMPTY_HIGHLIGHT: ReadonlySet<ID> = new Set();
@@ -70,6 +73,7 @@ export function createRenderer(opts: CreateRendererOptions): Renderer {
     getPreferences,
     getDragOverlay,
     getLassoOverlay,
+    getPings,
   } = opts;
   const maybeCtx = canvas.getContext('2d');
   if (!maybeCtx) throw new Error('2D canvas context unavailable');
@@ -131,6 +135,10 @@ export function createRenderer(opts: CreateRendererOptions): Renderer {
     }
     const lasso = getLassoOverlay ? getLassoOverlay() : null;
     if (lasso) drawLasso(ctx, lasso);
+    const pings = getPings ? getPings() : null;
+    if (pings && pings.length > 0) {
+      drawPings(ctx, pings, state.grid.cellSize, performance.now());
+    }
     ctx.restore();
   }
 

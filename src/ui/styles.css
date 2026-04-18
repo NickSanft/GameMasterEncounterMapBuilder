@@ -809,6 +809,148 @@ body.reduced-motion *::after {
   line-height: 1.35;
 }
 
+/* Notes panel (GM, right drawer) */
+.notes-panel {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 320px;
+  background: var(--bg-elev);
+  border-left: 1px solid var(--border);
+  box-shadow: -4px 0 18px rgba(0, 0, 0, 0.2);
+  z-index: 15;
+  display: flex;
+  flex-direction: column;
+}
+
+.notes-panel[hidden] {
+  display: none;
+}
+
+.notes-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.7rem 0.8rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.notes-panel-header h3 {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.notes-panel-close {
+  appearance: none;
+  background: none;
+  border: none;
+  color: var(--fg-muted);
+  font-size: 1.4rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 0.25rem;
+}
+
+.notes-panel-close:hover {
+  color: var(--fg);
+}
+
+.notes-panel-textarea {
+  flex: 1;
+  resize: none;
+  background: var(--bg);
+  border: none;
+  padding: 0.75rem 0.9rem;
+  color: var(--fg);
+  font-family: inherit;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  outline: none;
+}
+
+.notes-panel-footer {
+  padding: 0.4rem 0.8rem;
+  border-top: 1px solid var(--border);
+  color: var(--fg-muted);
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+body.notes-open .session-menu {
+  right: calc(320px + 0.75rem);
+}
+
+body.notes-open .zoom-controls {
+  right: calc(320px + 0.75rem);
+}
+
+/* Shortcut overlay modal */
+.shortcut-overlay {
+  min-width: 640px;
+  max-width: min(820px, 92vw);
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.shortcut-body {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.2rem 2rem;
+  overflow-y: auto;
+  padding-right: 0.4rem;
+}
+
+.shortcut-section h3 {
+  margin: 0 0 0.4rem;
+  font-size: 0.78rem;
+  color: var(--fg-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 700;
+}
+
+.shortcut-section dl {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.shortcut-section dl > div {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.75rem;
+  align-items: baseline;
+}
+
+.shortcut-section dt {
+  margin: 0;
+}
+
+.shortcut-section dd {
+  margin: 0;
+  color: var(--fg);
+  font-size: 0.85rem;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.shortcut-section kbd {
+  display: inline-block;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.75rem;
+  padding: 0.12rem 0.45rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  color: var(--fg);
+  white-space: nowrap;
+}
+
 /* Right-click context menu */
 .context-menu {
   position: fixed;

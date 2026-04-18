@@ -42,6 +42,9 @@ import { resolvePresetUrl } from '../state/preset-backgrounds.js';
 import { showContextMenu, type ContextMenuEntry } from '../ui/context-menu.js';
 import { nid } from '../util/id.js';
 import { nextTokenColor } from '../state/token-colors.js';
+import { createPingManager } from '../state/ping-manager.js';
+import { mountNotesPanel } from '../ui/notes-panel.js';
+import { mountShortcutOverlay } from '../ui/shortcut-overlay.js';
 import {
   zoomBy,
   fitToContent,
@@ -71,6 +74,7 @@ const fogHoverRef = createFogHoverRef();
 const panZoomRef: { handle: PanZoomHandle | null } = { handle: null };
 
 const imageLoader = createImageLoader(() => renderer.requestRender());
+const pingManager = createPingManager(() => renderer.requestRender());
 
 const initialCamera = (preferences.get().persistCamera && loadCamera('gm')) || { ...DEFAULT_CAMERA };
 
@@ -86,6 +90,7 @@ const renderer = createRenderer({
   getPreferences: () => preferences.get(),
   getDragOverlay: () => dragOverlayRef.current,
   getLassoOverlay: () => lassoOverlayRef.current,
+  getPings: () => pingManager.getActive(),
 });
 
 panZoomRef.handle = attachPanZoom(renderer);
@@ -239,6 +244,8 @@ mountSessionMenu(document.body, {
     }
   },
   onSettings: () => settingsModal.open(),
+  onToggleNotes: () => notesPanel.toggle(),
+  onShortcuts: () => shortcutOverlay.open(),
 });
 
 const tokenEditor = mountTokenEditor({
@@ -246,6 +253,14 @@ const tokenEditor = mountTokenEditor({
   selection,
   imageLoader,
 });
+
+const notesPanel = mountNotesPanel();
+const shortcutOverlay = mountShortcutOverlay('gm');
+
+function ping(worldX: number, worldY: number) {
+  pingManager.add(worldX, worldY);
+  channel?.send({ type: 'ping', x: worldX, y: worldY });
+}
 
 canvas.addEventListener('contextmenu', (e) => {
   e.preventDefault();
@@ -295,6 +310,10 @@ canvas.addEventListener('contextmenu', (e) => {
         shortcut: 'Ctrl+V',
         disabled: tokenClipboard.length === 0 || !onGrid,
         onClick: () => pasteClipboardAt(gx, gy),
+      },
+      {
+        label: 'Ping here',
+        onClick: () => ping(world.x, world.y),
       },
       { kind: 'separator' },
       {
@@ -348,6 +367,8 @@ if (channel) {
       sendCameraIfBroadcasting();
     } else if (msg.type === 'request-camera') {
       sendCameraIfBroadcasting();
+    } else if (msg.type === 'ping') {
+      pingManager.add(msg.x, msg.y, msg.color);
     }
   });
   channel.send({ type: 'full-state', state: serializeState(store.getState()) });
@@ -530,6 +551,12 @@ function setFogArea(gx: number, gy: number, size: number, value: 0 | 1) {
 
 window.addEventListener('keydown', (e) => {
   if (isEditableFocus(e.target)) return;
+
+  if (e.key === '?') {
+    shortcutOverlay.toggle();
+    e.preventDefault();
+    return;
+  }
 
   if (e.ctrlKey || e.metaKey) {
     const key = e.key.toLowerCase();

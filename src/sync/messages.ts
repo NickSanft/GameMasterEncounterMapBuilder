@@ -25,7 +25,8 @@ export type SyncMessage =
   | { type: 'patch'; patch: SerializablePatch }
   | { type: 'request-full-state' }
   | { type: 'camera'; camera: Camera }
-  | { type: 'request-camera' };
+  | { type: 'request-camera' }
+  | { type: 'ping'; x: number; y: number; color?: string };
 
 export function serializeState(s: SessionState): SerializedSessionState {
   return {

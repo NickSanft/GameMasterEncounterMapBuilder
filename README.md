@@ -19,8 +19,12 @@ From the landing page, open the **GM View** on your own screen and the **Spectat
 ### Session menu (top-right)
 
 - **Upload Map** — drops an image under the grid (auto-stretched to grid bounds).
+- **Preset Maps** — pick a bundled forest / dungeon / cavern / grassland background.
 - **Export** — downloads the current session (state + images) as JSON.
 - **Import** — restores a session from an exported JSON file.
+- **Notes** — toggle the private Session Notes drawer (GM only; saves locally, never synced).
+- **Shortcuts** — open the keyboard shortcut overlay (or press `?`).
+- **Settings** — grid, appearance (dark/light theme), camera, accessibility, diagnostics.
 - **New Session** — clears tokens, fog, and background.
 
 ### Global controls
@@ -32,6 +36,8 @@ From the landing page, open the **GM View** on your own screen and the **Spectat
 - **Ctrl/Cmd+Z** — undo (up to 50 steps). **Ctrl/Cmd+Shift+Z** or **Ctrl/Cmd+Y** — redo.
 - **Ctrl/Cmd+C / V / X** — copy, paste, cut selected tokens. **Ctrl/Cmd+D** — duplicate selection in place (offset one cell).
 - **Arrow keys / WASD** — move selected tokens by one cell (hold **Shift** for five). Drag/drop moves broadcast only on release.
+- **?** — open the on-screen shortcut reference.
+- **Right-click → Ping here** — flashes a ring on both GM and Spectator; ephemeral, not persisted.
 - **Escape** — close the token editor.
 
 ### Token editor

@@ -5,6 +5,8 @@ export interface SessionMenuActions {
   onExport(): void | Promise<void>;
   onImport(file: File): void | Promise<void>;
   onSettings(): void;
+  onToggleNotes(): void;
+  onShortcuts(): void;
 }
 
 export function mountSessionMenu(
@@ -67,10 +69,24 @@ export function mountSessionMenu(
     actions.onSettings();
   });
 
+  const notesBtn = createButton('Notes', 'Toggle session notes panel');
+  notesBtn.addEventListener('click', () => {
+    notesBtn.blur();
+    actions.onToggleNotes();
+  });
+
+  const shortcutsBtn = createButton('Shortcuts', 'Show keyboard shortcuts (?)');
+  shortcutsBtn.addEventListener('click', () => {
+    shortcutsBtn.blur();
+    actions.onShortcuts();
+  });
+
   menu.appendChild(uploadBtn);
   menu.appendChild(presetBtn);
   menu.appendChild(exportBtn);
   menu.appendChild(importBtn);
+  menu.appendChild(notesBtn);
+  menu.appendChild(shortcutsBtn);
   menu.appendChild(settingsBtn);
   menu.appendChild(newBtn);
   menu.appendChild(bgFileInput);

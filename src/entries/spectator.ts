@@ -11,6 +11,8 @@ import { createPreferences } from '../state/preferences.js';
 import { loadCamera, saveCamera, clearCamera } from '../state/camera-persistence.js';
 import { mountSettingsModal } from '../ui/settings-modal.js';
 import { mountZoomControls } from '../ui/zoom-controls.js';
+import { mountShortcutOverlay } from '../ui/shortcut-overlay.js';
+import { createPingManager } from '../state/ping-manager.js';
 import {
   zoomBy,
   fitToContent,
@@ -29,6 +31,7 @@ const initial = loadPersistedState();
 const store = createStore(initial ?? undefined);
 
 const imageLoader = createImageLoader(() => renderer.requestRender());
+const pingManager = createPingManager(() => renderer.requestRender());
 
 const initialCamera = (preferences.get().persistCamera && loadCamera('spectator')) || { ...DEFAULT_CAMERA };
 
@@ -39,6 +42,7 @@ const renderer = createRenderer({
   getState: () => store.getState(),
   getImage: (id) => imageLoader.get(id),
   getPreferences: () => preferences.get(),
+  getPings: () => pingManager.getActive(),
 });
 
 attachPanZoom(renderer);
@@ -50,7 +54,12 @@ const settingsModal = mountSettingsModal({
   store,
 });
 
-mountSpectatorMenu(() => settingsModal.open());
+const shortcutOverlay = mountShortcutOverlay('spectator');
+
+mountSpectatorMenu({
+  onSettings: () => settingsModal.open(),
+  onShortcuts: () => shortcutOverlay.open(),
+});
 
 mountZoomControls(document.body, {
   onZoomIn: () => zoomBy(renderer, ZOOM_BUTTON_STEP),
@@ -136,6 +145,8 @@ if (channel) {
       store.applyPatch(fromSerializablePatch(msg.patch));
     } else if (msg.type === 'camera') {
       applyRemoteCamera(msg.camera);
+    } else if (msg.type === 'ping') {
+      pingManager.add(msg.x, msg.y, msg.color);
     }
   });
   channel.send({ type: 'hello', from: 'spectator' });
@@ -152,6 +163,11 @@ preferences.subscribe((prefs) => {
 
 window.addEventListener('keydown', (e) => {
   if (isEditableFocus(e.target)) return;
+  if (e.key === '?') {
+    shortcutOverlay.toggle();
+    e.preventDefault();
+    return;
+  }
   if (e.ctrlKey || e.metaKey) return;
   if (e.key === '+' || e.key === '=') {
     zoomBy(renderer, ZOOM_BUTTON_STEP);
@@ -180,18 +196,32 @@ window.addEventListener('beforeunload', () => {
   persistCameraDebounced.flush();
 });
 
-function mountSpectatorMenu(onSettings: () => void) {
+function mountSpectatorMenu(actions: { onSettings: () => void; onShortcuts: () => void }) {
   const menu = document.createElement('div');
   menu.className = 'session-menu';
-  const btn = document.createElement('button');
-  btn.type = 'button';
-  btn.textContent = 'Settings';
-  btn.title = 'Open settings panel';
-  btn.addEventListener('click', () => {
-    btn.blur();
-    onSettings();
+  menu.setAttribute('role', 'group');
+  menu.setAttribute('aria-label', 'Spectator menu');
+
+  const shortcutsBtn = document.createElement('button');
+  shortcutsBtn.type = 'button';
+  shortcutsBtn.textContent = 'Shortcuts';
+  shortcutsBtn.title = 'Show keyboard shortcuts (?)';
+  shortcutsBtn.addEventListener('click', () => {
+    shortcutsBtn.blur();
+    actions.onShortcuts();
   });
-  menu.appendChild(btn);
+
+  const settingsBtn = document.createElement('button');
+  settingsBtn.type = 'button';
+  settingsBtn.textContent = 'Settings';
+  settingsBtn.title = 'Open settings panel';
+  settingsBtn.addEventListener('click', () => {
+    settingsBtn.blur();
+    actions.onSettings();
+  });
+
+  menu.appendChild(shortcutsBtn);
+  menu.appendChild(settingsBtn);
   document.body.appendChild(menu);
 }
 
