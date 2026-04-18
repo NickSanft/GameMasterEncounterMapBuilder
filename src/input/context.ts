@@ -1,6 +1,6 @@
 import type { Renderer } from '../render/renderer.js';
 import type { Store } from '../state/store.js';
-import type { ID } from '../state/types.js';
+import type { ID, Token } from '../state/types.js';
 import { screenToWorld } from '../render/coords.js';
 
 export interface InputContext {
@@ -12,6 +12,15 @@ export interface InputContext {
   selection: SelectionState;
   dragOverlay: DragOverlayRef;
   lassoOverlay: LassoOverlayRef;
+  lastPlaced: LastPlacedRef;
+}
+
+export interface LastPlacedRef {
+  current: Token | null;
+}
+
+export function createLastPlacedRef(): LastPlacedRef {
+  return { current: null };
 }
 
 export interface SelectionState {

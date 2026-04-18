@@ -11,7 +11,7 @@ From the landing page, open the **GM View** on your own screen and the **Spectat
 | Tool | Shortcut | Purpose |
 |---|---|---|
 | Select | `S` | Click a token to select, drag to move. Right-click to edit. Delete/Backspace removes the selected token. |
-| Token | `T` | Click any grid cell to drop a token. |
+| Token | `T` | Click any grid cell to drop a token. **Alt+click** stamps the most recently placed token (same label, color, border, image). |
 | Reveal | `R` | Drag to clear fog. Rect or freehand; brush size 1–3. |
 | Hide | `H` | Drag to re-cover fog. Same shape/size controls. |
 | Map | `M` | Drag to reposition the background, scroll to scale. |

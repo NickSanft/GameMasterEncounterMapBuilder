@@ -224,6 +224,106 @@ describe('undo / redo', () => {
   });
 });
 
+describe('batch', () => {
+  it('collapses multiple patches into a single undo step', () => {
+    const store = createStore();
+    store.batch(() => {
+      store.applyPatch({ kind: 'token-add', token: newToken('a') });
+      store.applyPatch({ kind: 'token-add', token: newToken('b') });
+      store.applyPatch({ kind: 'token-add', token: newToken('c') });
+    });
+    expect(store.getState().tokens).toHaveLength(3);
+    store.undo();
+    expect(store.getState().tokens).toHaveLength(0);
+  });
+
+  it('does not push an undo entry when no patches are applied', () => {
+    const store = createStore();
+    expect(store.canUndo()).toBe(false);
+    store.batch(() => {
+      /* no-op */
+    });
+    expect(store.canUndo()).toBe(false);
+  });
+
+  it('does not push an undo entry when patches are applied but state is unchanged', () => {
+    const store = createStore();
+    expect(store.canUndo()).toBe(false);
+    store.batch(() => {
+      // token-update on a missing id does not mutate state
+      store.applyPatch({
+        kind: 'token-update',
+        id: 'missing',
+        changes: { label: 'x' },
+      });
+    });
+    expect(store.canUndo()).toBe(false);
+  });
+
+  it('nested batches are treated as part of the outer batch', () => {
+    const store = createStore();
+    store.batch(() => {
+      store.applyPatch({ kind: 'token-add', token: newToken('a') });
+      store.batch(() => {
+        store.applyPatch({ kind: 'token-add', token: newToken('b') });
+      });
+      store.applyPatch({ kind: 'token-add', token: newToken('c') });
+    });
+    expect(store.getState().tokens).toHaveLength(3);
+    store.undo();
+    expect(store.getState().tokens).toHaveLength(0);
+  });
+
+  it('notifies subscribers once per applied patch during batch', () => {
+    const store = createStore();
+    const listener = vi.fn();
+    store.subscribe(listener);
+    store.batch(() => {
+      store.applyPatch({ kind: 'token-add', token: newToken('a') });
+      store.applyPatch({ kind: 'token-add', token: newToken('b') });
+    });
+    expect(listener).toHaveBeenCalledTimes(2);
+  });
+
+  it('redo after batch-undo restores the whole batch', () => {
+    const store = createStore();
+    store.batch(() => {
+      store.applyPatch({ kind: 'token-add', token: newToken('a') });
+      store.applyPatch({ kind: 'token-add', token: newToken('b') });
+    });
+    store.undo();
+    expect(store.getState().tokens).toHaveLength(0);
+    store.redo();
+    expect(store.getState().tokens).toHaveLength(2);
+  });
+
+  it('clears redo stack just like a plain patch', () => {
+    const store = createStore();
+    store.applyPatch({ kind: 'token-add', token: newToken('a') });
+    store.undo();
+    expect(store.canRedo()).toBe(true);
+    store.batch(() => {
+      store.applyPatch({ kind: 'token-add', token: newToken('b') });
+    });
+    expect(store.canRedo()).toBe(false);
+  });
+
+  it('throws from the callback still closes the batch cleanly', () => {
+    const store = createStore();
+    expect(() =>
+      store.batch(() => {
+        store.applyPatch({ kind: 'token-add', token: newToken('a') });
+        throw new Error('boom');
+      }),
+    ).toThrow(/boom/);
+    // Subsequent plain patches should still work and create their own undo step.
+    store.applyPatch({ kind: 'token-add', token: newToken('b') });
+    expect(store.getState().tokens).toHaveLength(2);
+    store.undo();
+    expect(store.getState().tokens).toHaveLength(1);
+  });
+});
+
 describe('resetSession / loadState', () => {
   it('resetSession clears tokens and fog via session-reset', () => {
     const store = createStore();

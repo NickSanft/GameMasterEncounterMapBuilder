@@ -14,10 +14,14 @@ export function createTokenTool(ctx: InputContext): Tool {
     const gx = Math.floor(world.x / grid.cellSize);
     const gy = Math.floor(world.y / grid.cellSize);
     if (gx < 0 || gy < 0 || gx >= grid.cols || gy >= grid.rows) return;
-    const count = store.getState().tokens.length;
-    store.applyPatch({
-      kind: 'token-add',
-      token: {
+
+    const stampTemplate = e.altKey ? ctx.lastPlaced.current : null;
+    let newToken;
+    if (stampTemplate) {
+      newToken = { ...stampTemplate, id: nid(), x: gx, y: gy };
+    } else {
+      const count = store.getState().tokens.length;
+      newToken = {
         id: nid(),
         x: gx,
         y: gy,
@@ -26,8 +30,10 @@ export function createTokenTool(ctx: InputContext): Tool {
         imageId: null,
         size: 1,
         borderColor: null,
-      },
-    });
+      };
+    }
+    store.applyPatch({ kind: 'token-add', token: newToken });
+    ctx.lastPlaced.current = newToken;
     e.preventDefault();
   }
 

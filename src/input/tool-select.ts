@@ -129,16 +129,18 @@ export function createSelectTool(ctx: InputContext): Tool {
         const snappedDX = Math.round(overlay.deltaX);
         const snappedDY = Math.round(overlay.deltaY);
         if (snappedDX !== 0 || snappedDY !== 0) {
-          const state = store.getState();
-          for (const tid of overlay.ids) {
-            const token = state.tokens.find((t) => t.id === tid);
-            if (!token) continue;
-            store.applyPatch({
-              kind: 'token-update',
-              id: tid,
-              changes: { x: token.x + snappedDX, y: token.y + snappedDY },
-            });
-          }
+          store.batch(() => {
+            const state = store.getState();
+            for (const tid of overlay.ids) {
+              const token = state.tokens.find((t) => t.id === tid);
+              if (!token) continue;
+              store.applyPatch({
+                kind: 'token-update',
+                id: tid,
+                changes: { x: token.x + snappedDX, y: token.y + snappedDY },
+              });
+            }
+          });
         }
       }
       renderer.requestRender();
@@ -174,9 +176,12 @@ export function createSelectTool(ctx: InputContext): Tool {
     if (e.key !== 'Delete' && e.key !== 'Backspace') return;
     if (selection.ids.size === 0) return;
     if (isEditableTarget(e.target)) return;
-    for (const id of selection.ids) {
-      store.applyPatch({ kind: 'token-remove', id });
-    }
+    const ids = Array.from(selection.ids);
+    store.batch(() => {
+      for (const id of ids) {
+        store.applyPatch({ kind: 'token-remove', id });
+      }
+    });
     selection.ids = new Set();
     renderer.requestRender();
     e.preventDefault();

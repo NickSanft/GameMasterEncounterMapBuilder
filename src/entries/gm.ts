@@ -6,6 +6,7 @@ import {
   createSelectionState,
   createDragOverlayRef,
   createLassoOverlayRef,
+  createLastPlacedRef,
 } from '../input/context.js';
 import { createToolManager } from '../input/tool-manager.js';
 import { createSelectTool } from '../input/tool-select.js';
@@ -62,6 +63,7 @@ const store = createStore(initial ?? undefined);
 const selection = createSelectionState();
 const dragOverlayRef = createDragOverlayRef();
 const lassoOverlayRef = createLassoOverlayRef();
+const lastPlacedRef = createLastPlacedRef();
 const fogPreviewRef = createFogPreviewRef();
 const fogOptionsRef = createFogOptionsRef();
 const fogHoverRef = createFogHoverRef();
@@ -107,6 +109,7 @@ const inputContext = {
   selection,
   dragOverlay: dragOverlayRef,
   lassoOverlay: lassoOverlayRef,
+  lastPlaced: lastPlacedRef,
   isSpaceHeld: () => panZoomRef.handle?.isSpaceHeld() ?? false,
   setWheelEnabled: (enabled: boolean) => panZoomRef.handle?.setWheelEnabled(enabled),
 };
@@ -123,7 +126,7 @@ const toolbarHandle = mountToolbar(
   toolManager,
   [
     { id: 'select', label: 'Select (S)', title: 'Click tokens to select. Drag to move. Right-click to edit.' },
-    { id: 'token', label: 'Token (T)', title: 'Click a cell to place a token.' },
+    { id: 'token', label: 'Token (T)', title: 'Click a cell to place a token. Alt+click stamps the last-placed token.' },
     { id: 'fog-reveal', label: 'Reveal (R)', title: 'Drag to reveal cells.' },
     { id: 'fog-hide', label: 'Hide (H)', title: 'Drag to hide cells.' },
     { id: 'background', label: 'Map (M)', title: 'Drag to move the background, wheel to scale.' },
@@ -403,19 +406,25 @@ function copySelection(): boolean {
 function pasteClipboard(): boolean {
   if (tokenClipboard.length === 0) return false;
   const copies = duplicateTokens(tokenClipboard);
-  for (const token of copies) {
-    store.applyPatch({ kind: 'token-add', token });
-  }
+  store.batch(() => {
+    for (const token of copies) {
+      store.applyPatch({ kind: 'token-add', token });
+    }
+  });
   selection.ids = new Set(copies.map((t) => t.id));
+  lastPlacedRef.current = copies[copies.length - 1] ?? lastPlacedRef.current;
   renderer.requestRender();
   return true;
 }
 
 function cutSelection(): boolean {
   if (!copySelection()) return false;
-  for (const id of selection.ids) {
-    store.applyPatch({ kind: 'token-remove', id });
-  }
+  const ids = Array.from(selection.ids);
+  store.batch(() => {
+    for (const id of ids) {
+      store.applyPatch({ kind: 'token-remove', id });
+    }
+  });
   selection.ids = new Set();
   renderer.requestRender();
   return true;
@@ -425,10 +434,13 @@ function duplicateSelection(): boolean {
   const sel = selectedTokens();
   if (sel.length === 0) return false;
   const copies = duplicateTokens(sel);
-  for (const token of copies) {
-    store.applyPatch({ kind: 'token-add', token });
-  }
+  store.batch(() => {
+    for (const token of copies) {
+      store.applyPatch({ kind: 'token-add', token });
+    }
+  });
   selection.ids = new Set(copies.map((t) => t.id));
+  lastPlacedRef.current = copies[copies.length - 1] ?? lastPlacedRef.current;
   renderer.requestRender();
   return true;
 }
@@ -436,26 +448,32 @@ function duplicateSelection(): boolean {
 function moveSelection(dx: number, dy: number): boolean {
   if (selection.ids.size === 0) return false;
   const tokens = store.getState().tokens;
+  const ids = Array.from(selection.ids);
   let moved = false;
-  for (const id of selection.ids) {
-    const t = tokens.find((t) => t.id === id);
-    if (!t) continue;
-    store.applyPatch({
-      kind: 'token-update',
-      id,
-      changes: { x: t.x + dx, y: t.y + dy },
-    });
-    moved = true;
-  }
+  store.batch(() => {
+    for (const id of ids) {
+      const t = tokens.find((t) => t.id === id);
+      if (!t) continue;
+      store.applyPatch({
+        kind: 'token-update',
+        id,
+        changes: { x: t.x + dx, y: t.y + dy },
+      });
+      moved = true;
+    }
+  });
   if (moved) renderer.requestRender();
   return moved;
 }
 
 function deleteSelection(): boolean {
   if (selection.ids.size === 0) return false;
-  for (const id of selection.ids) {
-    store.applyPatch({ kind: 'token-remove', id });
-  }
+  const ids = Array.from(selection.ids);
+  store.batch(() => {
+    for (const id of ids) {
+      store.applyPatch({ kind: 'token-remove', id });
+    }
+  });
   selection.ids = new Set();
   renderer.requestRender();
   return true;
@@ -465,19 +483,18 @@ function placeTokenAt(gx: number, gy: number) {
   const state = store.getState();
   if (gx < 0 || gy < 0 || gx >= state.grid.cols || gy >= state.grid.rows) return;
   const count = state.tokens.length;
-  store.applyPatch({
-    kind: 'token-add',
-    token: {
-      id: nid(),
-      x: gx,
-      y: gy,
-      label: `Token ${count + 1}`,
-      color: nextTokenColor(count),
-      imageId: null,
-      size: 1,
-      borderColor: null,
-    },
-  });
+  const token = {
+    id: nid(),
+    x: gx,
+    y: gy,
+    label: `Token ${count + 1}`,
+    color: nextTokenColor(count),
+    imageId: null,
+    size: 1,
+    borderColor: null,
+  };
+  store.applyPatch({ kind: 'token-add', token });
+  lastPlacedRef.current = token;
 }
 
 function pasteClipboardAt(gx: number, gy: number): boolean {
@@ -485,10 +502,13 @@ function pasteClipboardAt(gx: number, gy: number): boolean {
   const minX = Math.min(...tokenClipboard.map((t) => t.x));
   const minY = Math.min(...tokenClipboard.map((t) => t.y));
   const copies = duplicateTokens(tokenClipboard, gx - minX, gy - minY);
-  for (const token of copies) {
-    store.applyPatch({ kind: 'token-add', token });
-  }
+  store.batch(() => {
+    for (const token of copies) {
+      store.applyPatch({ kind: 'token-add', token });
+    }
+  });
   selection.ids = new Set(copies.map((t) => t.id));
+  lastPlacedRef.current = copies[copies.length - 1] ?? lastPlacedRef.current;
   renderer.requestRender();
   return true;
 }

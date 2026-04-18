@@ -11,6 +11,7 @@ export interface Store {
   applyPatch(patch: StatePatch): void;
   loadState(state: SessionState): void;
   resetSession(): void;
+  batch(fn: () => void): void;
   subscribe(listener: StoreListener): () => void;
   undo(): boolean;
   redo(): boolean;
@@ -52,6 +53,9 @@ export function createStore(initial?: SessionState): Store {
   let silent = false;
   let lastKey: string | null = null;
   let lastKeyTime = 0;
+  let batchDepth = 0;
+  let batchSnapshot: SessionState | null = null;
+  let batchPreState: SessionState | null = null;
 
   function notify(patch: StatePatch | null) {
     for (const l of listeners) l(patch);
@@ -71,7 +75,7 @@ export function createStore(initial?: SessionState): Store {
   }
 
   function applyPatch(patch: StatePatch): void {
-    if (!silent) pushHistory(coalesceKey(patch));
+    if (!silent && batchDepth === 0) pushHistory(coalesceKey(patch));
 
     switch (patch.kind) {
       case 'token-add':
@@ -139,9 +143,32 @@ export function createStore(initial?: SessionState): Store {
   }
 
   function loadState(next: SessionState): void {
-    if (!silent) pushHistory(null);
+    if (!silent && batchDepth === 0) pushHistory(null);
     state = next;
     notify(null);
+  }
+
+  function batch(fn: () => void): void {
+    if (batchDepth === 0) {
+      batchSnapshot = snapshot(state);
+      batchPreState = state;
+    }
+    batchDepth++;
+    try {
+      fn();
+    } finally {
+      batchDepth--;
+      if (batchDepth === 0) {
+        if (state !== batchPreState && batchSnapshot) {
+          undoStack.push(batchSnapshot);
+          if (undoStack.length > UNDO_LIMIT) undoStack.shift();
+          redoStack.length = 0;
+        }
+        batchSnapshot = null;
+        batchPreState = null;
+        lastKey = null;
+      }
+    }
   }
 
   function resetSession(): void {
@@ -180,6 +207,7 @@ export function createStore(initial?: SessionState): Store {
     applyPatch,
     loadState,
     resetSession,
+    batch,
     subscribe,
     undo,
     redo,
