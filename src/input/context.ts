@@ -13,6 +13,24 @@ export interface InputContext {
   dragOverlay: DragOverlayRef;
   lassoOverlay: LassoOverlayRef;
   lastPlaced: LastPlacedRef;
+  measurementOverlay: MeasurementOverlayRef;
+  aoeOverlay: AoeOverlayRef;
+}
+
+export interface MeasurementOverlayRef {
+  current: import('../render/layer-measure.js').MeasurementOverlay | null;
+}
+
+export function createMeasurementOverlayRef(): MeasurementOverlayRef {
+  return { current: null };
+}
+
+export interface AoeOverlayRef {
+  current: import('../render/layer-aoe.js').AoePreview | null;
+}
+
+export function createAoeOverlayRef(): AoeOverlayRef {
+  return { current: null };
 }
 
 export interface LastPlacedRef {

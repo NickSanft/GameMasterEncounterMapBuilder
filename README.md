@@ -16,6 +16,8 @@ From the landing page, open the **GM View** on your own screen and the **Spectat
 | Hide | `H` | Drag to re-cover fog. Same shape/size controls. |
 | Map | `M` | Drag to reposition the background, scroll to scale. |
 | Note | `N` | Click to drop a map annotation (colored pin + text). Right-click a pin to edit/share/hide/delete. |
+| Ruler | `L` | Drag to measure distance — shows squares, feet (D&D 5ft rule), and diagonal. Ephemeral. Also available on Spectator via its left toolbar. |
+| AoE | `Y` | Drag to place a sphere / cone / line / cube template. Pick shape, color, visibility in the side panel. Right-click a placed template to toggle visibility or delete. |
 
 ### Session menu (top-right)
 

@@ -37,6 +37,37 @@ export interface Annotation {
   visibility: AnnotationVisibility;
 }
 
+export type AoeKind = 'sphere' | 'cone' | 'line' | 'cube';
+export type AoeVisibility = 'gm' | 'shared';
+
+export interface AoeTemplate {
+  id: ID;
+  kind: AoeKind;
+  /** World origin point. For cube this is the top-left corner. */
+  x: number;
+  y: number;
+  /**
+   * Primary dimension in world units:
+   * - sphere: radius
+   * - cone: reach
+   * - line: length
+   * - cube: width
+   */
+  length: number;
+  /**
+   * Secondary dimension:
+   * - sphere: unused
+   * - cone: aperture in degrees
+   * - line: thickness (world units)
+   * - cube: height (world units)
+   */
+  width: number;
+  /** Rotation in radians (cone, line, cube). */
+  rotation: number;
+  color: string;
+  visibility: AoeVisibility;
+}
+
 export interface SessionState {
   version: 1;
   grid: GridConfig;
@@ -44,6 +75,7 @@ export interface SessionState {
   tokens: Token[];
   fog: Uint8Array;
   annotations: Annotation[];
+  aoeTemplates: AoeTemplate[];
 }
 
 export interface Camera {
@@ -64,6 +96,9 @@ export type StatePatch =
   | { kind: 'annotation-add'; annotation: Annotation }
   | { kind: 'annotation-update'; id: ID; changes: Partial<Annotation> }
   | { kind: 'annotation-remove'; id: ID }
+  | { kind: 'aoe-add'; template: AoeTemplate }
+  | { kind: 'aoe-update'; id: ID; changes: Partial<AoeTemplate> }
+  | { kind: 'aoe-remove'; id: ID }
   | { kind: 'session-reset'; state: SessionState };
 
 export const DEFAULT_GRID: GridConfig = {
@@ -96,5 +131,6 @@ export function createDefaultState(): SessionState {
     tokens: [],
     fog: new Uint8Array(grid.cols * grid.rows),
     annotations: [],
+    aoeTemplates: [],
   };
 }

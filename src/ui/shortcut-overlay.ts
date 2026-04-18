@@ -27,6 +27,8 @@ const GM_SECTIONS: ShortcutSection[] = [
       { keys: 'H', desc: 'Hide fog' },
       { keys: 'M', desc: 'Map positioning' },
       { keys: 'N', desc: 'Note — drop a map annotation' },
+      { keys: 'L', desc: 'Ruler — drag to measure distance' },
+      { keys: 'Y', desc: 'AoE — place a spell/effect template' },
     ],
   },
   {
@@ -68,6 +70,12 @@ const GM_SECTIONS: ShortcutSection[] = [
 
 const SPECTATOR_SECTIONS: ShortcutSection[] = [
   {
+    title: 'Tools',
+    entries: [
+      { keys: 'L', desc: 'Ruler — drag to measure distance' },
+    ],
+  },
+  {
     title: 'Camera',
     entries: [
       { keys: 'Space+drag / middle-mouse', desc: 'Pan camera' },
@@ -82,7 +90,7 @@ const SPECTATOR_SECTIONS: ShortcutSection[] = [
     title: 'Other',
     entries: [
       { keys: '?', desc: 'Open this help overlay' },
-      { keys: 'Escape', desc: 'Close modal' },
+      { keys: 'Escape', desc: 'Close modal / exit ruler' },
     ],
   },
 ];

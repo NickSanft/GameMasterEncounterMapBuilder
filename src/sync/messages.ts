@@ -1,5 +1,6 @@
 import type {
   Annotation,
+  AoeTemplate,
   Background,
   Camera,
   GridConfig,
@@ -15,6 +16,7 @@ export interface SerializedSessionState {
   tokens: Token[];
   fog: number[];
   annotations: Annotation[];
+  aoeTemplates: AoeTemplate[];
 }
 
 export type SerializablePatch =
@@ -38,6 +40,7 @@ export function serializeState(s: SessionState): SerializedSessionState {
     tokens: s.tokens.map((t) => ({ ...t })),
     fog: Array.from(s.fog),
     annotations: s.annotations.map((a) => ({ ...a })),
+    aoeTemplates: s.aoeTemplates.map((a) => ({ ...a })),
   };
 }
 
@@ -66,6 +69,17 @@ export function deserializeState(s: SerializedSessionState): SessionState {
       text: a.text ?? '',
       color: a.color ?? '#fdd835',
       visibility: a.visibility === 'gm' ? 'gm' : 'shared',
+    })),
+    aoeTemplates: (s.aoeTemplates ?? []).map((t) => ({
+      id: t.id,
+      kind: t.kind,
+      x: t.x,
+      y: t.y,
+      length: t.length,
+      width: t.width,
+      rotation: t.rotation,
+      color: t.color,
+      visibility: t.visibility === 'gm' ? 'gm' : 'shared',
     })),
   };
 }

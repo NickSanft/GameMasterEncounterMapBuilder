@@ -1,4 +1,4 @@
-import type { Annotation, ID, Token } from '../state/types.js';
+import type { Annotation, AoeTemplate, ID, Token } from '../state/types.js';
 
 export interface LassoRect {
   x1: number;
@@ -50,6 +50,32 @@ export function collectAnnotationLassoHits(
   for (const a of annotations) {
     if (a.x >= minX && a.x <= maxX && a.y >= minY && a.y <= maxY) {
       hits.push(a.id);
+    }
+  }
+  return hits;
+}
+
+/**
+ * Returns the ids of every AoE template whose origin point falls inside
+ * the lasso rectangle. AoE coordinates are already in world space.
+ * For the `cube` kind, the rectangle's center is used instead of the
+ * top-left corner so the lasso feels consistent with the visual extent.
+ */
+export function collectAoeLassoHits(
+  templates: readonly AoeTemplate[],
+  lasso: LassoRect,
+): ID[] {
+  const { minX, maxX, minY, maxY } = normalize(lasso);
+  const hits: ID[] = [];
+  for (const t of templates) {
+    let px = t.x;
+    let py = t.y;
+    if (t.kind === 'cube') {
+      px = t.x + t.length / 2;
+      py = t.y + t.width / 2;
+    }
+    if (px >= minX && px <= maxX && py >= minY && py <= maxY) {
+      hits.push(t.id);
     }
   }
   return hits;

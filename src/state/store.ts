@@ -30,6 +30,7 @@ function snapshot(s: SessionState): SessionState {
     tokens: s.tokens.map((t) => ({ ...t })),
     fog: new Uint8Array(s.fog),
     annotations: s.annotations.map((a) => ({ ...a })),
+    aoeTemplates: s.aoeTemplates.map((a) => ({ ...a })),
   };
 }
 
@@ -43,6 +44,8 @@ function coalesceKey(patch: StatePatch): string | null {
       return 'background-update';
     case 'annotation-update':
       return `annotation-update:${patch.id}`;
+    case 'aoe-update':
+      return `aoe-update:${patch.id}`;
     default:
       return null;
   }
@@ -158,6 +161,28 @@ export function createStore(initial?: SessionState): Store {
         state = {
           ...state,
           annotations: state.annotations.filter((a) => a.id !== patch.id),
+        };
+        break;
+      case 'aoe-add':
+        state = {
+          ...state,
+          aoeTemplates: [...state.aoeTemplates, patch.template],
+        };
+        break;
+      case 'aoe-update': {
+        const idx = state.aoeTemplates.findIndex((a) => a.id === patch.id);
+        if (idx === -1) return;
+        const existing = state.aoeTemplates[idx]!;
+        const next = { ...existing, ...patch.changes };
+        const aoeTemplates = state.aoeTemplates.slice();
+        aoeTemplates[idx] = next;
+        state = { ...state, aoeTemplates };
+        break;
+      }
+      case 'aoe-remove':
+        state = {
+          ...state,
+          aoeTemplates: state.aoeTemplates.filter((a) => a.id !== patch.id),
         };
         break;
       case 'session-reset':

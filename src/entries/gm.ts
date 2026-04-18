@@ -7,6 +7,8 @@ import {
   createDragOverlayRef,
   createLassoOverlayRef,
   createLastPlacedRef,
+  createMeasurementOverlayRef,
+  createAoeOverlayRef,
 } from '../input/context.js';
 import { createToolManager } from '../input/tool-manager.js';
 import { createSelectTool } from '../input/tool-select.js';
@@ -20,6 +22,11 @@ import {
 import { createBackgroundTool } from '../input/tool-background.js';
 import { createNoteTool } from '../input/tool-note.js';
 import { hitTestAnnotation } from '../input/hit-test-annotation.js';
+import { createMeasureTool } from '../input/tool-measure.js';
+import { createAoeTool, createAoeToolOptionsRef } from '../input/tool-aoe.js';
+import { hitTestAoe } from '../input/hit-test-aoe.js';
+import { DEFAULT_AOE_COLOR } from '../state/aoe.js';
+import { mountAoeSettings } from '../ui/aoe-settings.js';
 import { mountToolbar } from '../ui/toolbar.js';
 import { mountSessionMenu } from '../ui/session-menu.js';
 import { mountTokenEditor } from '../ui/token-editor.js';
@@ -71,6 +78,13 @@ const selection = createSelectionState();
 const dragOverlayRef = createDragOverlayRef();
 const lassoOverlayRef = createLassoOverlayRef();
 const lastPlacedRef = createLastPlacedRef();
+const measurementOverlayRef = createMeasurementOverlayRef();
+const aoeOverlayRef = createAoeOverlayRef();
+const aoeToolOptionsRef = createAoeToolOptionsRef({
+  kind: 'sphere',
+  color: DEFAULT_AOE_COLOR,
+  visibility: 'shared',
+});
 const fogPreviewRef = createFogPreviewRef();
 const fogOptionsRef = createFogOptionsRef();
 const fogHoverRef = createFogHoverRef();
@@ -95,6 +109,8 @@ const renderer = createRenderer({
   getDragOverlay: () => dragOverlayRef.current,
   getLassoOverlay: () => lassoOverlayRef.current,
   getPings: () => pingManager.getActive(),
+  getMeasurement: () => measurementOverlayRef.current,
+  getAoePreview: () => aoeOverlayRef.current,
 });
 
 panZoomRef.handle = attachPanZoom(renderer);
@@ -119,6 +135,8 @@ const inputContext = {
   dragOverlay: dragOverlayRef,
   lassoOverlay: lassoOverlayRef,
   lastPlaced: lastPlacedRef,
+  measurementOverlay: measurementOverlayRef,
+  aoeOverlay: aoeOverlayRef,
   isSpaceHeld: () => panZoomRef.handle?.isSpaceHeld() ?? false,
   setWheelEnabled: (enabled: boolean) => panZoomRef.handle?.setWheelEnabled(enabled),
 };
@@ -132,6 +150,8 @@ toolManager.register(createBackgroundTool(inputContext));
 toolManager.register(
   createNoteTool(inputContext, (a) => annotationEditor.openFor(a)),
 );
+toolManager.register(createMeasureTool(inputContext));
+toolManager.register(createAoeTool(inputContext, aoeToolOptionsRef));
 
 const toolbarHandle = mountToolbar(
   document.body,
@@ -142,6 +162,9 @@ const toolbarHandle = mountToolbar(
     { id: 'fog-reveal', label: 'Reveal (R)', title: 'Drag to reveal cells.' },
     { id: 'fog-hide', label: 'Hide (H)', title: 'Drag to hide cells.' },
     { id: 'background', label: 'Map (M)', title: 'Drag to move the background, wheel to scale.' },
+    { id: 'note', label: 'Note (N)', title: 'Click to drop a map annotation.' },
+    { id: 'measure', label: 'Ruler (L)', title: 'Drag to measure distance in grid squares.' },
+    { id: 'aoe', label: 'AoE (Y)', title: 'Drag to place an area-of-effect template.' },
   ],
   [
     {
@@ -164,6 +187,7 @@ const toolbarHandle = mountToolbar(
 toolManager.setActive('select');
 
 mountFogSettings(document.body, fogOptionsRef, toolManager);
+mountAoeSettings(document.body, aoeToolOptionsRef, toolManager);
 
 mountZoomControls(document.body, {
   onZoomIn: () => zoomBy(renderer, ZOOM_BUTTON_STEP),
@@ -283,13 +307,41 @@ canvas.addEventListener('contextmenu', (e) => {
   const annotHit = hit
     ? null
     : hitTestAnnotation(state.annotations, world.x, world.y);
+  const aoeHit = hit || annotHit
+    ? null
+    : hitTestAoe(state.aoeTemplates, world.x, world.y);
   const gx = Math.floor(world.x / state.grid.cellSize);
   const gy = Math.floor(world.y / state.grid.cellSize);
   const onGrid =
     gx >= 0 && gy >= 0 && gx < state.grid.cols && gy < state.grid.rows;
 
   const items: ContextMenuEntry[] = [];
-  if (annotHit) {
+  if (aoeHit) {
+    const aoe = aoeHit;
+    items.push(
+      {
+        label:
+          aoe.visibility === 'shared'
+            ? 'Make AoE GM-only'
+            : 'Share AoE with Spectator',
+        onClick: () =>
+          store.applyPatch({
+            kind: 'aoe-update',
+            id: aoe.id,
+            changes: {
+              visibility: aoe.visibility === 'shared' ? 'gm' : 'shared',
+            },
+          }),
+      },
+      { kind: 'separator' },
+      {
+        label: 'Delete AoE',
+        variant: 'danger',
+        onClick: () =>
+          store.applyPatch({ kind: 'aoe-remove', id: aoe.id }),
+      },
+    );
+  } else if (annotHit) {
     const annot = annotHit;
     items.push(
       {
@@ -385,7 +437,13 @@ canvas.addEventListener('contextmenu', (e) => {
     );
   }
 
-  const label = annotHit ? 'Annotation actions' : hit ? 'Token actions' : 'Map actions';
+  const label = aoeHit
+    ? 'AoE actions'
+    : annotHit
+      ? 'Annotation actions'
+      : hit
+        ? 'Token actions'
+        : 'Map actions';
   showContextMenu({
     x: e.clientX,
     y: e.clientY,
@@ -733,6 +791,14 @@ window.addEventListener('keydown', (e) => {
       break;
     case 'n':
       toolManager.setActive('note');
+      e.preventDefault();
+      break;
+    case 'l':
+      toolManager.setActive('measure');
+      e.preventDefault();
+      break;
+    case 'y':
+      toolManager.setActive('aoe');
       e.preventDefault();
       break;
   }

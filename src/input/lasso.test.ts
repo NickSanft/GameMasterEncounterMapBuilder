@@ -1,6 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { collectLassoHits, collectAnnotationLassoHits } from './lasso.js';
-import type { Annotation, Token } from '../state/types.js';
+import {
+  collectLassoHits,
+  collectAnnotationLassoHits,
+  collectAoeLassoHits,
+} from './lasso.js';
+import type { Annotation, AoeTemplate, Token } from '../state/types.js';
 
 function annot(partial: Partial<Annotation> & { id: string }): Annotation {
   return {
@@ -116,5 +120,48 @@ describe('collectAnnotationLassoHits', () => {
     expect(
       collectAnnotationLassoHits(annotations, { x1: 200, y1: 200, x2: 0, y2: 0 }),
     ).toEqual(['a']);
+  });
+});
+
+function aoe(partial: Partial<AoeTemplate> & { id: string; kind: AoeTemplate['kind'] }): AoeTemplate {
+  return {
+    id: partial.id,
+    kind: partial.kind,
+    x: partial.x ?? 0,
+    y: partial.y ?? 0,
+    length: partial.length ?? 100,
+    width: partial.width ?? 50,
+    rotation: partial.rotation ?? 0,
+    color: partial.color ?? '#ff7043',
+    visibility: partial.visibility ?? 'shared',
+  };
+}
+
+describe('collectAoeLassoHits', () => {
+  it('selects non-cube AoEs by origin point', () => {
+    const templates = [
+      aoe({ id: 's', kind: 'sphere', x: 50, y: 50 }),
+      aoe({ id: 'c', kind: 'cone', x: 300, y: 50 }),
+    ];
+    const hits = collectAoeLassoHits(templates, {
+      x1: 0,
+      y1: 0,
+      x2: 200,
+      y2: 200,
+    });
+    expect(hits).toEqual(['s']);
+  });
+
+  it('selects cubes by center point, not top-left corner', () => {
+    // Cube with top-left (200,200) and size 100x100 → center (250,250)
+    const templates = [aoe({ id: 'cube', kind: 'cube', x: 200, y: 200, length: 100, width: 100 })];
+    // Lasso covering only the center area, not the corner
+    const hits = collectAoeLassoHits(templates, {
+      x1: 220,
+      y1: 220,
+      x2: 260,
+      y2: 260,
+    });
+    expect(hits).toEqual(['cube']);
   });
 });

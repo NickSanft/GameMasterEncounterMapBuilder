@@ -2,10 +2,12 @@ import type { InputContext } from './context.js';
 import type { Tool } from './tool-manager.js';
 import { hitTestToken } from './hit-test.js';
 import { hitTestAnnotation } from './hit-test-annotation.js';
+import { hitTestAoe } from './hit-test-aoe.js';
 import { pointerToWorld } from './context.js';
 import {
   collectLassoHits,
   collectAnnotationLassoHits,
+  collectAoeLassoHits,
 } from './lasso.js';
 import type { ID } from '../state/types.js';
 
@@ -47,6 +49,9 @@ export function createSelectTool(ctx: InputContext): Tool {
     const annotHit = tokenHit
       ? null
       : hitTestAnnotation(state.annotations, world.x, world.y);
+    const aoeHit = tokenHit || annotHit
+      ? null
+      : hitTestAoe(state.aoeTemplates, world.x, world.y);
 
     if (tokenHit) {
       handleHitSelect(tokenHit.id, e.shiftKey);
@@ -56,6 +61,12 @@ export function createSelectTool(ctx: InputContext): Tool {
 
     if (annotHit) {
       handleHitSelect(annotHit.id, e.shiftKey);
+      beginDrag(e, world.x, world.y);
+      return;
+    }
+
+    if (aoeHit) {
+      handleHitSelect(aoeHit.id, e.shiftKey);
       beginDrag(e, world.x, world.y);
       return;
     }
@@ -158,6 +169,18 @@ export function createSelectTool(ctx: InputContext): Tool {
                 id,
                 changes: { x: a.x + overlay.deltaX, y: a.y + overlay.deltaY },
               });
+              continue;
+            }
+            const aoe = state.aoeTemplates.find((x) => x.id === id);
+            if (aoe) {
+              store.applyPatch({
+                kind: 'aoe-update',
+                id,
+                changes: {
+                  x: aoe.x + overlay.deltaX,
+                  y: aoe.y + overlay.deltaY,
+                },
+              });
             }
           }
         });
@@ -177,7 +200,8 @@ export function createSelectTool(ctx: InputContext): Tool {
         const state = store.getState();
         const tokenHits = collectLassoHits(state.tokens, state.grid.cellSize, rect);
         const annotHits = collectAnnotationLassoHits(state.annotations, rect);
-        const hits = [...tokenHits, ...annotHits];
+        const aoeHits = collectAoeLassoHits(state.aoeTemplates, rect);
+        const hits = [...tokenHits, ...annotHits, ...aoeHits];
         if (additive) {
           const merged = new Set(startSel);
           for (const id of hits) merged.add(id);
@@ -204,6 +228,8 @@ export function createSelectTool(ctx: InputContext): Tool {
           store.applyPatch({ kind: 'token-remove', id });
         } else if (state.annotations.some((a) => a.id === id)) {
           store.applyPatch({ kind: 'annotation-remove', id });
+        } else if (state.aoeTemplates.some((aoe) => aoe.id === id)) {
+          store.applyPatch({ kind: 'aoe-remove', id });
         }
       }
     });

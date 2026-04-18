@@ -17,6 +17,8 @@ import { drawBackground, type ImageProvider } from './layer-background.js';
 import { drawLasso } from './layer-lasso.js';
 import { drawPings } from './layer-pings.js';
 import { drawAnnotations } from './layer-annotations.js';
+import { drawMeasurement, type MeasurementOverlay } from './layer-measure.js';
+import { drawAoeTemplates, type AoePreview } from './layer-aoe.js';
 import type { Preferences } from '../state/preferences.js';
 import type { DragOverlay, LassoOverlay } from '../input/context.js';
 import type { Ping } from '../state/ping-manager.js';
@@ -44,6 +46,8 @@ interface CreateRendererOptions {
   getDragOverlay?(): DragOverlay | null;
   getLassoOverlay?(): LassoOverlay | null;
   getPings?(): readonly Ping[];
+  getMeasurement?(): MeasurementOverlay | null;
+  getAoePreview?(): AoePreview | null;
 }
 
 const EMPTY_HIGHLIGHT: ReadonlySet<ID> = new Set();
@@ -75,6 +79,8 @@ export function createRenderer(opts: CreateRendererOptions): Renderer {
     getDragOverlay,
     getLassoOverlay,
     getPings,
+    getMeasurement,
+    getAoePreview,
   } = opts;
   const maybeCtx = canvas.getContext('2d');
   if (!maybeCtx) throw new Error('2D canvas context unavailable');
@@ -126,6 +132,12 @@ export function createRenderer(opts: CreateRendererOptions): Renderer {
       mode,
       dragOverlay,
     });
+    drawAoeTemplates(ctx, state, {
+      mode,
+      highlightIds: highlights,
+      preview: getAoePreview ? getAoePreview() : null,
+      dragOverlay,
+    });
     drawFog(ctx, state, mode, { gmColor: gmFogColor, gmOpacity: gmFogOpacity });
     drawAnnotations(ctx, state, {
       mode,
@@ -141,6 +153,8 @@ export function createRenderer(opts: CreateRendererOptions): Renderer {
     }
     const lasso = getLassoOverlay ? getLassoOverlay() : null;
     if (lasso) drawLasso(ctx, lasso);
+    const measurement = getMeasurement ? getMeasurement() : null;
+    if (measurement) drawMeasurement(ctx, measurement, state.grid.cellSize);
     const pings = getPings ? getPings() : null;
     if (pings && pings.length > 0) {
       drawPings(ctx, pings, state.grid.cellSize, performance.now());

@@ -13,6 +13,8 @@ import { mountSettingsModal } from '../ui/settings-modal.js';
 import { mountZoomControls } from '../ui/zoom-controls.js';
 import { mountShortcutOverlay } from '../ui/shortcut-overlay.js';
 import { createPingManager } from '../state/ping-manager.js';
+import { createMeasurementOverlayRef } from '../input/context.js';
+import { createMeasureTool } from '../input/tool-measure.js';
 import {
   zoomBy,
   fitToContent,
@@ -20,9 +22,13 @@ import {
   ZOOM_BUTTON_STEP,
 } from '../render/camera-controls.js';
 import { isEditableFocus } from '../util/focus.js';
+import type { PanZoomHandle } from '../input/pan-zoom.js';
 
-const canvas = document.getElementById('canvas') as HTMLCanvasElement | null;
-if (!canvas) throw new Error('Canvas element #canvas not found');
+const canvasEl = document.getElementById('canvas');
+if (!(canvasEl instanceof HTMLCanvasElement)) {
+  throw new Error('Canvas element #canvas not found');
+}
+const canvas: HTMLCanvasElement = canvasEl;
 
 const preferences = createPreferences();
 applyPrefsToBody(preferences.get());
@@ -32,8 +38,11 @@ const store = createStore(initial ?? undefined);
 
 const imageLoader = createImageLoader(() => renderer.requestRender());
 const pingManager = createPingManager(() => renderer.requestRender());
+const measurementOverlayRef = createMeasurementOverlayRef();
 
 const initialCamera = (preferences.get().persistCamera && loadCamera('spectator')) || { ...DEFAULT_CAMERA };
+
+const panZoomRef: { handle: PanZoomHandle | null } = { handle: null };
 
 const renderer = createRenderer({
   canvas,
@@ -43,10 +52,48 @@ const renderer = createRenderer({
   getImage: (id) => imageLoader.get(id),
   getPreferences: () => preferences.get(),
   getPings: () => pingManager.getActive(),
+  getMeasurement: () => measurementOverlayRef.current,
 });
 
-attachPanZoom(renderer);
+panZoomRef.handle = attachPanZoom(renderer);
 
+const measureTool = createMeasureTool({
+  canvas,
+  renderer,
+  measurementOverlay: measurementOverlayRef,
+  isSpaceHeld: () => panZoomRef.handle?.isSpaceHeld() ?? false,
+});
+
+const FOLLOW_PAUSE_MS = 2000;
+
+let applyingRemoteCamera = false;
+let pauseFollowUntil = 0;
+
+const persistCameraDebounced = debounce(() => {
+  if (preferences.get().persistCamera) saveCamera('spectator', renderer.camera);
+}, 400);
+
+renderer.onCameraChange(() => {
+  persistCameraDebounced();
+  if (!applyingRemoteCamera) {
+    pauseFollowUntil = Date.now() + FOLLOW_PAUSE_MS;
+  }
+});
+
+preferences.subscribe((prefs) => {
+  applyPrefsToBody(prefs);
+  renderer.requestRender();
+  if (!prefs.persistCamera) clearCamera('spectator');
+  else persistCameraDebounced();
+});
+
+function applyRemoteCamera(camera: { x: number; y: number; zoom: number }) {
+  if (!preferences.get().followGmCamera) return;
+  if (Date.now() < pauseFollowUntil) return;
+  applyingRemoteCamera = true;
+  renderer.camera = { x: camera.x, y: camera.y, zoom: camera.zoom };
+  applyingRemoteCamera = false;
+}
 
 const settingsModal = mountSettingsModal({
   viewMode: 'spectator',
@@ -55,6 +102,22 @@ const settingsModal = mountSettingsModal({
 });
 
 const shortcutOverlay = mountShortcutOverlay('spectator');
+
+let rulerActive = false;
+const rulerBtn = mountSpectatorToolbar(() => setRulerActive(!rulerActive));
+
+function setRulerActive(active: boolean) {
+  if (active === rulerActive) return;
+  rulerActive = active;
+  if (active) {
+    measureTool.activate();
+  } else {
+    measureTool.deactivate();
+  }
+  rulerBtn.classList.toggle('active', active);
+  rulerBtn.setAttribute('aria-pressed', active ? 'true' : 'false');
+  canvas.style.cursor = active ? 'crosshair' : '';
+}
 
 mountSpectatorMenu({
   onSettings: () => settingsModal.open(),
@@ -104,37 +167,6 @@ store.subscribe((patch) => {
     imageLoader.invalidate(patch.changes.imageId);
   }
 });
-
-const FOLLOW_PAUSE_MS = 2000;
-
-let applyingRemoteCamera = false;
-let pauseFollowUntil = 0;
-
-const persistCameraDebounced = debounce(() => {
-  if (preferences.get().persistCamera) saveCamera('spectator', renderer.camera);
-}, 400);
-
-renderer.onCameraChange(() => {
-  persistCameraDebounced();
-  if (!applyingRemoteCamera) {
-    pauseFollowUntil = Date.now() + FOLLOW_PAUSE_MS;
-  }
-});
-
-preferences.subscribe((prefs) => {
-  applyPrefsToBody(prefs);
-  renderer.requestRender();
-  if (!prefs.persistCamera) clearCamera('spectator');
-  else persistCameraDebounced();
-});
-
-function applyRemoteCamera(camera: { x: number; y: number; zoom: number }) {
-  if (!preferences.get().followGmCamera) return;
-  if (Date.now() < pauseFollowUntil) return;
-  applyingRemoteCamera = true;
-  renderer.camera = { x: camera.x, y: camera.y, zoom: camera.zoom };
-  applyingRemoteCamera = false;
-}
 
 const channel = createSyncChannel();
 if (channel) {
@@ -189,12 +221,43 @@ window.addEventListener('keydown', (e) => {
     e.preventDefault();
     return;
   }
+  if (e.key.toLowerCase() === 'l') {
+    setRulerActive(!rulerActive);
+    e.preventDefault();
+    return;
+  }
+  if (e.key === 'Escape' && rulerActive) {
+    setRulerActive(false);
+    e.preventDefault();
+  }
 });
 
 window.addEventListener('beforeunload', () => {
   persist.flush();
   persistCameraDebounced.flush();
 });
+
+function mountSpectatorToolbar(onRuler: () => void): HTMLButtonElement {
+  const bar = document.createElement('div');
+  bar.className = 'gm-toolbar spectator-toolbar';
+  bar.setAttribute('role', 'toolbar');
+  bar.setAttribute('aria-label', 'Spectator tools');
+
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.textContent = 'Ruler (L)';
+  btn.title = 'Drag to measure distance in grid squares.';
+  btn.setAttribute('aria-pressed', 'false');
+  btn.setAttribute('aria-label', 'Ruler — drag to measure distance');
+  btn.addEventListener('click', () => {
+    onRuler();
+    btn.blur();
+  });
+  bar.appendChild(btn);
+
+  document.body.appendChild(bar);
+  return btn;
+}
 
 function mountSpectatorMenu(actions: { onSettings: () => void; onShortcuts: () => void }) {
   const menu = document.createElement('div');
