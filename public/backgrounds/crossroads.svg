@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1500" height="1000" viewBox="0 0 1500 1000" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <pattern id="cobble" x="0" y="0" width="60" height="60" patternUnits="userSpaceOnUse">
+      <rect width="60" height="60" fill="#8c8a85"/>
+      <circle cx="15" cy="15" r="12" fill="#7e7c77"/>
+      <circle cx="45" cy="15" r="12" fill="#7e7c77"/>
+      <circle cx="15" cy="45" r="12" fill="#7e7c77"/>
+      <circle cx="45" cy="45" r="12" fill="#7e7c77"/>
+      <circle cx="30" cy="30" r="12" fill="#78766f"/>
+    </pattern>
+    <pattern id="roof" x="0" y="0" width="24" height="16" patternUnits="userSpaceOnUse">
+      <rect width="24" height="16" fill="#8a3626"/>
+      <path d="M 0 16 L 12 4 L 24 16 Z" fill="#6b2a1e"/>
+    </pattern>
+  </defs>
+
+  <!-- Grass base outside streets -->
+  <rect width="1500" height="1000" fill="#577a42"/>
+
+  <!-- Cross-shaped stone street -->
+  <rect x="500" y="0" width="500" height="1000" fill="url(#cobble)"/>
+  <rect x="0" y="380" width="1500" height="240" fill="url(#cobble)"/>
+
+  <!-- Sidewalk borders along streets -->
+  <g stroke="#4a4843" stroke-width="3">
+    <line x1="500" y1="0" x2="500" y2="380"/>
+    <line x1="1000" y1="0" x2="1000" y2="380"/>
+    <line x1="500" y1="620" x2="500" y2="1000"/>
+    <line x1="1000" y1="620" x2="1000" y2="1000"/>
+    <line x1="0" y1="380" x2="500" y2="380"/>
+    <line x1="0" y1="620" x2="500" y2="620"/>
+    <line x1="1000" y1="380" x2="1500" y2="380"/>
+    <line x1="1000" y1="620" x2="1500" y2="620"/>
+  </g>
+
+  <!-- Buildings at each corner -->
+  <g stroke="#3d2a1c" stroke-width="4">
+    <!-- Top-left -->
+    <rect x="60" y="60" width="380" height="260" fill="#d0bfa5"/>
+    <rect x="60" y="30" width="380" height="50" fill="url(#roof)"/>
+    <rect x="130" y="160" width="60" height="100" fill="#3a2818"/>
+    <rect x="300" y="160" width="60" height="100" fill="#3a2818"/>
+    <rect x="230" y="220" width="40" height="100" fill="#5a3f20"/>
+
+    <!-- Top-right -->
+    <rect x="1060" y="80" width="380" height="240" fill="#c7b7a0"/>
+    <rect x="1060" y="50" width="380" height="50" fill="url(#roof)"/>
+    <rect x="1130" y="160" width="60" height="100" fill="#3a2818"/>
+    <rect x="1300" y="160" width="60" height="100" fill="#3a2818"/>
+    <rect x="1230" y="220" width="40" height="100" fill="#5a3f20"/>
+
+    <!-- Bottom-left -->
+    <rect x="60" y="680" width="380" height="260" fill="#c5b49e"/>
+    <rect x="60" y="650" width="380" height="50" fill="url(#roof)"/>
+    <rect x="130" y="760" width="60" height="100" fill="#3a2818"/>
+    <rect x="300" y="760" width="60" height="100" fill="#3a2818"/>
+    <rect x="230" y="820" width="40" height="120" fill="#5a3f20"/>
+
+    <!-- Bottom-right -->
+    <rect x="1060" y="680" width="380" height="260" fill="#d0bfa5"/>
+    <rect x="1060" y="650" width="380" height="50" fill="url(#roof)"/>
+    <rect x="1130" y="760" width="60" height="100" fill="#3a2818"/>
+    <rect x="1300" y="760" width="60" height="100" fill="#3a2818"/>
+    <rect x="1230" y="820" width="40" height="120" fill="#5a3f20"/>
+  </g>
+
+  <!-- Central fountain -->
+  <circle cx="750" cy="500" r="80" fill="#9e9a90" stroke="#4a4843" stroke-width="4"/>
+  <circle cx="750" cy="500" r="60" fill="#3d7aa3"/>
+  <circle cx="750" cy="500" r="54" fill="#568fba" opacity="0.8"/>
+  <circle cx="750" cy="500" r="22" fill="#9e9a90" stroke="#4a4843" stroke-width="3"/>
+
+  <!-- Lamp posts at intersections -->
+  <g stroke="#2a1c10" stroke-width="3" fill="#3a2818">
+    <circle cx="480" cy="360" r="10"/>
+    <circle cx="1020" cy="360" r="10"/>
+    <circle cx="480" cy="640" r="10"/>
+    <circle cx="1020" cy="640" r="10"/>
+  </g>
+  <g fill="#fce082" opacity="0.7">
+    <circle cx="480" cy="360" r="4"/>
+    <circle cx="1020" cy="360" r="4"/>
+    <circle cx="480" cy="640" r="4"/>
+    <circle cx="1020" cy="640" r="4"/>
+  </g>
+
+  <!-- Carriage tracks on the horizontal street -->
+  <g stroke="#4a4843" stroke-width="2" fill="none" opacity="0.55">
+    <line x1="0" y1="460" x2="1500" y2="460"/>
+    <line x1="0" y1="530" x2="1500" y2="530"/>
+  </g>
+</svg>

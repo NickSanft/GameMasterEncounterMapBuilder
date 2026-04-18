@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1500" height="1000" viewBox="0 0 1500 1000" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <pattern id="planks" x="0" y="0" width="50" height="200" patternUnits="userSpaceOnUse">
+      <rect width="50" height="200" fill="#8b6a3d"/>
+      <line x1="0" y1="60" x2="50" y2="60" stroke="#5a3f20" stroke-width="1.5"/>
+      <line x1="0" y1="135" x2="50" y2="135" stroke="#5a3f20" stroke-width="1.5"/>
+      <line x1="0" y1="0" x2="0" y2="200" stroke="#5a3f20" stroke-width="2"/>
+    </pattern>
+    <symbol id="table" overflow="visible">
+      <ellipse rx="54" ry="54" fill="#4a331c" stroke="#2a1c10" stroke-width="3"/>
+      <ellipse rx="44" ry="44" fill="#7d5a30"/>
+      <circle r="8" fill="#2a1c10"/>
+    </symbol>
+    <symbol id="chair" overflow="visible">
+      <rect x="-14" y="-14" width="28" height="28" rx="3" fill="#5c3e1f" stroke="#2a1c10" stroke-width="2"/>
+    </symbol>
+  </defs>
+
+  <rect width="1500" height="1000" fill="url(#planks)"/>
+
+  <!-- Walls -->
+  <rect x="0" y="0" width="1500" height="40" fill="#3a2818"/>
+  <rect x="0" y="960" width="1500" height="40" fill="#3a2818"/>
+  <rect x="0" y="0" width="40" height="1000" fill="#3a2818"/>
+  <rect x="1460" y="0" width="40" height="1000" fill="#3a2818"/>
+
+  <!-- Bar counter along top wall -->
+  <rect x="140" y="40" width="600" height="110" fill="#4a2f17" stroke="#2a1c10" stroke-width="3"/>
+  <rect x="150" y="50" width="580" height="90" fill="#6b4223"/>
+  <rect x="150" y="130" width="580" height="14" fill="#3a2613"/>
+  <!-- Stools -->
+  <circle cx="220" cy="205" r="20" fill="#5c3e1f" stroke="#2a1c10" stroke-width="2"/>
+  <circle cx="320" cy="205" r="20" fill="#5c3e1f" stroke="#2a1c10" stroke-width="2"/>
+  <circle cx="420" cy="205" r="20" fill="#5c3e1f" stroke="#2a1c10" stroke-width="2"/>
+  <circle cx="520" cy="205" r="20" fill="#5c3e1f" stroke="#2a1c10" stroke-width="2"/>
+  <circle cx="620" cy="205" r="20" fill="#5c3e1f" stroke="#2a1c10" stroke-width="2"/>
+
+  <!-- Fireplace (right side) -->
+  <rect x="1320" y="280" width="140" height="200" fill="#3a2a1f" stroke="#1a120c" stroke-width="4"/>
+  <rect x="1340" y="320" width="100" height="140" fill="#1a0c04"/>
+  <ellipse cx="1390" cy="440" rx="40" ry="16" fill="#d66a2f"/>
+  <ellipse cx="1390" cy="420" rx="28" ry="18" fill="#f4a22b"/>
+  <ellipse cx="1390" cy="410" rx="16" ry="12" fill="#fce082"/>
+
+  <!-- Tables scattered -->
+  <use href="#table" x="280" y="420"/>
+  <use href="#chair" x="220" y="420"/>
+  <use href="#chair" x="340" y="420"/>
+  <use href="#chair" x="280" y="360"/>
+  <use href="#chair" x="280" y="480"/>
+
+  <use href="#table" x="560" y="480"/>
+  <use href="#chair" x="500" y="480"/>
+  <use href="#chair" x="620" y="480"/>
+  <use href="#chair" x="560" y="420"/>
+  <use href="#chair" x="560" y="540"/>
+
+  <use href="#table" x="880" y="400"/>
+  <use href="#chair" x="820" y="400"/>
+  <use href="#chair" x="940" y="400"/>
+  <use href="#chair" x="880" y="340"/>
+  <use href="#chair" x="880" y="460"/>
+
+  <use href="#table" x="420" y="750"/>
+  <use href="#chair" x="360" y="750"/>
+  <use href="#chair" x="480" y="750"/>
+  <use href="#chair" x="420" y="690"/>
+  <use href="#chair" x="420" y="810"/>
+
+  <use href="#table" x="800" y="770"/>
+  <use href="#chair" x="740" y="770"/>
+  <use href="#chair" x="860" y="770"/>
+
+  <use href="#table" x="1120" y="700"/>
+  <use href="#chair" x="1060" y="700"/>
+  <use href="#chair" x="1180" y="700"/>
+  <use href="#chair" x="1120" y="640"/>
+
+  <!-- Barrels in corner -->
+  <g>
+    <ellipse cx="120" cy="850" rx="34" ry="38" fill="#6b4223" stroke="#2a1c10" stroke-width="3"/>
+    <ellipse cx="120" cy="820" rx="32" ry="10" fill="#8b5a2e"/>
+    <ellipse cx="190" cy="890" rx="34" ry="38" fill="#6b4223" stroke="#2a1c10" stroke-width="3"/>
+    <ellipse cx="190" cy="860" rx="32" ry="10" fill="#8b5a2e"/>
+  </g>
+
+  <!-- Rug -->
+  <rect x="620" y="650" width="260" height="260" fill="#8a2e1f" stroke="#5a1a0f" stroke-width="4" opacity="0.85"/>
+  <rect x="640" y="670" width="220" height="220" fill="none" stroke="#f4c560" stroke-width="2" opacity="0.7"/>
+</svg>

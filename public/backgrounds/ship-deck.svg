@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1500" height="1000" viewBox="0 0 1500 1000" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <pattern id="deck-planks" x="0" y="0" width="60" height="260" patternUnits="userSpaceOnUse">
+      <rect width="60" height="260" fill="#a0764a"/>
+      <line x1="0" y1="85" x2="60" y2="85" stroke="#6a4a25" stroke-width="1.6"/>
+      <line x1="0" y1="180" x2="60" y2="180" stroke="#6a4a25" stroke-width="1.6"/>
+      <line x1="0" y1="0" x2="0" y2="260" stroke="#6a4a25" stroke-width="2"/>
+    </pattern>
+    <radialGradient id="water" cx="50%" cy="50%" r="75%">
+      <stop offset="0%" stop-color="#3d7aa3"/>
+      <stop offset="100%" stop-color="#1a3a50"/>
+    </radialGradient>
+  </defs>
+
+  <!-- Water background -->
+  <rect width="1500" height="1000" fill="url(#water)"/>
+  <g stroke="#7ab5d1" stroke-width="1.2" fill="none" opacity="0.4">
+    <path d="M 40 100 q 16 -5 32 0"/>
+    <path d="M 200 180 q 16 -5 32 0"/>
+    <path d="M 120 420 q 16 -5 32 0"/>
+    <path d="M 40 700 q 16 -5 32 0"/>
+    <path d="M 1320 160 q 16 -5 32 0"/>
+    <path d="M 1420 500 q 16 -5 32 0"/>
+    <path d="M 1340 820 q 16 -5 32 0"/>
+  </g>
+
+  <!-- Ship hull outline — rounded at bow, squared at stern -->
+  <path d="M 750 50 Q 1200 60 1340 500 Q 1200 940 750 950 Q 300 940 160 500 Q 300 60 750 50 Z"
+        fill="#8c6340" stroke="#3a2818" stroke-width="8"/>
+  <path d="M 750 70 Q 1180 80 1320 500 Q 1180 920 750 930 Q 320 920 180 500 Q 320 80 750 70 Z"
+        fill="url(#deck-planks)"/>
+
+  <!-- Rails (outer trim) -->
+  <path d="M 750 70 Q 1180 80 1320 500 Q 1180 920 750 930 Q 320 920 180 500 Q 320 80 750 70 Z"
+        fill="none" stroke="#5a3f20" stroke-width="5" opacity="0.8"/>
+
+  <!-- Mast at center -->
+  <circle cx="750" cy="500" r="60" fill="#6b4223" stroke="#3a2818" stroke-width="4"/>
+  <circle cx="750" cy="500" r="34" fill="#8c6340"/>
+  <circle cx="750" cy="500" r="8" fill="#3a2818"/>
+
+  <!-- Cargo crates -->
+  <g stroke="#3a2818" stroke-width="3">
+    <rect x="360" y="320" width="100" height="100" fill="#7a5a3a"/>
+    <line x1="360" y1="370" x2="460" y2="370" stroke="#3a2818" stroke-width="2"/>
+    <line x1="410" y1="320" x2="410" y2="420" stroke="#3a2818" stroke-width="2"/>
+
+    <rect x="1030" y="700" width="120" height="120" fill="#7a5a3a"/>
+    <line x1="1030" y1="760" x2="1150" y2="760" stroke="#3a2818" stroke-width="2"/>
+    <line x1="1090" y1="700" x2="1090" y2="820" stroke="#3a2818" stroke-width="2"/>
+  </g>
+
+  <!-- Barrels -->
+  <g>
+    <ellipse cx="400" cy="680" rx="38" ry="42" fill="#6b4223" stroke="#2a1c10" stroke-width="3"/>
+    <ellipse cx="400" cy="650" rx="36" ry="10" fill="#8b5a2e"/>
+    <ellipse cx="480" cy="720" rx="38" ry="42" fill="#6b4223" stroke="#2a1c10" stroke-width="3"/>
+    <ellipse cx="480" cy="690" rx="36" ry="10" fill="#8b5a2e"/>
+    <ellipse cx="1110" cy="360" rx="38" ry="42" fill="#6b4223" stroke="#2a1c10" stroke-width="3"/>
+    <ellipse cx="1110" cy="330" rx="36" ry="10" fill="#8b5a2e"/>
+  </g>
+
+  <!-- Ropes on deck -->
+  <g stroke="#d7b981" stroke-width="4" fill="none" opacity="0.8">
+    <path d="M 640 320 Q 600 380 620 430"/>
+    <path d="M 820 640 Q 860 690 850 740"/>
+  </g>
+
+  <!-- Hatchway -->
+  <rect x="660" y="770" width="180" height="120" fill="#3a2818" stroke="#1a0c04" stroke-width="3"/>
+  <rect x="670" y="780" width="160" height="100" fill="#2a1c10"/>
+  <line x1="670" y1="830" x2="830" y2="830" stroke="#5a3f20" stroke-width="3"/>
+</svg>

@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1500" height="1000" viewBox="0 0 1500 1000" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <pattern id="sewer-stone" x="0" y="0" width="80" height="80" patternUnits="userSpaceOnUse">
+      <rect width="80" height="80" fill="#3a3a38"/>
+      <rect width="80" height="80" fill="none" stroke="#1e1e1c" stroke-width="2"/>
+      <circle cx="20" cy="28" r="2" fill="#2a2a28" opacity="0.7"/>
+      <circle cx="56" cy="58" r="1.5" fill="#2a2a28" opacity="0.6"/>
+      <circle cx="66" cy="18" r="1" fill="#4a4a48" opacity="0.5"/>
+    </pattern>
+    <radialGradient id="sewer-vignette" cx="50%" cy="50%" r="75%">
+      <stop offset="0%" stop-color="#3a3a38"/>
+      <stop offset="100%" stop-color="#18181a"/>
+    </radialGradient>
+  </defs>
+
+  <rect width="1500" height="1000" fill="url(#sewer-vignette)"/>
+  <rect width="1500" height="1000" fill="url(#sewer-stone)" opacity="0.55"/>
+
+  <!-- Dark stone walkways around a central water channel -->
+  <rect x="0" y="440" width="1500" height="120" fill="#2a3a3e"/>
+  <path d="M 0 470 Q 350 450 700 480 T 1500 470" stroke="#3e6168" stroke-width="26" fill="none"/>
+  <path d="M 0 470 Q 350 450 700 480 T 1500 470" stroke="#567884" stroke-width="14" fill="none" opacity="0.7"/>
+  <path d="M 0 500 Q 350 485 700 515 T 1500 505" stroke="#2b4a52" stroke-width="16" fill="none" opacity="0.6"/>
+
+  <!-- Ripples -->
+  <g stroke="#a5cad3" stroke-width="1.5" fill="none" opacity="0.45">
+    <path d="M 200 475 q 20 -4 40 0"/>
+    <path d="M 500 485 q 20 -4 40 0"/>
+    <path d="M 900 495 q 20 -4 40 0"/>
+    <path d="M 1250 485 q 20 -4 40 0"/>
+  </g>
+
+  <!-- Side tunnels (darker) -->
+  <rect x="280" y="0" width="160" height="410" fill="#16161a"/>
+  <rect x="286" y="0" width="148" height="408" fill="url(#sewer-stone)" opacity="0.55"/>
+  <rect x="960" y="0" width="160" height="410" fill="#16161a"/>
+  <rect x="966" y="0" width="148" height="408" fill="url(#sewer-stone)" opacity="0.55"/>
+
+  <rect x="600" y="590" width="160" height="410" fill="#16161a"/>
+  <rect x="606" y="598" width="148" height="402" fill="url(#sewer-stone)" opacity="0.55"/>
+  <rect x="1200" y="590" width="160" height="410" fill="#16161a"/>
+  <rect x="1206" y="598" width="148" height="402" fill="url(#sewer-stone)" opacity="0.55"/>
+
+  <!-- Grates -->
+  <g fill="#1a1a18" stroke="#4a4a45" stroke-width="1.5">
+    <rect x="140" y="220" width="60" height="60"/>
+    <line x1="140" y1="240" x2="200" y2="240"/>
+    <line x1="140" y1="260" x2="200" y2="260"/>
+    <line x1="160" y1="220" x2="160" y2="280"/>
+    <line x1="180" y1="220" x2="180" y2="280"/>
+  </g>
+  <g fill="#1a1a18" stroke="#4a4a45" stroke-width="1.5">
+    <rect x="1300" y="780" width="60" height="60"/>
+    <line x1="1300" y1="800" x2="1360" y2="800"/>
+    <line x1="1300" y1="820" x2="1360" y2="820"/>
+    <line x1="1320" y1="780" x2="1320" y2="840"/>
+    <line x1="1340" y1="780" x2="1340" y2="840"/>
+  </g>
+
+  <!-- Debris piles -->
+  <g fill="#4a3a2a" opacity="0.8" stroke="#1a120a" stroke-width="1">
+    <ellipse cx="540" cy="160" rx="30" ry="12"/>
+    <ellipse cx="540" cy="150" rx="22" ry="10" fill="#5a4a38"/>
+    <ellipse cx="860" cy="850" rx="26" ry="10"/>
+    <ellipse cx="862" cy="844" rx="18" ry="7" fill="#5a4a38"/>
+  </g>
+
+  <!-- Torch glows -->
+  <g opacity="0.65">
+    <radialGradient id="torch" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#ffb64e" stop-opacity="0.8"/>
+      <stop offset="100%" stop-color="#ffb64e" stop-opacity="0"/>
+    </radialGradient>
+    <circle cx="100" cy="100" r="80" fill="url(#torch)"/>
+    <circle cx="100" cy="100" r="5" fill="#fce082"/>
+    <circle cx="1400" cy="200" r="80" fill="url(#torch)"/>
+    <circle cx="1400" cy="200" r="5" fill="#fce082"/>
+    <circle cx="680" cy="900" r="80" fill="url(#torch)"/>
+    <circle cx="680" cy="900" r="5" fill="#fce082"/>
+  </g>
+</svg>

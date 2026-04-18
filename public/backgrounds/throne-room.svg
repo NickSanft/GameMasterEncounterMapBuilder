@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1500" height="1000" viewBox="0 0 1500 1000" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <pattern id="marble" x="0" y="0" width="100" height="100" patternUnits="userSpaceOnUse">
+      <rect width="100" height="100" fill="#e5e1d6"/>
+      <rect width="100" height="100" fill="none" stroke="#bfbaad" stroke-width="2"/>
+      <rect x="0" y="50" width="50" height="50" fill="#d7d2c4"/>
+      <rect x="50" y="0" width="50" height="50" fill="#d7d2c4"/>
+      <path d="M 10 30 Q 25 34 40 28" stroke="#bfbaad" stroke-width="1" fill="none" opacity="0.6"/>
+      <path d="M 60 80 Q 75 84 90 78" stroke="#bfbaad" stroke-width="1" fill="none" opacity="0.6"/>
+    </pattern>
+    <radialGradient id="gold" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#f6d580"/>
+      <stop offset="100%" stop-color="#a8832f"/>
+    </radialGradient>
+  </defs>
+
+  <rect width="1500" height="1000" fill="url(#marble)"/>
+
+  <!-- Walls -->
+  <rect x="0" y="0" width="1500" height="30" fill="#2e2620"/>
+  <rect x="0" y="970" width="1500" height="30" fill="#2e2620"/>
+  <rect x="0" y="0" width="30" height="1000" fill="#2e2620"/>
+  <rect x="1470" y="0" width="30" height="1000" fill="#2e2620"/>
+
+  <!-- Red carpet runway down the middle -->
+  <rect x="600" y="30" width="300" height="860" fill="#8a2e1f" stroke="#5a1a0f" stroke-width="4"/>
+  <rect x="630" y="60" width="240" height="800" fill="none" stroke="#f4c560" stroke-width="3" opacity="0.85"/>
+  <!-- Carpet patterning -->
+  <g fill="none" stroke="#f4c560" stroke-width="2" opacity="0.5">
+    <rect x="650" y="140" width="200" height="140"/>
+    <rect x="650" y="340" width="200" height="140"/>
+    <rect x="650" y="540" width="200" height="140"/>
+    <rect x="650" y="740" width="200" height="80"/>
+  </g>
+
+  <!-- Pillars lining the sides -->
+  <g fill="#c4beb0" stroke="#5a5344" stroke-width="2">
+    <!-- Left row -->
+    <circle cx="280" cy="200" r="34"/>
+    <circle cx="280" cy="400" r="34"/>
+    <circle cx="280" cy="600" r="34"/>
+    <circle cx="280" cy="800" r="34"/>
+    <!-- Right row -->
+    <circle cx="1220" cy="200" r="34"/>
+    <circle cx="1220" cy="400" r="34"/>
+    <circle cx="1220" cy="600" r="34"/>
+    <circle cx="1220" cy="800" r="34"/>
+  </g>
+  <!-- Pillar inner shine -->
+  <g fill="#ecead9" opacity="0.55">
+    <circle cx="274" cy="194" r="10"/>
+    <circle cx="274" cy="394" r="10"/>
+    <circle cx="274" cy="594" r="10"/>
+    <circle cx="274" cy="794" r="10"/>
+    <circle cx="1214" cy="194" r="10"/>
+    <circle cx="1214" cy="394" r="10"/>
+    <circle cx="1214" cy="594" r="10"/>
+    <circle cx="1214" cy="794" r="10"/>
+  </g>
+
+  <!-- Throne platform at top of room -->
+  <rect x="520" y="80" width="460" height="180" fill="#d7d2c4" stroke="#8a836e" stroke-width="3"/>
+  <rect x="560" y="120" width="380" height="140" fill="#c4beb0"/>
+
+  <!-- Steps below throne platform -->
+  <rect x="560" y="260" width="380" height="20" fill="#bfbaad" stroke="#5a5344" stroke-width="1.5"/>
+  <rect x="540" y="280" width="420" height="20" fill="#b5b0a3" stroke="#5a5344" stroke-width="1.5"/>
+  <rect x="520" y="300" width="460" height="20" fill="#aba694" stroke="#5a5344" stroke-width="1.5"/>
+
+  <!-- The throne -->
+  <rect x="680" y="70" width="140" height="150" fill="#6b2818" stroke="#3a120a" stroke-width="4"/>
+  <rect x="694" y="105" width="112" height="90" fill="#8a3626"/>
+  <rect x="680" y="190" width="140" height="30" fill="#4a1810" stroke="#3a120a" stroke-width="3"/>
+  <!-- Throne backrest points -->
+  <path d="M 680 70 L 700 40 L 720 70 Z" fill="#6b2818" stroke="#3a120a" stroke-width="3"/>
+  <path d="M 740 70 L 760 30 L 780 70 Z" fill="url(#gold)" stroke="#3a120a" stroke-width="3"/>
+  <path d="M 800 70 L 820 40 L 820 70 Z" fill="#6b2818" stroke="#3a120a" stroke-width="3"/>
+  <!-- Gold inlay on throne -->
+  <circle cx="750" cy="150" r="18" fill="url(#gold)" stroke="#3a120a" stroke-width="2"/>
+
+  <!-- Braziers beside throne -->
+  <g>
+    <circle cx="480" cy="160" r="28" fill="#4a3420" stroke="#2a1c10" stroke-width="3"/>
+    <ellipse cx="480" cy="140" rx="24" ry="8" fill="#ffb24a"/>
+    <ellipse cx="480" cy="132" rx="14" ry="8" fill="#fce082"/>
+
+    <circle cx="1020" cy="160" r="28" fill="#4a3420" stroke="#2a1c10" stroke-width="3"/>
+    <ellipse cx="1020" cy="140" rx="24" ry="8" fill="#ffb24a"/>
+    <ellipse cx="1020" cy="132" rx="14" ry="8" fill="#fce082"/>
+  </g>
+
+  <!-- Banners hanging on side walls -->
+  <g>
+    <rect x="100" y="60" width="60" height="200" fill="#8a2e1f" stroke="#3a120a" stroke-width="3"/>
+    <rect x="112" y="80" width="36" height="80" fill="url(#gold)" opacity="0.85"/>
+    <polygon points="100,260 130,300 160,260" fill="#8a2e1f" stroke="#3a120a" stroke-width="3"/>
+
+    <rect x="1340" y="60" width="60" height="200" fill="#8a2e1f" stroke="#3a120a" stroke-width="3"/>
+    <rect x="1352" y="80" width="36" height="80" fill="url(#gold)" opacity="0.85"/>
+    <polygon points="1340,260 1370,300 1400,260" fill="#8a2e1f" stroke="#3a120a" stroke-width="3"/>
+  </g>
+</svg>

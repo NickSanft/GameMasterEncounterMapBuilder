@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1500" height="1000" viewBox="0 0 1500 1000" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <radialGradient id="swamp-base" cx="50%" cy="50%" r="80%">
+      <stop offset="0%" stop-color="#4a5a2a"/>
+      <stop offset="100%" stop-color="#283820"/>
+    </radialGradient>
+    <radialGradient id="swamp-pool" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#4f5a2a" stop-opacity="0.9"/>
+      <stop offset="100%" stop-color="#1e2a18" stop-opacity="0.95"/>
+    </radialGradient>
+    <radialGradient id="swamp-fog" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#a5ac9a" stop-opacity="0.4"/>
+      <stop offset="100%" stop-color="#a5ac9a" stop-opacity="0"/>
+    </radialGradient>
+    <symbol id="tree-stump" overflow="visible">
+      <ellipse rx="28" ry="26" fill="#3a2818"/>
+      <ellipse rx="22" ry="20" fill="#5a3a20"/>
+      <circle r="14" fill="#6b4828" stroke="#2a1c10" stroke-width="2"/>
+      <circle r="4" fill="#3a2818"/>
+    </symbol>
+    <symbol id="tree-trunk" overflow="visible">
+      <ellipse rx="20" ry="60" fill="#3a2818"/>
+      <ellipse rx="16" ry="56" fill="#5a3a20"/>
+    </symbol>
+  </defs>
+
+  <rect width="1500" height="1000" fill="url(#swamp-base)"/>
+
+  <!-- Water pools -->
+  <ellipse cx="300" cy="300" rx="200" ry="130" fill="url(#swamp-pool)"/>
+  <ellipse cx="1100" cy="700" rx="260" ry="150" fill="url(#swamp-pool)"/>
+  <ellipse cx="700" cy="150" rx="140" ry="70" fill="url(#swamp-pool)"/>
+  <ellipse cx="850" cy="860" rx="160" ry="80" fill="url(#swamp-pool)"/>
+
+  <!-- Algae floating on pools -->
+  <g fill="#6a8b3a" opacity="0.8">
+    <ellipse cx="280" cy="280" rx="30" ry="16"/>
+    <ellipse cx="340" cy="320" rx="20" ry="12"/>
+    <ellipse cx="230" cy="320" rx="22" ry="11"/>
+    <ellipse cx="1080" cy="680" rx="30" ry="16"/>
+    <ellipse cx="1160" cy="720" rx="22" ry="13"/>
+  </g>
+
+  <!-- Tree trunks with canopy hinted -->
+  <use href="#tree-trunk" x="180" y="700"/>
+  <ellipse cx="180" cy="660" rx="60" ry="50" fill="#3a5224" opacity="0.8"/>
+  <use href="#tree-trunk" x="1300" y="400"/>
+  <ellipse cx="1300" cy="360" rx="70" ry="55" fill="#3a5224" opacity="0.8"/>
+  <use href="#tree-trunk" x="600" y="500"/>
+  <ellipse cx="600" cy="460" rx="58" ry="46" fill="#3a5224" opacity="0.8"/>
+  <use href="#tree-trunk" x="1000" y="300"/>
+  <ellipse cx="1000" cy="260" rx="64" ry="50" fill="#3a5224" opacity="0.8"/>
+
+  <!-- Tree stumps -->
+  <use href="#tree-stump" x="500" y="200"/>
+  <use href="#tree-stump" x="900" y="550"/>
+  <use href="#tree-stump" x="400" y="780"/>
+  <use href="#tree-stump" x="1280" y="850"/>
+  <use href="#tree-stump" x="740" y="380"/>
+
+  <!-- Vines / roots on ground -->
+  <g stroke="#3a2818" stroke-width="3" fill="none" opacity="0.6">
+    <path d="M 100 500 Q 180 540 260 520 T 440 560"/>
+    <path d="M 700 720 Q 800 760 880 720 T 1060 760"/>
+    <path d="M 1200 180 Q 1260 220 1340 200 T 1450 230"/>
+  </g>
+
+  <!-- Little mushrooms -->
+  <g>
+    <ellipse cx="450" cy="600" rx="8" ry="5" fill="#c4463c"/>
+    <rect x="448" y="600" width="4" height="10" fill="#e5d5a5"/>
+    <ellipse cx="465" cy="610" rx="6" ry="4" fill="#c4463c"/>
+    <rect x="463" y="610" width="3" height="8" fill="#e5d5a5"/>
+
+    <ellipse cx="1050" cy="450" rx="8" ry="5" fill="#c4463c"/>
+    <rect x="1048" y="450" width="4" height="10" fill="#e5d5a5"/>
+    <ellipse cx="1065" cy="460" rx="6" ry="4" fill="#c4463c"/>
+    <rect x="1063" y="460" width="3" height="8" fill="#e5d5a5"/>
+  </g>
+
+  <!-- Fog patches (subtle haze) -->
+  <ellipse cx="400" cy="500" rx="200" ry="120" fill="url(#swamp-fog)"/>
+  <ellipse cx="1200" cy="550" rx="180" ry="100" fill="url(#swamp-fog)"/>
+  <ellipse cx="800" cy="250" rx="220" ry="110" fill="url(#swamp-fog)"/>
+</svg>

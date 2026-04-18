@@ -777,6 +777,14 @@ body.reduced-motion *::after {
 .preset-maps-modal {
   min-width: 580px;
   max-width: min(780px, 92vw);
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.preset-maps-modal .modal-body {
+  overflow-y: auto;
+  padding-right: 0.4rem;
 }
 
 .preset-grid {
