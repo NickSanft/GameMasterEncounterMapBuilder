@@ -25,6 +25,17 @@ export type SerializablePatch =
   | Exclude<StatePatch, { kind: 'session-reset' }>
   | { kind: 'session-reset'; state: SerializedSessionState };
 
+export interface ViewportRect {
+  /** World-space top-left x. */
+  x: number;
+  /** World-space top-left y. */
+  y: number;
+  /** World-space width. */
+  width: number;
+  /** World-space height. */
+  height: number;
+}
+
 export type SyncMessage =
   | { type: 'hello'; from: 'gm' | 'spectator' }
   | { type: 'full-state'; state: SerializedSessionState }
@@ -32,7 +43,8 @@ export type SyncMessage =
   | { type: 'request-full-state' }
   | { type: 'camera'; camera: Camera }
   | { type: 'request-camera' }
-  | { type: 'ping'; x: number; y: number; color?: string };
+  | { type: 'ping'; x: number; y: number; color?: string }
+  | { type: 'spectator-viewport'; viewport: ViewportRect };
 
 export function serializeState(s: SessionState): SerializedSessionState {
   return {

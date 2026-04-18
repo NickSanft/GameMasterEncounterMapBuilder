@@ -69,6 +69,8 @@ import { mountNotesPanel } from '../ui/notes-panel.js';
 import { mountShortcutOverlay } from '../ui/shortcut-overlay.js';
 import { mountInitiativeBar } from '../ui/initiative-bar.js';
 import { mountInitiativeModal } from '../ui/initiative-modal.js';
+import { mountDiagnosticsOverlay } from '../ui/diagnostics-overlay.js';
+import type { ViewportRect } from '../sync/messages.js';
 import {
   zoomBy,
   fitToContent,
@@ -107,6 +109,21 @@ const panZoomRef: { handle: PanZoomHandle | null } = { handle: null };
 const imageLoader = createImageLoader(() => renderer.requestRender());
 const pingManager = createPingManager(() => renderer.requestRender());
 
+const spectatorViewportRef: { current: ViewportRect | null; lastUpdate: number } = {
+  current: null,
+  lastUpdate: 0,
+};
+const SPECTATOR_VIEWPORT_TIMEOUT_MS = 15_000;
+
+function getSpectatorViewport(): ViewportRect | null {
+  if (!preferences.get().showSpectatorViewport) return null;
+  if (!spectatorViewportRef.current) return null;
+  if (Date.now() - spectatorViewportRef.lastUpdate > SPECTATOR_VIEWPORT_TIMEOUT_MS) {
+    return null;
+  }
+  return spectatorViewportRef.current;
+}
+
 const initialCamera = (preferences.get().persistCamera && loadCamera('gm')) || { ...DEFAULT_CAMERA };
 
 const renderer = createRenderer({
@@ -124,6 +141,7 @@ const renderer = createRenderer({
   getPings: () => pingManager.getActive(),
   getMeasurement: () => measurementOverlayRef.current,
   getAoePreview: () => aoeOverlayRef.current,
+  getSpectatorViewport,
 });
 
 panZoomRef.handle = attachPanZoom(renderer);
@@ -138,6 +156,7 @@ preferences.subscribe((prefs) => {
   renderer.requestRender();
   if (!prefs.persistCamera) clearCamera('gm');
   else persistCameraDebounced();
+  diagnosticsOverlay?.setEnabled(prefs.showDiagnostics);
 });
 
 const inputContext = {
@@ -575,13 +594,33 @@ if (channel) {
       sendCameraIfBroadcasting();
     } else if (msg.type === 'ping') {
       pingManager.add(msg.x, msg.y, msg.color);
+    } else if (msg.type === 'spectator-viewport') {
+      spectatorViewportRef.current = msg.viewport;
+      spectatorViewportRef.lastUpdate = Date.now();
+      if (preferences.get().showSpectatorViewport) renderer.requestRender();
     }
   });
+  channel.send({ type: 'hello', from: 'gm' });
   channel.send({ type: 'full-state', state: serializeState(store.getState()) });
 }
 
 const broadcastCameraThrottled = rafThrottle(sendCameraIfBroadcasting);
 renderer.onCameraChange(broadcastCameraThrottled);
+
+const diagnosticsOverlay = mountDiagnosticsOverlay({
+  renderer,
+  store,
+  viewMode: 'gm',
+  getRemoteViewport: () => {
+    const vp = spectatorViewportRef.current;
+    if (!vp) return null;
+    if (Date.now() - spectatorViewportRef.lastUpdate > SPECTATOR_VIEWPORT_TIMEOUT_MS) {
+      return null;
+    }
+    return { width: vp.width, height: vp.height };
+  },
+});
+diagnosticsOverlay.setEnabled(preferences.get().showDiagnostics);
 
 const persist = debounce(() => saveState(store.getState()), 200);
 

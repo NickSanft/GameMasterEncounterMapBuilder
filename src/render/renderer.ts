@@ -19,18 +19,35 @@ import { drawPings } from './layer-pings.js';
 import { drawAnnotations } from './layer-annotations.js';
 import { drawMeasurement, type MeasurementOverlay } from './layer-measure.js';
 import { drawAoeTemplates, type AoePreview } from './layer-aoe.js';
+import {
+  drawSpectatorViewport,
+} from './layer-spectator-viewport.js';
 import type { Preferences } from '../state/preferences.js';
 import type { DragOverlay, LassoOverlay } from '../input/context.js';
 import type { Ping } from '../state/ping-manager.js';
+import type { ViewportRect } from '../sync/messages.js';
+
+export interface FrameSample {
+  /** Time elapsed since the previous rendered frame, in ms. */
+  deltaMs: number;
+  /** Duration of this frame's render call, in ms. */
+  renderMs: number;
+  /** CSS-pixel canvas dimensions. */
+  cssWidth: number;
+  cssHeight: number;
+}
 
 export interface Renderer {
   readonly canvas: HTMLCanvasElement;
   readonly mode: ViewMode;
   camera: Camera;
+  readonly cssWidth: number;
+  readonly cssHeight: number;
   requestRender(): void;
   resize(): void;
   destroy(): void;
   onCameraChange(listener: () => void): () => void;
+  onFrame(listener: (sample: FrameSample) => void): () => void;
 }
 
 interface CreateRendererOptions {
@@ -48,6 +65,7 @@ interface CreateRendererOptions {
   getPings?(): readonly Ping[];
   getMeasurement?(): MeasurementOverlay | null;
   getAoePreview?(): AoePreview | null;
+  getSpectatorViewport?(): ViewportRect | null;
 }
 
 const EMPTY_HIGHLIGHT: ReadonlySet<ID> = new Set();
@@ -81,6 +99,7 @@ export function createRenderer(opts: CreateRendererOptions): Renderer {
     getPings,
     getMeasurement,
     getAoePreview,
+    getSpectatorViewport,
   } = opts;
   const maybeCtx = canvas.getContext('2d');
   if (!maybeCtx) throw new Error('2D canvas context unavailable');
@@ -90,7 +109,9 @@ export function createRenderer(opts: CreateRendererOptions): Renderer {
   let cssWidth = 0;
   let cssHeight = 0;
   let camera: Camera = opts.camera;
+  let lastFrameAt = 0;
   const cameraListeners = new Set<() => void>();
+  const frameListeners = new Set<(sample: FrameSample) => void>();
 
   function resize() {
     const dpr = window.devicePixelRatio || 1;
@@ -104,6 +125,7 @@ export function createRenderer(opts: CreateRendererOptions): Renderer {
 
   function render() {
     rafHandle = 0;
+    const frameStart = performance.now();
     const dpr = window.devicePixelRatio || 1;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
@@ -164,7 +186,21 @@ export function createRenderer(opts: CreateRendererOptions): Renderer {
     if (pings && pings.length > 0) {
       drawPings(ctx, pings, state.grid.cellSize, performance.now());
     }
+    if (mode === 'gm' && getSpectatorViewport) {
+      const vp = getSpectatorViewport();
+      if (vp) drawSpectatorViewport(ctx, vp, camera.zoom);
+    }
     ctx.restore();
+
+    if (frameListeners.size > 0) {
+      const renderMs = performance.now() - frameStart;
+      const deltaMs = lastFrameAt > 0 ? frameStart - lastFrameAt : 0;
+      lastFrameAt = frameStart;
+      const sample: FrameSample = { deltaMs, renderMs, cssWidth, cssHeight };
+      for (const l of frameListeners) l(sample);
+    } else {
+      lastFrameAt = frameStart;
+    }
   }
 
   function requestRender() {
@@ -188,15 +224,27 @@ export function createRenderer(opts: CreateRendererOptions): Renderer {
       requestRender();
       for (const l of cameraListeners) l();
     },
+    get cssWidth() {
+      return cssWidth;
+    },
+    get cssHeight() {
+      return cssHeight;
+    },
     requestRender,
     resize,
     destroy() {
       window.removeEventListener('resize', onWindowResize);
       if (rafHandle !== 0) cancelAnimationFrame(rafHandle);
+      cameraListeners.clear();
+      frameListeners.clear();
     },
     onCameraChange(listener: () => void): () => void {
       cameraListeners.add(listener);
       return () => cameraListeners.delete(listener);
+    },
+    onFrame(listener: (sample: FrameSample) => void): () => void {
+      frameListeners.add(listener);
+      return () => frameListeners.delete(listener);
     },
   };
 }

@@ -933,6 +933,46 @@ body.reduced-motion *::after {
   background: #a13b3b;
 }
 
+/* Diagnostics overlay */
+.diagnostics-overlay {
+  position: fixed;
+  top: 0.75rem;
+  right: 0.75rem;
+  z-index: 50;
+  min-width: 180px;
+  padding: 0.45rem 0.6rem 0.5rem;
+  background: var(--panel-bg);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: var(--panel-shadow);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.35;
+  pointer-events: none;
+  user-select: none;
+  opacity: 0.92;
+}
+
+.diag-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  align-items: baseline;
+}
+
+.diag-label {
+  color: var(--fg-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  font-size: 10px;
+}
+
+.diag-value {
+  color: var(--fg);
+  font-variant-numeric: tabular-nums;
+}
+
 .preset-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);

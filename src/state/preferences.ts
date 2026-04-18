@@ -14,6 +14,8 @@ export interface Preferences {
   gmFogOpacity: number;
   followGmCamera: boolean;
   broadcastCamera: boolean;
+  showDiagnostics: boolean;
+  showSpectatorViewport: boolean;
 }
 
 export const DEFAULT_PREFERENCES: Preferences = {
@@ -27,6 +29,8 @@ export const DEFAULT_PREFERENCES: Preferences = {
   gmFogOpacity: 0.35,
   followGmCamera: false,
   broadcastCamera: false,
+  showDiagnostics: false,
+  showSpectatorViewport: false,
 };
 
 export interface PreferencesStore {

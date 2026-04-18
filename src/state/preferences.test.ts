@@ -104,4 +104,26 @@ describe('createPreferences', () => {
     prefs.update({ labelSize: 'small' });
     expect(count).toBe(0);
   });
+
+  it('defaults diagnostics toggles to false', () => {
+    const prefs = createPreferences();
+    expect(prefs.get().showDiagnostics).toBe(false);
+    expect(prefs.get().showSpectatorViewport).toBe(false);
+  });
+
+  it('persists and loads diagnostics toggles', () => {
+    const a = createPreferences();
+    a.update({ showDiagnostics: true, showSpectatorViewport: true });
+    const b = createPreferences();
+    expect(b.get().showDiagnostics).toBe(true);
+    expect(b.get().showSpectatorViewport).toBe(true);
+  });
+
+  it('reset() clears diagnostics toggles', () => {
+    const prefs = createPreferences();
+    prefs.update({ showDiagnostics: true, showSpectatorViewport: true });
+    prefs.reset();
+    expect(prefs.get().showDiagnostics).toBe(false);
+    expect(prefs.get().showSpectatorViewport).toBe(false);
+  });
 });

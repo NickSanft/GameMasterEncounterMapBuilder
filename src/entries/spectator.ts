@@ -5,7 +5,7 @@ import { DEFAULT_CAMERA } from '../state/types.js';
 import { createSyncChannel } from '../sync/channel.js';
 import { deserializeState, fromSerializablePatch } from '../sync/messages.js';
 import { loadPersistedState, saveState } from '../state/persistence.js';
-import { debounce } from '../util/debounce.js';
+import { debounce, rafThrottle } from '../util/debounce.js';
 import { createImageLoader } from '../images/loader.js';
 import { createPreferences } from '../state/preferences.js';
 import { loadCamera, saveCamera, clearCamera } from '../state/camera-persistence.js';
@@ -13,9 +13,11 @@ import { mountSettingsModal } from '../ui/settings-modal.js';
 import { mountZoomControls } from '../ui/zoom-controls.js';
 import { mountShortcutOverlay } from '../ui/shortcut-overlay.js';
 import { mountInitiativeBar } from '../ui/initiative-bar.js';
+import { mountDiagnosticsOverlay } from '../ui/diagnostics-overlay.js';
 import { createPingManager } from '../state/ping-manager.js';
 import { createMeasurementOverlayRef } from '../input/context.js';
 import { createMeasureTool } from '../input/tool-measure.js';
+import { viewportFromCamera } from '../render/viewport.js';
 import {
   zoomBy,
   fitToContent,
@@ -86,6 +88,7 @@ preferences.subscribe((prefs) => {
   renderer.requestRender();
   if (!prefs.persistCamera) clearCamera('spectator');
   else persistCameraDebounced();
+  diagnosticsOverlay?.setEnabled(prefs.showDiagnostics);
 });
 
 function applyRemoteCamera(camera: { x: number; y: number; zoom: number }) {
@@ -171,6 +174,20 @@ store.subscribe((patch) => {
 });
 
 const channel = createSyncChannel();
+
+function broadcastViewport() {
+  if (!channel) return;
+  const viewport = viewportFromCamera(
+    renderer.camera,
+    renderer.cssWidth,
+    renderer.cssHeight,
+  );
+  if (viewport.width <= 0 || viewport.height <= 0) return;
+  channel.send({ type: 'spectator-viewport', viewport });
+}
+
+const broadcastViewportThrottled = rafThrottle(broadcastViewport);
+
 if (channel) {
   channel.onMessage((msg) => {
     if (msg.type === 'full-state') {
@@ -181,12 +198,26 @@ if (channel) {
       applyRemoteCamera(msg.camera);
     } else if (msg.type === 'ping') {
       pingManager.add(msg.x, msg.y, msg.color);
+    } else if (msg.type === 'hello' && msg.from === 'gm') {
+      // GM just loaded — (re)announce our viewport so the indicator appears.
+      broadcastViewportThrottled();
     }
   });
   channel.send({ type: 'hello', from: 'spectator' });
+  broadcastViewportThrottled();
 } else {
   showSyncWarning();
 }
+
+renderer.onCameraChange(broadcastViewportThrottled);
+window.addEventListener('resize', broadcastViewportThrottled);
+
+const diagnosticsOverlay = mountDiagnosticsOverlay({
+  renderer,
+  store,
+  viewMode: 'spectator',
+});
+diagnosticsOverlay.setEnabled(preferences.get().showDiagnostics);
 
 preferences.subscribe((prefs) => {
   if (prefs.followGmCamera && channel) {

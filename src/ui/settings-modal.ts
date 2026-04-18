@@ -71,6 +71,8 @@ export function mountSettingsModal(
   const resetBtn = modal.querySelector<HTMLButtonElement>('[data-action="reset-prefs"]')!;
   const scanImagesBtn = modal.querySelector<HTMLButtonElement>('[data-action="scan-images"]');
   const scanImagesStatus = modal.querySelector<HTMLDivElement>('[data-field="scan-images-status"]');
+  const showDiagnosticsInput = modal.querySelector<HTMLInputElement>('[data-field="showDiagnostics"]');
+  const showSpectatorViewportInput = modal.querySelector<HTMLInputElement>('[data-field="showSpectatorViewport"]');
   const closeBtn = modal.querySelector<HTMLButtonElement>('.modal-close')!;
 
   // Tab refs
@@ -125,6 +127,8 @@ export function mountSettingsModal(
     if (gmFogOpacityLabel) gmFogOpacityLabel.textContent = `${Math.round(prefs.gmFogOpacity * 100)}%`;
     if (broadcastCameraInput) broadcastCameraInput.checked = prefs.broadcastCamera;
     if (followGmCameraInput) followGmCameraInput.checked = prefs.followGmCamera;
+    if (showDiagnosticsInput) showDiagnosticsInput.checked = prefs.showDiagnostics;
+    if (showSpectatorViewportInput) showSpectatorViewportInput.checked = prefs.showSpectatorViewport;
   }
 
   function open() {
@@ -239,6 +243,18 @@ export function mountSettingsModal(
     });
   }
 
+  if (showDiagnosticsInput) {
+    showDiagnosticsInput.addEventListener('change', () => {
+      preferences.update({ showDiagnostics: showDiagnosticsInput.checked });
+    });
+  }
+
+  if (showSpectatorViewportInput) {
+    showSpectatorViewportInput.addEventListener('change', () => {
+      preferences.update({ showSpectatorViewport: showSpectatorViewportInput.checked });
+    });
+  }
+
   resetBtn.addEventListener('click', () => {
     const ok = window.confirm(
       'Reset all local preferences (theme, label size, contrast, etc.) to defaults? Session state is unaffected.',
@@ -334,7 +350,7 @@ function renderModalHTML(viewMode: ViewMode): string {
         ${renderAppearancePane(viewMode)}
         ${renderCameraPane(viewMode)}
         ${renderAccessibilityPane()}
-        ${renderDiagnosticsPane()}
+        ${renderDiagnosticsPane(viewMode)}
       </div>
     </div>
   `;
@@ -447,9 +463,25 @@ function renderAccessibilityPane(): string {
   `;
 }
 
-function renderDiagnosticsPane(): string {
+function renderDiagnosticsPane(viewMode: ViewMode): string {
+  const gmSpectatorViewport = viewMode === 'gm'
+    ? `
+      <label class="check">
+        <input type="checkbox" data-field="showSpectatorViewport" />
+        <span>Show Spectator viewport overlay</span>
+      </label>
+      <p class="settings-hint">Draws a dashed rectangle showing what the Spectator tab currently sees. Requires a Spectator tab to be open in the same browser.</p>`
+    : '';
+
   return `
     <section ${paneAttrs('diagnostics', false)}>
+      <label class="check">
+        <input type="checkbox" data-field="showDiagnostics" />
+        <span>Show diagnostics overlay (FPS, counts, camera)</span>
+      </label>
+      <p class="settings-hint">Floats a small panel in the top-right showing frame timing, state counts, and camera info.</p>
+      ${gmSpectatorViewport}
+      <hr />
       <div>
         <button type="button" data-action="scan-images">Scan and remove unused images</button>
       </div>
