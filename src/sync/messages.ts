@@ -1,4 +1,5 @@
 import type {
+  Annotation,
   Background,
   Camera,
   GridConfig,
@@ -13,6 +14,7 @@ export interface SerializedSessionState {
   background: Background;
   tokens: Token[];
   fog: number[];
+  annotations: Annotation[];
 }
 
 export type SerializablePatch =
@@ -35,6 +37,7 @@ export function serializeState(s: SessionState): SerializedSessionState {
     background: { ...s.background },
     tokens: s.tokens.map((t) => ({ ...t })),
     fog: Array.from(s.fog),
+    annotations: s.annotations.map((a) => ({ ...a })),
   };
 }
 
@@ -56,6 +59,14 @@ export function deserializeState(s: SerializedSessionState): SessionState {
     },
     tokens: s.tokens.map((t) => ({ ...t, borderColor: t.borderColor ?? null })),
     fog: Uint8Array.from(s.fog),
+    annotations: (s.annotations ?? []).map((a) => ({
+      id: a.id,
+      x: a.x,
+      y: a.y,
+      text: a.text ?? '',
+      color: a.color ?? '#fdd835',
+      visibility: a.visibility === 'gm' ? 'gm' : 'shared',
+    })),
   };
 }
 

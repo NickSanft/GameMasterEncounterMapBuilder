@@ -15,6 +15,7 @@ From the landing page, open the **GM View** on your own screen and the **Spectat
 | Reveal | `R` | Drag to clear fog. Rect or freehand; brush size 1–3. |
 | Hide | `H` | Drag to re-cover fog. Same shape/size controls. |
 | Map | `M` | Drag to reposition the background, scroll to scale. |
+| Note | `N` | Click to drop a map annotation (colored pin + text). Right-click a pin to edit/share/hide/delete. |
 
 ### Session menu (top-right)
 

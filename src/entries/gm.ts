@@ -18,9 +18,12 @@ import {
   createFogHoverRef,
 } from '../input/tool-fog.js';
 import { createBackgroundTool } from '../input/tool-background.js';
+import { createNoteTool } from '../input/tool-note.js';
+import { hitTestAnnotation } from '../input/hit-test-annotation.js';
 import { mountToolbar } from '../ui/toolbar.js';
 import { mountSessionMenu } from '../ui/session-menu.js';
 import { mountTokenEditor } from '../ui/token-editor.js';
+import { mountAnnotationEditor } from '../ui/annotation-editor.js';
 import { mountFogSettings } from '../ui/fog-settings.js';
 import { mountSettingsModal } from '../ui/settings-modal.js';
 import { mountZoomControls } from '../ui/zoom-controls.js';
@@ -36,7 +39,8 @@ import { putImage } from '../images/store.js';
 import { hitTestToken } from '../input/hit-test.js';
 import { screenToWorld } from '../render/coords.js';
 import { duplicateTokens } from '../state/token-clipboard.js';
-import type { Token } from '../state/types.js';
+import type { Annotation, Token } from '../state/types.js';
+import { DEFAULT_ANNOTATION_COLOR } from '../state/annotation-presets.js';
 import { mountPresetBackgroundsModal } from '../ui/preset-backgrounds-modal.js';
 import { resolvePresetUrl } from '../state/preset-backgrounds.js';
 import { showContextMenu, type ContextMenuEntry } from '../ui/context-menu.js';
@@ -125,6 +129,9 @@ toolManager.register(createTokenTool(inputContext));
 toolManager.register(createFogTool(inputContext, 'reveal', fogPreviewRef, fogOptionsRef, fogHoverRef));
 toolManager.register(createFogTool(inputContext, 'hide', fogPreviewRef, fogOptionsRef, fogHoverRef));
 toolManager.register(createBackgroundTool(inputContext));
+toolManager.register(
+  createNoteTool(inputContext, (a) => annotationEditor.openFor(a)),
+);
 
 const toolbarHandle = mountToolbar(
   document.body,
@@ -253,6 +260,7 @@ const tokenEditor = mountTokenEditor({
   selection,
   imageLoader,
 });
+const annotationEditor = mountAnnotationEditor({ store });
 
 const notesPanel = mountNotesPanel();
 const shortcutOverlay = mountShortcutOverlay('gm');
@@ -272,13 +280,45 @@ canvas.addEventListener('contextmenu', (e) => {
   );
   const state = store.getState();
   const hit = hitTestToken(state.tokens, state.grid, world.x, world.y);
+  const annotHit = hit
+    ? null
+    : hitTestAnnotation(state.annotations, world.x, world.y);
   const gx = Math.floor(world.x / state.grid.cellSize);
   const gy = Math.floor(world.y / state.grid.cellSize);
   const onGrid =
     gx >= 0 && gy >= 0 && gx < state.grid.cols && gy < state.grid.rows;
 
   const items: ContextMenuEntry[] = [];
-  if (hit) {
+  if (annotHit) {
+    const annot = annotHit;
+    items.push(
+      {
+        label: 'Edit annotation…',
+        onClick: () => annotationEditor.openFor(annot),
+      },
+      {
+        label:
+          annot.visibility === 'shared'
+            ? 'Make GM-only'
+            : 'Share with Spectator',
+        onClick: () =>
+          store.applyPatch({
+            kind: 'annotation-update',
+            id: annot.id,
+            changes: {
+              visibility: annot.visibility === 'shared' ? 'gm' : 'shared',
+            },
+          }),
+      },
+      { kind: 'separator' },
+      {
+        label: 'Delete annotation',
+        variant: 'danger',
+        onClick: () =>
+          store.applyPatch({ kind: 'annotation-remove', id: annot.id }),
+      },
+    );
+  } else if (hit) {
     if (!selection.ids.has(hit.id)) {
       selection.ids = new Set([hit.id]);
       renderer.requestRender();
@@ -312,6 +352,10 @@ canvas.addEventListener('contextmenu', (e) => {
         onClick: () => pasteClipboardAt(gx, gy),
       },
       {
+        label: 'Place annotation here',
+        onClick: () => placeAnnotationAt(world.x, world.y),
+      },
+      {
         label: 'Ping here',
         onClick: () => ping(world.x, world.y),
       },
@@ -341,11 +385,12 @@ canvas.addEventListener('contextmenu', (e) => {
     );
   }
 
+  const label = annotHit ? 'Annotation actions' : hit ? 'Token actions' : 'Map actions';
   showContextMenu({
     x: e.clientX,
     y: e.clientY,
     items,
-    label: hit ? 'Token actions' : 'Map actions',
+    label,
   });
 });
 
@@ -468,19 +513,31 @@ function duplicateSelection(): boolean {
 
 function moveSelection(dx: number, dy: number): boolean {
   if (selection.ids.size === 0) return false;
-  const tokens = store.getState().tokens;
+  const state = store.getState();
   const ids = Array.from(selection.ids);
   let moved = false;
+  const cellSize = state.grid.cellSize;
   store.batch(() => {
     for (const id of ids) {
-      const t = tokens.find((t) => t.id === id);
-      if (!t) continue;
-      store.applyPatch({
-        kind: 'token-update',
-        id,
-        changes: { x: t.x + dx, y: t.y + dy },
-      });
-      moved = true;
+      const t = state.tokens.find((t) => t.id === id);
+      if (t) {
+        store.applyPatch({
+          kind: 'token-update',
+          id,
+          changes: { x: t.x + dx, y: t.y + dy },
+        });
+        moved = true;
+        continue;
+      }
+      const a = state.annotations.find((a) => a.id === id);
+      if (a) {
+        store.applyPatch({
+          kind: 'annotation-update',
+          id,
+          changes: { x: a.x + dx * cellSize, y: a.y + dy * cellSize },
+        });
+        moved = true;
+      }
     }
   });
   if (moved) renderer.requestRender();
@@ -490,14 +547,32 @@ function moveSelection(dx: number, dy: number): boolean {
 function deleteSelection(): boolean {
   if (selection.ids.size === 0) return false;
   const ids = Array.from(selection.ids);
+  const state = store.getState();
   store.batch(() => {
     for (const id of ids) {
-      store.applyPatch({ kind: 'token-remove', id });
+      if (state.tokens.some((t) => t.id === id)) {
+        store.applyPatch({ kind: 'token-remove', id });
+      } else if (state.annotations.some((a) => a.id === id)) {
+        store.applyPatch({ kind: 'annotation-remove', id });
+      }
     }
   });
   selection.ids = new Set();
   renderer.requestRender();
   return true;
+}
+
+function placeAnnotationAt(worldX: number, worldY: number) {
+  const annotation: Annotation = {
+    id: nid(),
+    x: worldX,
+    y: worldY,
+    text: '',
+    color: DEFAULT_ANNOTATION_COLOR,
+    visibility: 'shared',
+  };
+  store.applyPatch({ kind: 'annotation-add', annotation });
+  annotationEditor.openFor(annotation);
 }
 
 function placeTokenAt(gx: number, gy: number) {
@@ -654,6 +729,10 @@ window.addEventListener('keydown', (e) => {
       break;
     case 'm':
       toolManager.setActive('background');
+      e.preventDefault();
+      break;
+    case 'n':
+      toolManager.setActive('note');
       e.preventDefault();
       break;
   }

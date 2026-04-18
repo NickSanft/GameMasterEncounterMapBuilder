@@ -809,6 +809,27 @@ body.reduced-motion *::after {
   line-height: 1.35;
 }
 
+/* Annotation editor modal */
+.annotation-editor textarea {
+  padding: 0.5rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--fg);
+  border-radius: 4px;
+  font-family: inherit;
+  font-size: 0.9rem;
+  text-transform: none;
+  line-height: 1.4;
+  resize: vertical;
+  width: 100%;
+  min-height: 3.2rem;
+}
+
+.annotation-editor textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
 /* Notes panel (GM, right drawer) */
 .notes-panel {
   position: absolute;

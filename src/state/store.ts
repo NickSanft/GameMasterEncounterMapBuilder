@@ -29,6 +29,7 @@ function snapshot(s: SessionState): SessionState {
     background: { ...s.background },
     tokens: s.tokens.map((t) => ({ ...t })),
     fog: new Uint8Array(s.fog),
+    annotations: s.annotations.map((a) => ({ ...a })),
   };
 }
 
@@ -40,6 +41,8 @@ function coalesceKey(patch: StatePatch): string | null {
       return 'fog-set';
     case 'background-update':
       return 'background-update';
+    case 'annotation-update':
+      return `annotation-update:${patch.id}`;
     default:
       return null;
   }
@@ -133,6 +136,28 @@ export function createStore(initial?: SessionState): Store {
         state = {
           ...state,
           background: { ...state.background, ...patch.changes },
+        };
+        break;
+      case 'annotation-add':
+        state = {
+          ...state,
+          annotations: [...state.annotations, patch.annotation],
+        };
+        break;
+      case 'annotation-update': {
+        const idx = state.annotations.findIndex((a) => a.id === patch.id);
+        if (idx === -1) return;
+        const existing = state.annotations[idx]!;
+        const next = { ...existing, ...patch.changes };
+        const annotations = state.annotations.slice();
+        annotations[idx] = next;
+        state = { ...state, annotations };
+        break;
+      }
+      case 'annotation-remove':
+        state = {
+          ...state,
+          annotations: state.annotations.filter((a) => a.id !== patch.id),
         };
         break;
       case 'session-reset':

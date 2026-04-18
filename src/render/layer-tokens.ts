@@ -26,10 +26,18 @@ const DEFAULT_OPTIONS: TokenRenderOptions = {
   mode: 'gm',
 };
 
-function withOverlay(token: Token, overlay: DragOverlay | null | undefined): Token {
+function withOverlay(
+  token: Token,
+  overlay: DragOverlay | null | undefined,
+  cellSize: number,
+): Token {
   if (!overlay || !overlay.ids.includes(token.id)) return token;
   if (overlay.deltaX === 0 && overlay.deltaY === 0) return token;
-  return { ...token, x: token.x + overlay.deltaX, y: token.y + overlay.deltaY };
+  return {
+    ...token,
+    x: token.x + overlay.deltaX / cellSize,
+    y: token.y + overlay.deltaY / cellSize,
+  };
 }
 
 export function drawTokens(
@@ -42,29 +50,53 @@ export function drawTokens(
   const { cellSize } = state.grid;
   const labelScale = LABEL_SIZE_MULTIPLIER[options.labelSize];
   const overlay = options.dragOverlay ?? null;
+  const draggedIds =
+    overlay && (overlay.deltaX !== 0 || overlay.deltaY !== 0) ? overlay.ids : [];
 
   const unselected: Token[] = [];
   const selected: Token[] = [];
   for (const t of state.tokens) {
     if (options.mode === 'spectator' && isTokenFullyHidden(t, state)) continue;
-    const display = withOverlay(t, overlay);
+    const display = withOverlay(t, overlay, cellSize);
     if (highlightIds.has(t.id)) selected.push(display);
     else unselected.push(display);
   }
 
+  function isDragged(t: Token): boolean {
+    return draggedIds.includes(t.id);
+  }
+
   for (const t of unselected) {
-    drawTokenBody(ctx, t, cellSize, false, getImage, options.showColorblindMarkers);
+    drawTokenBody(
+      ctx,
+      t,
+      cellSize,
+      false,
+      getImage,
+      options.showColorblindMarkers,
+      isDragged(t),
+    );
   }
   for (const t of selected) {
-    drawTokenBody(ctx, t, cellSize, true, getImage, options.showColorblindMarkers);
+    drawTokenBody(
+      ctx,
+      t,
+      cellSize,
+      true,
+      getImage,
+      options.showColorblindMarkers,
+      isDragged(t),
+    );
   }
   for (const t of unselected) {
-    drawTokenLabel(ctx, t, cellSize, labelScale, false);
+    drawTokenLabel(ctx, t, cellSize, labelScale, false, isDragged(t));
   }
   for (const t of selected) {
-    drawTokenLabel(ctx, t, cellSize, labelScale, true);
+    drawTokenLabel(ctx, t, cellSize, labelScale, true, isDragged(t));
   }
 }
+
+const DRAG_GHOST_ALPHA = 0.6;
 
 function drawTokenBody(
   ctx: CanvasRenderingContext2D,
@@ -73,10 +105,14 @@ function drawTokenBody(
   highlighted: boolean,
   getImage: ImageProvider,
   showMarkers: boolean,
+  isDragged: boolean,
 ): void {
   const cx = (t.x + t.size / 2) * cellSize;
   const cy = (t.y + t.size / 2) * cellSize;
   const r = (t.size * cellSize) / 2 - 4;
+
+  ctx.save();
+  if (isDragged) ctx.globalAlpha = DRAG_GHOST_ALPHA;
 
   const img = t.imageId ? getImage(t.imageId) : null;
 
@@ -126,6 +162,7 @@ function drawTokenBody(
       drawMarker(ctx, shape, markerCx, markerCy, markerR, t.borderColor);
     }
   }
+  ctx.restore();
 }
 
 function drawTokenLabel(
@@ -134,10 +171,14 @@ function drawTokenLabel(
   cellSize: number,
   labelScale: number,
   selected: boolean,
+  isDragged: boolean,
 ): void {
   const cx = (t.x + t.size / 2) * cellSize;
   const cy = (t.y + t.size / 2) * cellSize;
   const r = (t.size * cellSize) / 2 - 4;
+
+  ctx.save();
+  if (isDragged) ctx.globalAlpha = DRAG_GHOST_ALPHA;
 
   const baseFontSize = Math.max(11, cellSize * 0.22);
   const fontSize = baseFontSize * labelScale;
@@ -165,6 +206,8 @@ function drawTokenLabel(
 
   ctx.fillStyle = '#ffffff';
   ctx.fillText(t.label, cx, labelY + padY);
+
+  ctx.restore();
 }
 
 function drawMarker(

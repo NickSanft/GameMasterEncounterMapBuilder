@@ -16,6 +16,7 @@ import {
 import { drawBackground, type ImageProvider } from './layer-background.js';
 import { drawLasso } from './layer-lasso.js';
 import { drawPings } from './layer-pings.js';
+import { drawAnnotations } from './layer-annotations.js';
 import type { Preferences } from '../state/preferences.js';
 import type { DragOverlay, LassoOverlay } from '../input/context.js';
 import type { Ping } from '../state/ping-manager.js';
@@ -126,6 +127,11 @@ export function createRenderer(opts: CreateRendererOptions): Renderer {
       dragOverlay,
     });
     drawFog(ctx, state, mode, { gmColor: gmFogColor, gmOpacity: gmFogOpacity });
+    drawAnnotations(ctx, state, {
+      mode,
+      highlightIds: highlights,
+      dragOverlay,
+    });
     const preview = getFogPreview ? getFogPreview() : null;
     if (preview) {
       drawFogPreview(ctx, preview, state.grid.cellSize);

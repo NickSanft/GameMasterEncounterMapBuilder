@@ -1,6 +1,17 @@
 import { describe, it, expect } from 'vitest';
-import { collectLassoHits } from './lasso.js';
-import type { Token } from '../state/types.js';
+import { collectLassoHits, collectAnnotationLassoHits } from './lasso.js';
+import type { Annotation, Token } from '../state/types.js';
+
+function annot(partial: Partial<Annotation> & { id: string }): Annotation {
+  return {
+    id: partial.id,
+    x: partial.x ?? 0,
+    y: partial.y ?? 0,
+    text: partial.text ?? '',
+    color: partial.color ?? '#fdd835',
+    visibility: partial.visibility ?? 'shared',
+  };
+}
 
 function token(partial: Partial<Token> & { id: string }): Token {
   return {
@@ -74,5 +85,36 @@ describe('collectLassoHits', () => {
       y2: 200,
     });
     expect(hits).toEqual(['near']);
+  });
+});
+
+describe('collectAnnotationLassoHits', () => {
+  it('selects annotations whose anchor is inside the rectangle', () => {
+    const annotations = [
+      annot({ id: 'a', x: 50, y: 50 }),
+      annot({ id: 'b', x: 300, y: 300 }),
+      annot({ id: 'c', x: 150, y: 150 }),
+    ];
+    const hits = collectAnnotationLassoHits(annotations, {
+      x1: 0,
+      y1: 0,
+      x2: 200,
+      y2: 200,
+    });
+    expect(hits.sort()).toEqual(['a', 'c']);
+  });
+
+  it('returns empty for a zero-area rectangle', () => {
+    const annotations = [annot({ id: 'a', x: 50, y: 50 })];
+    expect(
+      collectAnnotationLassoHits(annotations, { x1: 0, y1: 0, x2: 0, y2: 0 }),
+    ).toEqual([]);
+  });
+
+  it('normalizes inverted rectangles', () => {
+    const annotations = [annot({ id: 'a', x: 50, y: 50 })];
+    expect(
+      collectAnnotationLassoHits(annotations, { x1: 200, y1: 200, x2: 0, y2: 0 }),
+    ).toEqual(['a']);
   });
 });

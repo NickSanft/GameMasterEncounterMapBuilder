@@ -26,12 +26,24 @@ export interface Background {
   scaleY: number;
 }
 
+export type AnnotationVisibility = 'gm' | 'shared';
+
+export interface Annotation {
+  id: ID;
+  x: number;
+  y: number;
+  text: string;
+  color: string;
+  visibility: AnnotationVisibility;
+}
+
 export interface SessionState {
   version: 1;
   grid: GridConfig;
   background: Background;
   tokens: Token[];
   fog: Uint8Array;
+  annotations: Annotation[];
 }
 
 export interface Camera {
@@ -49,6 +61,9 @@ export type StatePatch =
   | { kind: 'fog-set'; cells: Array<{ x: number; y: number; value: 0 | 1 }> }
   | { kind: 'grid-update'; changes: Partial<GridConfig> }
   | { kind: 'background-update'; changes: Partial<Background> }
+  | { kind: 'annotation-add'; annotation: Annotation }
+  | { kind: 'annotation-update'; id: ID; changes: Partial<Annotation> }
+  | { kind: 'annotation-remove'; id: ID }
   | { kind: 'session-reset'; state: SessionState };
 
 export const DEFAULT_GRID: GridConfig = {
@@ -80,5 +95,6 @@ export function createDefaultState(): SessionState {
     background: { ...DEFAULT_BACKGROUND },
     tokens: [],
     fog: new Uint8Array(grid.cols * grid.rows),
+    annotations: [],
   };
 }

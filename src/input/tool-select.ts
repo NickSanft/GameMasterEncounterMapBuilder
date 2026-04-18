@@ -1,8 +1,12 @@
 import type { InputContext } from './context.js';
 import type { Tool } from './tool-manager.js';
 import { hitTestToken } from './hit-test.js';
+import { hitTestAnnotation } from './hit-test-annotation.js';
 import { pointerToWorld } from './context.js';
-import { collectLassoHits } from './lasso.js';
+import {
+  collectLassoHits,
+  collectAnnotationLassoHits,
+} from './lasso.js';
 import type { ID } from '../state/types.js';
 
 interface LassoInProgress {
@@ -14,83 +18,88 @@ interface LassoInProgress {
 
 export function createSelectTool(ctx: InputContext): Tool {
   const { canvas, renderer, store, selection, dragOverlay, lassoOverlay } = ctx;
-  let draggingAnchorId: string | null = null;
-  let dragOffsetX = 0;
-  let dragOffsetY = 0;
   let activePointerId: number | null = null;
+  let isDragging = false;
+  let dragStartWorldX = 0;
+  let dragStartWorldY = 0;
   let lasso: LassoInProgress | null = null;
+
+  function beginDrag(e: PointerEvent, worldX: number, worldY: number) {
+    isDragging = true;
+    activePointerId = e.pointerId;
+    dragStartWorldX = worldX;
+    dragStartWorldY = worldY;
+    dragOverlay.current = {
+      ids: Array.from(selection.ids),
+      deltaX: 0,
+      deltaY: 0,
+    };
+    canvas.setPointerCapture(e.pointerId);
+    renderer.requestRender();
+    e.preventDefault();
+  }
 
   function onPointerDown(e: PointerEvent) {
     if (e.button !== 0 || ctx.isSpaceHeld()) return;
     const world = pointerToWorld(canvas, renderer, e);
     const state = store.getState();
-    const hit = hitTestToken(state.tokens, state.grid, world.x, world.y);
+    const tokenHit = hitTestToken(state.tokens, state.grid, world.x, world.y);
+    const annotHit = tokenHit
+      ? null
+      : hitTestAnnotation(state.annotations, world.x, world.y);
 
-    if (hit) {
-      if (e.shiftKey) {
-        const next = new Set(selection.ids);
-        if (next.has(hit.id)) {
-          next.delete(hit.id);
-          selection.ids = next;
-          renderer.requestRender();
-          return; // removed from selection; no drag
-        }
-        next.add(hit.id);
-        selection.ids = next;
-      } else if (!selection.ids.has(hit.id)) {
-        selection.ids = new Set([hit.id]);
-      }
-      // Begin a group drag anchored at the clicked token.
-      draggingAnchorId = hit.id;
-      activePointerId = e.pointerId;
-      const gridX = world.x / state.grid.cellSize;
-      const gridY = world.y / state.grid.cellSize;
-      dragOffsetX = gridX - hit.x;
-      dragOffsetY = gridY - hit.y;
-      dragOverlay.current = {
-        ids: Array.from(selection.ids),
-        deltaX: 0,
-        deltaY: 0,
-      };
-      canvas.setPointerCapture(e.pointerId);
-      renderer.requestRender();
-      e.preventDefault();
-    } else {
-      // Empty-space interaction — start lasso.
-      lasso = {
-        startWorldX: world.x,
-        startWorldY: world.y,
-        additive: e.shiftKey,
-        startSelection: new Set(selection.ids),
-      };
-      activePointerId = e.pointerId;
-      lassoOverlay.current = {
-        x1: world.x,
-        y1: world.y,
-        x2: world.x,
-        y2: world.y,
-        additive: e.shiftKey,
-      };
-      canvas.setPointerCapture(e.pointerId);
-      renderer.requestRender();
-      e.preventDefault();
+    if (tokenHit) {
+      handleHitSelect(tokenHit.id, e.shiftKey);
+      beginDrag(e, world.x, world.y);
+      return;
+    }
+
+    if (annotHit) {
+      handleHitSelect(annotHit.id, e.shiftKey);
+      beginDrag(e, world.x, world.y);
+      return;
+    }
+
+    // Empty-space interaction — start lasso.
+    lasso = {
+      startWorldX: world.x,
+      startWorldY: world.y,
+      additive: e.shiftKey,
+      startSelection: new Set(selection.ids),
+    };
+    activePointerId = e.pointerId;
+    lassoOverlay.current = {
+      x1: world.x,
+      y1: world.y,
+      x2: world.x,
+      y2: world.y,
+      additive: e.shiftKey,
+    };
+    canvas.setPointerCapture(e.pointerId);
+    renderer.requestRender();
+    e.preventDefault();
+  }
+
+  function handleHitSelect(id: ID, shift: boolean) {
+    if (shift) {
+      const next = new Set(selection.ids);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      selection.ids = next;
+    } else if (!selection.ids.has(id)) {
+      selection.ids = new Set([id]);
     }
   }
 
   function onPointerMove(e: PointerEvent) {
     if (e.pointerId !== activePointerId) return;
 
-    if (draggingAnchorId !== null) {
+    if (isDragging) {
       const world = pointerToWorld(canvas, renderer, e);
-      const state = store.getState();
-      const anchor = state.tokens.find((t) => t.id === draggingAnchorId);
-      if (!anchor) return;
-      const targetGridX = world.x / state.grid.cellSize - dragOffsetX;
-      const targetGridY = world.y / state.grid.cellSize - dragOffsetY;
       dragOverlay.current = {
-        ids: dragOverlay.current?.ids ?? [draggingAnchorId],
-        deltaX: targetGridX - anchor.x,
-        deltaY: targetGridY - anchor.y,
+        ids: dragOverlay.current?.ids ?? Array.from(selection.ids),
+        deltaX: world.x - dragStartWorldX,
+        deltaY: world.y - dragStartWorldY,
       };
       renderer.requestRender();
       return;
@@ -119,32 +128,41 @@ export function createSelectTool(ctx: InputContext): Tool {
       /* no-op */
     }
 
-    if (draggingAnchorId !== null) {
-      const id = draggingAnchorId;
+    if (isDragging) {
       const overlay = dragOverlay.current;
-      draggingAnchorId = null;
+      isDragging = false;
       dragOverlay.current = null;
 
       if (overlay && (overlay.deltaX !== 0 || overlay.deltaY !== 0)) {
-        const snappedDX = Math.round(overlay.deltaX);
-        const snappedDY = Math.round(overlay.deltaY);
-        if (snappedDX !== 0 || snappedDY !== 0) {
-          store.batch(() => {
-            const state = store.getState();
-            for (const tid of overlay.ids) {
-              const token = state.tokens.find((t) => t.id === tid);
-              if (!token) continue;
+        const state = store.getState();
+        const cellSize = state.grid.cellSize;
+        const gridDX = Math.round(overlay.deltaX / cellSize);
+        const gridDY = Math.round(overlay.deltaY / cellSize);
+        store.batch(() => {
+          for (const id of overlay.ids) {
+            const t = state.tokens.find((x) => x.id === id);
+            if (t) {
+              if (gridDX !== 0 || gridDY !== 0) {
+                store.applyPatch({
+                  kind: 'token-update',
+                  id,
+                  changes: { x: t.x + gridDX, y: t.y + gridDY },
+                });
+              }
+              continue;
+            }
+            const a = state.annotations.find((x) => x.id === id);
+            if (a) {
               store.applyPatch({
-                kind: 'token-update',
-                id: tid,
-                changes: { x: token.x + snappedDX, y: token.y + snappedDY },
+                kind: 'annotation-update',
+                id,
+                changes: { x: a.x + overlay.deltaX, y: a.y + overlay.deltaY },
               });
             }
-          });
-        }
+          }
+        });
       }
       renderer.requestRender();
-      void id; // silence unused-var
       return;
     }
 
@@ -157,7 +175,9 @@ export function createSelectTool(ctx: InputContext): Tool {
 
       if (rect) {
         const state = store.getState();
-        const hits = collectLassoHits(state.tokens, state.grid.cellSize, rect);
+        const tokenHits = collectLassoHits(state.tokens, state.grid.cellSize, rect);
+        const annotHits = collectAnnotationLassoHits(state.annotations, rect);
+        const hits = [...tokenHits, ...annotHits];
         if (additive) {
           const merged = new Set(startSel);
           for (const id of hits) merged.add(id);
@@ -177,9 +197,14 @@ export function createSelectTool(ctx: InputContext): Tool {
     if (selection.ids.size === 0) return;
     if (isEditableTarget(e.target)) return;
     const ids = Array.from(selection.ids);
+    const state = store.getState();
     store.batch(() => {
       for (const id of ids) {
-        store.applyPatch({ kind: 'token-remove', id });
+        if (state.tokens.some((t) => t.id === id)) {
+          store.applyPatch({ kind: 'token-remove', id });
+        } else if (state.annotations.some((a) => a.id === id)) {
+          store.applyPatch({ kind: 'annotation-remove', id });
+        }
       }
     });
     selection.ids = new Set();
@@ -223,7 +248,7 @@ export function createSelectTool(ctx: InputContext): Tool {
         lassoOverlay.current = null;
         renderer.requestRender();
       }
-      draggingAnchorId = null;
+      isDragging = false;
       activePointerId = null;
       lasso = null;
     },

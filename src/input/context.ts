@@ -33,6 +33,7 @@ export function createSelectionState(): SelectionState {
 
 export interface DragOverlay {
   ids: readonly ID[];
+  /** World-space delta in pixels at zoom=1. Layers convert as needed. */
   deltaX: number;
   deltaY: number;
 }

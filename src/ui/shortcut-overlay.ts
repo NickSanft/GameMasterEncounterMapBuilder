@@ -26,6 +26,7 @@ const GM_SECTIONS: ShortcutSection[] = [
       { keys: 'R', desc: 'Reveal fog' },
       { keys: 'H', desc: 'Hide fog' },
       { keys: 'M', desc: 'Map positioning' },
+      { keys: 'N', desc: 'Note — drop a map annotation' },
     ],
   },
   {
