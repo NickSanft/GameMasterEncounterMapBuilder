@@ -425,6 +425,10 @@ body.view {
   margin-right: 0.4rem;
 }
 
+.token-editor-cycle[hidden] {
+  display: none;
+}
+
 .icon-btn {
   appearance: none;
   width: 1.65rem;
