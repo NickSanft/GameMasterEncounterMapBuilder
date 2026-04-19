@@ -70,6 +70,7 @@ import { mountShortcutOverlay } from '../ui/shortcut-overlay.js';
 import { mountInitiativeBar } from '../ui/initiative-bar.js';
 import { mountInitiativeModal } from '../ui/initiative-modal.js';
 import { mountDiagnosticsOverlay } from '../ui/diagnostics-overlay.js';
+import { mountHelpOverlay } from '../ui/help-overlay.js';
 import type { ViewportRect } from '../sync/messages.js';
 import {
   zoomBy,
@@ -403,6 +404,7 @@ const initiativeModal = mountInitiativeModal({ store });
 mountInitiativeBar(store, 'gm', {
   onOpenTracker: () => initiativeModal.open(),
 });
+mountHelpOverlay('gm');
 
 function ping(worldX: number, worldY: number) {
   pingManager.add(worldX, worldY);

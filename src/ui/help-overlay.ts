@@ -1,0 +1,230 @@
+import type { ViewMode } from '../state/types.js';
+import { attachFocusTrap, rememberFocus, restoreFocus } from '../util/focus.js';
+
+export interface HelpOverlayHandle {
+  open(): void;
+  close(): void;
+  toggle(): void;
+}
+
+interface HelpEntry {
+  name: string;
+  desc: string;
+}
+
+interface HelpSection {
+  title: string;
+  intro?: string;
+  entries: HelpEntry[];
+}
+
+const GM_SECTIONS: HelpSection[] = [
+  {
+    title: 'Tools (left side)',
+    intro: 'Pick a tool, then interact with the map. Hover a tool to see its keyboard shortcut.',
+    entries: [
+      { name: 'Select', desc: 'Click a token to select it. Shift+click toggles a token in/out of the selection. Drag an empty area to rubber-band-select. Drag a selected token (or group) to move them together. Works on tokens, annotations, and AoE templates.' },
+      { name: 'Token', desc: 'Click any grid cell to drop a new token. Alt+click stamps a copy of the most recently placed token so you can fill a room quickly.' },
+      { name: 'Reveal', desc: 'Drag across cells to uncover them to the Spectator. The GM always sees the whole map (just dimmed over hidden areas).' },
+      { name: 'Hide', desc: 'Drag across cells to re-hide them under fog of war.' },
+      { name: 'Map', desc: 'Drag the background image to reposition it under the grid. Scroll wheel scales it up or down so the art lines up with your chosen cell size.' },
+      { name: 'Note', desc: 'Click anywhere on the map to drop a text annotation (loot, traps, callouts). Right-click a note to make it GM-only or share it with the Spectator.' },
+      { name: 'Ruler', desc: 'Drag between two points to measure distance in grid squares. Release to clear. Great for reach and movement checks.' },
+      { name: 'AoE', desc: 'Drag to place a spell or effect template — sphere, cone, line, or cube. Choose the shape and color from the panel that appears when the tool is active.' },
+      { name: 'Undo / Redo', desc: 'Step backward or forward through your last actions. Also Ctrl/Cmd+Z and Ctrl/Cmd+Shift+Z.' },
+    ],
+  },
+  {
+    title: 'Session menu (left column)',
+    entries: [
+      { name: 'Upload Map', desc: 'Pick an image file from your computer to use as the battle map background.' },
+      { name: 'Preset Maps', desc: 'Choose from a built-in gallery of ready-made backgrounds (tavern, dungeon, forest, etc.).' },
+      { name: 'Token Library', desc: 'Save individual tokens (name, color, image, border) for reuse across sessions. Click a saved token to drop it at the center of your current view.' },
+      { name: 'Template Library', desc: 'Save a group of selected tokens as a named template, preserving their relative positions. Drop the whole pack with one click.' },
+      { name: 'Initiative', desc: 'Open the combat initiative tracker. Add entries, link them to tokens on the map, and cycle through turns. The active combatant glows on the canvas.' },
+      { name: 'Export', desc: 'Download the current session (map, tokens, fog, annotations, AoE, initiative) as a JSON file so you can share or back it up.' },
+      { name: 'Import', desc: 'Load a previously exported JSON file to restore a session.' },
+      { name: 'Notes', desc: 'Toggle a plain-text scratchpad you can use for DM notes, stat blocks, or scratch math during play.' },
+      { name: 'Shortcuts', desc: 'Show all keyboard shortcuts (same overlay as pressing ?).' },
+      { name: 'Settings', desc: 'Grid dimensions, theme (dark/light), label size, fog color, camera behavior, accessibility options, and diagnostics.' },
+      { name: 'New Session', desc: 'Clear everything (tokens, fog, background, annotations) and start from a blank grid. Prompts for confirmation.' },
+    ],
+  },
+  {
+    title: 'Initiative bar (top center)',
+    intro: 'Visible once you start initiative from the tracker.',
+    entries: [
+      { name: 'Round counter', desc: 'Shows the current round number.' },
+      { name: 'Active name', desc: 'Click to jump to the initiative tracker for quick edits.' },
+      { name: '‹ / ›', desc: 'Advance or retreat the active turn. The current token gets a gold ring on the canvas.' },
+    ],
+  },
+  {
+    title: 'Zoom controls (bottom right)',
+    entries: [
+      { name: '+ / −', desc: 'Zoom in or out around the center of the view.' },
+      { name: 'Fit', desc: 'Zoom and pan to fit all placed content (map + tokens) on screen. Also F.' },
+      { name: 'Reset', desc: 'Return to the default camera (origin + 1× zoom). Also 0.' },
+    ],
+  },
+  {
+    title: 'Canvas interactions',
+    entries: [
+      { name: 'Right-click', desc: 'Context menu — place a token, paste, ping, reveal/hide 5×5, fit, or act on what you clicked (token / annotation / AoE).' },
+      { name: 'Space+drag / middle-mouse', desc: 'Pan the camera without switching tools.' },
+      { name: 'Scroll wheel', desc: 'Zoom toward the cursor.' },
+      { name: 'Arrow keys / WASD', desc: 'Nudge the selected tokens one cell at a time (+Shift = 5 cells).' },
+      { name: 'E', desc: 'Open the token editor for the first selected token.' },
+    ],
+  },
+];
+
+const SPECTATOR_SECTIONS: HelpSection[] = [
+  {
+    title: 'Tools (left side)',
+    entries: [
+      { name: 'Ruler', desc: 'Drag between two points to measure distance in grid squares. Release to clear. Great for planning moves on your own.' },
+    ],
+  },
+  {
+    title: 'Session menu (left column)',
+    entries: [
+      { name: 'Shortcuts', desc: 'Show all keyboard shortcuts (same overlay as pressing ?).' },
+      { name: 'Settings', desc: 'Theme, label size, camera behavior, accessibility, diagnostics. Turn on "Follow GM\u2019s camera" to mirror what the GM is looking at.' },
+    ],
+  },
+  {
+    title: 'Initiative bar (top center)',
+    intro: 'Read-only mirror of the GM\u2019s initiative tracker. Updates automatically.',
+    entries: [
+      { name: 'Round counter + active name', desc: 'Shows whose turn it is and which round of combat you\u2019re on.' },
+    ],
+  },
+  {
+    title: 'Zoom controls (bottom right)',
+    entries: [
+      { name: '+ / −', desc: 'Zoom in or out.' },
+      { name: 'Fit', desc: 'Fit the revealed map on screen. Also F.' },
+      { name: 'Reset', desc: 'Back to the default view. Also 0.' },
+    ],
+  },
+  {
+    title: 'Canvas interactions',
+    entries: [
+      { name: 'Space+drag / middle-mouse', desc: 'Pan the camera.' },
+      { name: 'Scroll wheel', desc: 'Zoom toward the cursor.' },
+      { name: 'Fog of war', desc: 'Only cells the GM has revealed are fully visible. Tokens under hidden cells don\u2019t render here.' },
+    ],
+  },
+];
+
+export function mountHelpOverlay(viewMode: ViewMode): HelpOverlayHandle {
+  const sections = viewMode === 'gm' ? GM_SECTIONS : SPECTATOR_SECTIONS;
+
+  // Floating "?" button (bottom-left corner).
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'help-button';
+  button.setAttribute('aria-label', 'Open quick tutorial');
+  button.title = 'Quick tutorial — what does each button do?';
+  button.textContent = '?';
+  document.body.appendChild(button);
+
+  const backdrop = document.createElement('div');
+  backdrop.className = 'modal-backdrop';
+  backdrop.hidden = true;
+
+  const modal = document.createElement('div');
+  modal.className = 'modal help-overlay';
+  modal.setAttribute('role', 'dialog');
+  modal.setAttribute('aria-modal', 'true');
+  modal.setAttribute('aria-label', 'Quick tutorial');
+
+  const viewLabel = viewMode === 'gm' ? 'GM View' : 'Spectator View';
+  const intro = viewMode === 'gm'
+    ? 'A rundown of every button and interaction on this screen. Press Escape or click outside to close.'
+    : 'A rundown of every control on this screen. Press Escape or click outside to close.';
+
+  const body = sections
+    .map(
+      (section) => `
+        <section class="help-section">
+          <h3>${escape(section.title)}</h3>
+          ${section.intro ? `<p class="help-section-intro">${escape(section.intro)}</p>` : ''}
+          <dl>
+            ${section.entries
+              .map(
+                (e) => `
+                  <div>
+                    <dt>${escape(e.name)}</dt>
+                    <dd>${escape(e.desc)}</dd>
+                  </div>`,
+              )
+              .join('')}
+          </dl>
+        </section>`,
+    )
+    .join('');
+
+  modal.innerHTML = `
+    <div class="modal-header">
+      <h2>Quick tutorial — ${escape(viewLabel)}</h2>
+      <button type="button" class="modal-close" aria-label="Close">×</button>
+    </div>
+    <div class="modal-body help-body">
+      <p class="help-intro">${escape(intro)}</p>
+      ${body}
+    </div>
+  `;
+
+  backdrop.appendChild(modal);
+  document.body.appendChild(backdrop);
+  attachFocusTrap(modal);
+
+  let triggerFocus: HTMLElement | null = null;
+  const closeBtn = modal.querySelector<HTMLButtonElement>('.modal-close')!;
+
+  function open() {
+    triggerFocus = rememberFocus();
+    backdrop.hidden = false;
+    window.setTimeout(() => closeBtn.focus(), 0);
+  }
+
+  function close() {
+    backdrop.hidden = true;
+    const prior = triggerFocus;
+    triggerFocus = null;
+    restoreFocus(prior);
+  }
+
+  function toggle() {
+    if (backdrop.hidden) open();
+    else close();
+  }
+
+  button.addEventListener('click', () => {
+    button.blur();
+    toggle();
+  });
+
+  closeBtn.addEventListener('click', close);
+  backdrop.addEventListener('click', (e) => {
+    if (e.target === backdrop) close();
+  });
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !backdrop.hidden) {
+      close();
+      e.preventDefault();
+    }
+  });
+
+  return { open, close, toggle };
+}
+
+function escape(s: string): string {
+  return s
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;');
+}
