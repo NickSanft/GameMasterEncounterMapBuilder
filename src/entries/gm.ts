@@ -50,6 +50,17 @@ import {
   saveState,
   saveStateSync,
 } from '../state/persistence.js';
+import {
+  getActiveSceneId,
+  setActiveSceneId,
+  ensureActiveScene,
+  getSceneState,
+  saveScene,
+  listScenes,
+  captureThumbnail,
+} from '../state/scenes.js';
+import { mountScenesModal } from '../ui/scenes-modal.js';
+import { mountSceneIndicator } from '../ui/scene-indicator.js';
 import { exportSession, importSession } from '../state/export.js';
 import { createPreferences } from '../state/preferences.js';
 import { loadCamera, saveCamera, clearCamera } from '../state/camera-persistence.js';
@@ -99,19 +110,19 @@ import type { PanZoomHandle } from '../input/pan-zoom.js';
 import { EXPORT_FILENAME_PREFIX } from '../util/constants.js';
 import { isEditableFocus } from '../util/focus.js';
 
-const canvas = document.getElementById('canvas') as HTMLCanvasElement | null;
-if (!canvas) throw new Error('Canvas element #canvas not found');
+const canvasEl = document.getElementById('canvas');
+if (!(canvasEl instanceof HTMLCanvasElement)) {
+  throw new Error('Canvas element #canvas not found');
+}
+const canvas: HTMLCanvasElement = canvasEl;
 
 const preferences = createPreferences();
 applyPrefsToBody(preferences.get());
 
 // Start with the default state so first paint is instant; hydrate from
-// IDB (falling back to the localStorage backup) as soon as the async
-// load resolves.
+// IDB asynchronously (see `hydrateFromIdb` at the bottom of this file,
+// called once all UI handles are in scope).
 const store = createStore();
-void loadPersistedState().then((persisted) => {
-  if (persisted) store.loadState(persisted);
-});
 const selection = createSelectionState();
 const dragOverlayRef = createDragOverlayRef();
 const lassoOverlayRef = createLassoOverlayRef();
@@ -439,6 +450,7 @@ mountSessionMenu(document.body, {
   onInitiative: () => initiativeModal.open(),
   onTokenLibrary: () => tokenLibraryModal.open(),
   onTemplateLibrary: () => templateLibraryModal.open(),
+  onScenes: () => scenesModal.open(),
   onClearDrawings: () => {
     const state = store.getState();
     if (state.strokes.length === 0) return;
@@ -464,6 +476,95 @@ mountInitiativeBar(store, 'gm', {
   onOpenTracker: () => initiativeModal.open(),
 });
 mountHelpOverlay('gm');
+
+// ---- Scenes ------------------------------------------------------------
+// The active-scene pointer drives which scene the regular saveState /
+// loadPersistedState path operates on (through `ensureActiveScene`).
+// Scene switching saves the outgoing scene first, then loads the target.
+async function refreshSceneIndicator(): Promise<void> {
+  try {
+    const [list, activeId] = await Promise.all([
+      listScenes(),
+      Promise.resolve(getActiveSceneId()),
+    ]);
+    const active = activeId
+      ? list.find((s) => s.id === activeId) ?? null
+      : null;
+    sceneIndicator.setName(active?.name ?? null, list.length);
+  } catch {
+    sceneIndicator.setName(null, 0);
+  }
+}
+
+async function switchToScene(id: string): Promise<void> {
+  // Persist the outgoing scene (with a fresh thumbnail) before swapping.
+  const outgoingId = getActiveSceneId();
+  if (outgoingId) {
+    try {
+      const thumb = captureThumbnail(canvas);
+      await saveScene(outgoingId, store.getState(), {
+        thumbnail: thumb ?? undefined,
+      });
+    } catch (err) {
+      console.warn('[scenes] save-outgoing failed', err);
+    }
+  }
+
+  setActiveSceneId(id);
+  try {
+    const next = await getSceneState(id);
+    if (next) {
+      store.loadState(next);
+      store.clearHistory();
+    }
+  } catch (err) {
+    console.warn('[scenes] load-incoming failed', err);
+  }
+  // Full state to the Spectator so it reflects the new scene.
+  channel?.send({ type: 'full-state', state: serializeState(store.getState()) });
+  await refreshSceneIndicator();
+}
+
+async function handleDeleteActiveScene(): Promise<void> {
+  // Called by the modal before it deletes the active scene: pick
+  // another scene to become active, or create a blank one.
+  const list = await listScenes();
+  const activeId = getActiveSceneId();
+  const others = list.filter((s) => s.id !== activeId);
+  if (others.length > 0) {
+    await switchToScene(others[0]!.id);
+  } else {
+    // Modal disallows deleting the last scene, so this branch only
+    // triggers from a race (external delete); fall back to a blank scene.
+    const ensured = await ensureActiveScene();
+    await switchToScene(ensured);
+  }
+}
+
+const scenesModal = mountScenesModal({
+  getActiveId: () => getActiveSceneId(),
+  onSwitch: (id) => switchToScene(id),
+  onCreated: (id) => switchToScene(id),
+  onDuplicated: async () => {
+    await refreshSceneIndicator();
+  },
+  onDeleteActive: () => handleDeleteActiveScene(),
+  onChanged: () => refreshSceneIndicator(),
+});
+
+const sceneIndicator = mountSceneIndicator({
+  onClick: () => scenesModal.open(),
+});
+
+// Kick off the initial hydrate now that store + indicator are both set up.
+void loadPersistedState().then(async (persisted) => {
+  if (persisted) {
+    store.loadState(persisted);
+    store.clearHistory();
+  }
+  await refreshSceneIndicator();
+});
+
 const dicePanel = mountDicePanel({
   viewMode: 'gm',
   onLocalRoll: (roll) => {

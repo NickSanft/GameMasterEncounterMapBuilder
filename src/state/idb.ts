@@ -8,13 +8,26 @@ import { IDB_DB_NAME as DB_NAME } from '../util/constants.js';
  *   v1 — `images` object store
  *   v2 — added `tokenCatalog` + `templateCatalog` object stores
  *   v3 — added `sessions` object store for SessionState persistence
+ *   v4 — no schema change; bumped to re-run `onupgradeneeded` so browsers
+ *        that reached v3 without the `sessions` store (from a partial /
+ *        interrupted upgrade) pick it up. The upgrade handler below is
+ *        idempotent — every store is gated on `objectStoreNames.contains`.
  */
-export const DB_VERSION = 3;
+export const DB_VERSION = 4;
 
 export const IMAGES_STORE = 'images';
 export const TOKEN_CATALOG_STORE = 'tokenCatalog';
 export const TEMPLATE_CATALOG_STORE = 'templateCatalog';
 export const SESSIONS_STORE = 'sessions';
+
+/**
+ * Record id used by Phase 39 when the app only supported one session.
+ * Phase 40+ migrates any record stored under this id into a named scene
+ * and then deletes it. Left here as a shared constant so both
+ * `persistence.ts` (legacy paths) and `scenes.ts` (migration) can refer
+ * to the same key without reintroducing a circular module dependency.
+ */
+export const LEGACY_ACTIVE_SESSION_ID = 'active';
 
 export type StoreName =
   | typeof IMAGES_STORE
@@ -58,6 +71,11 @@ export function _resetDBForTests(): void {
 /**
  * Run a single-store IndexedDB transaction. The returned promise resolves
  * with the request result once the transaction completes.
+ *
+ * If the named store doesn't exist on the opened DB (which should never
+ * happen — the upgrade handler above creates it unconditionally), we
+ * throw a clear actionable error instead of the raw DOMException. Users
+ * hit with this can recover by clearing site data in devtools.
  */
 export async function runTx<T>(
   storeName: StoreName,
@@ -65,6 +83,13 @@ export async function runTx<T>(
   fn: (store: IDBObjectStore) => IDBRequest<T>,
 ): Promise<T> {
   const db = await openDB();
+  if (!db.objectStoreNames.contains(storeName)) {
+    throw new Error(
+      `IndexedDB store "${storeName}" is missing. The database schema is out ` +
+        `of sync with the app. Open devtools → Application → IndexedDB, delete ` +
+        `the "${DB_NAME}" database, and reload.`,
+    );
+  }
   return new Promise((resolve, reject) => {
     const t = db.transaction(storeName, mode);
     const s = t.objectStore(storeName);

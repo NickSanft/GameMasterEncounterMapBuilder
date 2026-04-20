@@ -18,6 +18,11 @@ export interface Store {
   redo(): boolean;
   canUndo(): boolean;
   canRedo(): boolean;
+  /**
+   * Wipe the undo/redo history. Used when switching between scenes so
+   * an undo from scene B can't roll state back into scene A.
+   */
+  clearHistory(): void;
 }
 
 const UNDO_LIMIT = 50;
@@ -334,6 +339,13 @@ export function createStore(initial?: SessionState): Store {
     return () => listeners.delete(listener);
   }
 
+  function clearHistory(): void {
+    undoStack.length = 0;
+    redoStack.length = 0;
+    lastKey = null;
+    lastKeyTime = 0;
+  }
+
   return {
     getState: () => state,
     applyPatch,
@@ -345,5 +357,6 @@ export function createStore(initial?: SessionState): Store {
     redo,
     canUndo: () => undoStack.length > 0,
     canRedo: () => redoStack.length > 0,
+    clearHistory,
   };
 }

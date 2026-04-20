@@ -39,6 +39,40 @@ Planned work for the remaining phases. See the plan conversation for full scope.
 
 ---
 
+## [0.40.0] — 2026-04-20 — Scenes / multiple encounters
+
+### Added
+- **Scene system.** A session can now contain many **Scenes** — each one a full snapshot of background, grid, tokens, fog, annotations, AoE templates, drawings, and initiative. Switching scenes saves the outgoing state and loads the incoming one in a single atomic swap. Undo history is per-scene (undo after a switch can't roll state back into the previous scene).
+- **Scenes modal** (session menu → *Scenes…*, or the new Scene indicator). Lists every scene newest-first with a thumbnail, name, and "Updated N min ago" subtitle. Buttons per row: **Switch**, **Rename**, **Duplicate**, **Delete** (disabled when it would leave zero scenes). The "+ New scene" button prompts for a name, creates the scene, and switches to it.
+- **Scene indicator** — a small clickable badge next to the "GM View" label showing `Scene: {name}` and a count pill when there's more than one scene. Clicking it opens the Scenes modal; it also keeps the current scene name visible at all times.
+- **Thumbnail capture** — every scene switch grabs a 240 px-wide JPEG of the canvas before swap, stored in the scene record so the Scenes modal shows a visual preview rather than a placeholder.
+- **Pure helpers** `src/state/scenes.ts`: `createScene`, `listScenes` (metadata-only projection), `getScene`, `getSceneState`, `renameScene`, `deleteScene`, `duplicateScene`, `saveScene`, `getActiveSceneId` / `setActiveSceneId` (localStorage pointer), `ensureActiveScene` (boot-time bootstrap that auto-promotes legacy Phase 39 records + auto-creates a blank scene on fresh installs), and `captureThumbnail`. **17 unit tests** cover CRUD, ordering, pointer round-trip, stale-pointer recovery, and legacy-record promotion.
+- **Store**: new `store.clearHistory()` clears the undo/redo stacks — called on every scene switch.
+- **IDB**: `sessions` object store now holds full `SceneRecord { id, name, state, thumbnail, createdAt, updatedAt }` rows keyed by scene id. The Phase 39 `'active'` key still works as a read-once legacy path and is deleted on first boot after the upgrade. DB_VERSION bumped to **4** (no schema change vs 3) so the idempotent `onupgradeneeded` handler re-runs for anyone whose browser reached v3 without the `sessions` store (from a partial upgrade). Added a defensive guard in `runTx` that throws a clear, actionable error when a store is unexpectedly missing — rather than an opaque `DOMException`.
+- **Active-scene pointer** lives in localStorage (`gm-encounter-maps-active-scene-id`) so it's tiny and survives independently of the session blob.
+- **Sync**: after a scene switch the GM broadcasts a fresh `full-state` to the Spectator so it mirrors the new scene.
+
+### Changed
+- `loadPersistedState()` now loads the **active** scene (not the singleton Phase 39 record). Fresh installs get a blank `Untitled scene` auto-created.
+- `saveState()` routes through `ensureActiveScene` + `saveScene(activeId, ...)` — same fire-and-forget API as 0.39, just now scoped per scene.
+- `clearPersistedState()` wipes the **active scene's** record + localStorage backup (plus the legacy Phase 39 key if it still exists). It does not delete other scenes; those are managed via the Scenes modal.
+- Session-menu ordering tweaked: the new *Scenes…* button sits between *Preset Maps* and *Token Library* so scene switching is just below the map-picker.
+- `persistence.test.ts` updated for the new "always have an active scene" semantics — a fresh DB + no stored state now yields a blank default scene rather than `null`.
+
+### Tests
+- **17 new unit tests** in `src/state/scenes.test.ts`.
+- **5 new Playwright specs** in `e2e/scenes.spec.ts`:
+  - Scene indicator + session-menu entry + modal render with the seeded scene.
+  - Creating a new scene via the prompt → indicator updates + modal shows 2 rows.
+  - Switching scenes swaps token state end-to-end: place token → create empty scene → token gone → switch back → token restored.
+  - Rename updates both the card and the scene indicator.
+  - Duplicate produces an independent `(copy)` row.
+
+### Help overlay
+- New *Scenes…* entry in the GM session-menu section explaining the per-scene isolation and how to jump back to the modal via the Scene indicator.
+
+---
+
 ## [0.39.0] — 2026-04-20 — Session persistence → IndexedDB
 
 ### Added
@@ -474,7 +508,8 @@ Planned work for the remaining phases. See the plan conversation for full scope.
 
 ---
 
-[Unreleased]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.39.0...HEAD
+[Unreleased]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.40.0...HEAD
+[0.40.0]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.39.0...v0.40.0
 [0.39.0]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.38.0...v0.39.0
 [0.38.0]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.37.0...v0.38.0
 [0.37.0]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.36.0...v0.37.0

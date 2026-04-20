@@ -11,6 +11,7 @@ export interface SessionMenuActions {
   onTokenLibrary(): void;
   onTemplateLibrary(): void;
   onClearDrawings(): void;
+  onScenes(): void;
 }
 
 export function mountSessionMenu(
@@ -112,8 +113,18 @@ export function mountSessionMenu(
     actions.onClearDrawings();
   });
 
+  const scenesBtn = createButton(
+    'Scenes…',
+    'Switch between saved scenes, create / duplicate / delete scenes',
+  );
+  scenesBtn.addEventListener('click', () => {
+    scenesBtn.blur();
+    actions.onScenes();
+  });
+
   menu.appendChild(uploadBtn);
   menu.appendChild(presetBtn);
+  menu.appendChild(scenesBtn);
   menu.appendChild(tokenLibBtn);
   menu.appendChild(templateLibBtn);
   menu.appendChild(initiativeBtn);

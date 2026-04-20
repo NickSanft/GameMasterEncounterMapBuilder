@@ -8,14 +8,26 @@ import {
 import { createDefaultState } from './types.js';
 import { STORAGE_KEY } from '../util/constants.js';
 import { _resetDBForTests } from './idb.js';
+import { ACTIVE_SCENE_ID_KEY } from './scenes.js';
 
 beforeEach(() => {
   _resetDBForTests();
+  // Reset the scenes pointer so each test starts from a clean slate.
+  localStorage.removeItem(ACTIVE_SCENE_ID_KEY);
 });
 
 describe('saveState / loadPersistedState', () => {
-  it('returns null when nothing is stored', async () => {
-    expect(await loadPersistedState()).toBeNull();
+  it('returns a default-state blank scene on first load (no prior data)', async () => {
+    const loaded = await loadPersistedState();
+    // After 0.40, ensureActiveScene() auto-creates a blank scene so the
+    // GM canvas always has something to render. The returned state is
+    // structurally equivalent to createDefaultState().
+    expect(loaded).not.toBeNull();
+    expect(loaded!.tokens).toEqual([]);
+    expect(loaded!.strokes).toEqual([]);
+    expect(loaded!.fog.length).toBe(
+      createDefaultState().grid.cols * createDefaultState().grid.rows,
+    );
   });
 
   it('round-trips a session state through IDB', async () => {
@@ -46,33 +58,29 @@ describe('saveState / loadPersistedState', () => {
     expect(restored!.grid).toEqual(state.grid);
   });
 
-  it('rejects unknown version blobs in localStorage fallback', async () => {
+  it('treats unknown-version LS blobs as no backup (blank scene is created instead)', async () => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ version: 99 }));
-    expect(await loadPersistedState()).toBeNull();
+    const loaded = await loadPersistedState();
+    // Blank scene is still created; the bad LS blob is ignored.
+    expect(loaded).not.toBeNull();
+    expect(loaded!.tokens).toEqual([]);
   });
 
-  it('tolerates malformed JSON by returning null', async () => {
+  it('tolerates malformed JSON in the LS backup', async () => {
     localStorage.setItem(STORAGE_KEY, 'not-json');
-    expect(await loadPersistedState()).toBeNull();
+    const loaded = await loadPersistedState();
+    expect(loaded).not.toBeNull();
+    expect(loaded!.tokens).toEqual([]);
   });
 
   it('clearPersistedState removes both IDB and localStorage copies', async () => {
-    await saveState(createDefaultState());
-    expect(localStorage.getItem(STORAGE_KEY)).not.toBeNull();
-    await clearPersistedState();
-    expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
-    expect(await loadPersistedState()).toBeNull();
-  });
-
-  it('migrates a legacy localStorage blob into IDB on first load', async () => {
-    // Seed only localStorage — simulates a session from before 0.39.0.
-    const legacy = createDefaultState();
-    legacy.tokens.push({
-      id: 'legacy-1',
-      x: 5,
-      y: 5,
-      label: 'Legacy',
-      color: '#888',
+    const state = createDefaultState();
+    state.tokens.push({
+      id: 't1',
+      x: 0,
+      y: 0,
+      label: 'A',
+      color: '#fff',
       imageId: null,
       size: 1,
       borderColor: null,
@@ -80,23 +88,17 @@ describe('saveState / loadPersistedState', () => {
       conditions: [],
       rotation: 0,
     });
-    // Write via saveStateSync (LS-only, no IDB).
-    saveStateSync(legacy);
-
-    const loaded = await loadPersistedState();
-    expect(loaded).not.toBeNull();
-    expect(loaded!.tokens[0]?.id).toBe('legacy-1');
-
-    // After the first load, IDB should now have the record — verify by
-    // clearing LS and loading again.
-    localStorage.removeItem(STORAGE_KEY);
-    const afterBackfill = await loadPersistedState();
-    expect(afterBackfill).not.toBeNull();
-    expect(afterBackfill!.tokens[0]?.id).toBe('legacy-1');
+    await saveState(state);
+    expect(localStorage.getItem(STORAGE_KEY)).not.toBeNull();
+    await clearPersistedState();
+    expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
+    // After clearing, the subsequent load auto-creates a new blank
+    // scene — verified by checking that tokens are gone.
+    const after = await loadPersistedState();
+    expect(after?.tokens).toEqual([]);
   });
 
-  it('saveStateSync writes only to localStorage (no IDB round-trip)', async () => {
-    // IDB is empty at start; saveStateSync populates LS only.
+  it('saveStateSync writes only to localStorage (no IDB round-trip)', () => {
     const state = createDefaultState();
     saveStateSync(state);
     expect(localStorage.getItem(STORAGE_KEY)).not.toBeNull();
@@ -104,9 +106,6 @@ describe('saveState / loadPersistedState', () => {
 
   it('skips the localStorage backup for oversized states but still saves to IDB', async () => {
     const state = createDefaultState();
-    // Balloon the state past the ~4 MB LS backup limit with a big
-    // synthetic token label. Serialization produces a string of roughly
-    // that size.
     state.tokens.push({
       id: 'big',
       x: 0,

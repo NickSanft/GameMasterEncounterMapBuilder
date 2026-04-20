@@ -145,6 +145,59 @@ body.view {
   z-index: 20;
 }
 
+/* Scene indicator — click to open the Scenes modal. */
+.scene-indicator {
+  position: absolute;
+  top: 0.75rem;
+  left: 5.5rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.3rem 0.65rem;
+  background: var(--panel-bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--fg);
+  font-family: inherit;
+  font-size: 0.78rem;
+  cursor: pointer;
+  z-index: 20;
+  max-width: 22rem;
+  transition: border-color 100ms ease, background 100ms ease;
+}
+
+.scene-indicator:hover {
+  border-color: var(--accent);
+  background: var(--hover-overlay);
+}
+
+.scene-indicator:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+.scene-indicator-label {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  max-width: 16rem;
+}
+
+.scene-indicator-count {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  background: var(--accent);
+  color: var(--bg);
+  padding: 0.1rem 0.4rem;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.scene-indicator-count[hidden] {
+  display: none;
+}
+
 /* GM Toolbar */
 .gm-toolbar {
   position: absolute;
@@ -1311,6 +1364,139 @@ body.reduced-motion *::after {
 
 .library-delete:hover {
   background: #a13b3b;
+}
+
+/* Scenes modal */
+.scenes-modal {
+  min-width: 640px;
+  max-width: min(900px, 94vw);
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.scenes-modal .modal-body {
+  overflow-y: auto;
+  padding-right: 0.4rem;
+}
+
+.scenes-toolbar {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.4rem;
+}
+
+.scenes-toolbar button.primary {
+  background: var(--accent);
+  color: var(--bg);
+  border-color: var(--accent);
+  font-weight: 600;
+}
+
+.scenes-toolbar button.primary:hover:not(:disabled) {
+  filter: brightness(1.05);
+}
+
+.scenes-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 0.7rem;
+}
+
+.scene-card {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  transition: border-color 100ms ease, transform 120ms ease, box-shadow 120ms ease;
+}
+
+.scene-card:hover {
+  border-color: var(--accent);
+  transform: translateY(-2px);
+  box-shadow: var(--panel-shadow);
+}
+
+.scene-card.active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+.scene-card-main {
+  appearance: none;
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  color: var(--fg);
+  font-family: inherit;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  text-align: left;
+}
+
+.scene-thumb {
+  aspect-ratio: 3 / 2;
+  width: 100%;
+  background-color: var(--bg);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--fg-muted);
+  font-size: 0.78rem;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.scene-thumb-placeholder {
+  opacity: 0.7;
+}
+
+.scene-meta {
+  padding: 0.5rem 0.65rem 0.55rem;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.scene-name {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.scene-sub {
+  font-size: 0.78rem;
+  color: var(--fg-muted);
+  margin-top: 0.2rem;
+}
+
+.scene-actions {
+  display: flex;
+  gap: 0.25rem;
+  padding: 0.3rem 0.4rem 0.4rem;
+  border-top: 1px solid var(--border);
+}
+
+.scene-actions .scene-action {
+  flex: 1;
+  padding: 0.3rem 0.25rem;
+  font-size: 0.76rem;
+}
+
+.scene-actions .scene-action.danger {
+  color: #ff8a8a;
+}
+
+.scene-actions .scene-action.danger:hover:not(:disabled) {
+  background: #a13b3b;
+  color: #fff;
 }
 
 /* Diagnostics overlay */

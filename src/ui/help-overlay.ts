@@ -40,6 +40,7 @@ const GM_SECTIONS: HelpSection[] = [
     entries: [
       { name: 'Upload Map', desc: 'Pick an image file from your computer to use as the battle map background.' },
       { name: 'Preset Maps', desc: 'Choose from a built-in gallery of ready-made backgrounds (tavern, dungeon, forest, etc.).' },
+      { name: 'Scenes…', desc: 'Manage multiple saved encounters in one session. Each scene has its own map, tokens, fog, annotations, drawings, AoE templates, and initiative. Switching scenes saves the outgoing one and loads the incoming one; undo history is per-scene. Click the "Scene: X" indicator near the top-left badge to jump back here.' },
       { name: 'Token Library', desc: 'Save individual tokens (name, color, image, border) for reuse across sessions. Click a saved token to drop it at the center of your current view.' },
       { name: 'Template Library', desc: 'Save a group of selected tokens as a named template, preserving their relative positions. Drop the whole pack with one click.' },
       { name: 'Initiative', desc: 'Open the combat initiative tracker. Add entries, link them to tokens on the map, and cycle through turns. The active combatant glows on the canvas.' },
