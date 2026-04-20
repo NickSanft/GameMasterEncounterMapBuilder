@@ -39,6 +39,31 @@ Planned work for the remaining phases. See the plan conversation for full scope.
 
 ---
 
+## [0.39.0] — 2026-04-20 — Session persistence → IndexedDB
+
+### Added
+- **IDB-backed session persistence.** New `sessions` object store (DB_VERSION bumped 2 → 3) now holds the serialized session state as the primary source of truth. localStorage remains as a small backup, used only when the serialized blob fits under ~4 MB. Unblocks arbitrarily large sessions (big fog grids, many tokens, rich libraries) that would previously hit the localStorage quota.
+- **Three new persistence APIs** in `src/state/persistence.ts`:
+  - `saveState(state)` — async; writes to IDB first, writes a localStorage backup if it fits under the 4 MB limit.
+  - `saveStateSync(state)` — synchronous; localStorage-only, for `beforeunload` where IDB writes can't complete.
+  - `loadPersistedState()` — async; reads from IDB first, falls back to localStorage. When LS wins (legacy pre-0.39 sessions), backfills IDB on the next `saveState` call so subsequent loads are IDB-fast.
+- **Migration path** is automatic — users upgrading from 0.38 with only a localStorage blob will have their session transparently loaded and copied into IDB on the first page load. No user action required.
+- **`beforeunload` fallback** — GM + Spectator entries now call `saveStateSync(store.getState())` in addition to `persist.flush()`. The flushed IDB write can't beat the unload, but the sync LS backup writes before the page dies. Next load prefers IDB, so on a clean shutdown this is a no-op.
+
+### Changed
+- `createStore()` on GM + Spectator now starts with the default state for instant first paint; `loadPersistedState()` hydrates in the background as soon as IDB resolves. Tokens/fog/etc. from the last session pop in once the async load completes (typically <50 ms).
+- `saveState()` is now `Promise<void>`; existing debounced callers already use it fire-and-forget with `void`.
+- `clearPersistedState()` now clears both IDB and localStorage; it's async.
+
+### Tests
+- `src/state/persistence.test.ts` expanded from 5 sync tests to **8 async tests** covering the IDB round-trip, legacy-LS migration + backfill, the `saveStateSync` LS-only path, and the oversize-state fallback (when a blob exceeds the LS quota, IDB still has it but LS is cleared rather than overwriting a stale copy).
+- New Playwright spec `e2e/persistence.spec.ts` verifies the end-to-end round-trip: place a token → reload the page → the token is restored and editable.
+
+### Notes
+- Phase 40 ("Scenes — multiple encounters") will introduce per-scene keyed session records on top of this store. The `ACTIVE_SESSION_ID = 'active'` constant is already parameterized so the diff will be minor.
+
+---
+
 ## [0.38.0] — 2026-04-20 — Freehand draw tool
 
 ### Added
@@ -449,7 +474,8 @@ Planned work for the remaining phases. See the plan conversation for full scope.
 
 ---
 
-[Unreleased]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.38.0...HEAD
+[Unreleased]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.39.0...HEAD
+[0.39.0]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.38.0...v0.39.0
 [0.38.0]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.37.0...v0.38.0
 [0.37.0]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.36.0...v0.37.0
 [0.36.0]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.35.0...v0.36.0

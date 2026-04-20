@@ -7,17 +7,20 @@ import { IDB_DB_NAME as DB_NAME } from '../util/constants.js';
  * Version history:
  *   v1 — `images` object store
  *   v2 — added `tokenCatalog` + `templateCatalog` object stores
+ *   v3 — added `sessions` object store for SessionState persistence
  */
-export const DB_VERSION = 2;
+export const DB_VERSION = 3;
 
 export const IMAGES_STORE = 'images';
 export const TOKEN_CATALOG_STORE = 'tokenCatalog';
 export const TEMPLATE_CATALOG_STORE = 'templateCatalog';
+export const SESSIONS_STORE = 'sessions';
 
 export type StoreName =
   | typeof IMAGES_STORE
   | typeof TOKEN_CATALOG_STORE
-  | typeof TEMPLATE_CATALOG_STORE;
+  | typeof TEMPLATE_CATALOG_STORE
+  | typeof SESSIONS_STORE;
 
 let dbPromise: Promise<IDBDatabase> | null = null;
 
@@ -35,6 +38,9 @@ export function openDB(): Promise<IDBDatabase> {
       }
       if (!db.objectStoreNames.contains(TEMPLATE_CATALOG_STORE)) {
         db.createObjectStore(TEMPLATE_CATALOG_STORE, { keyPath: 'id' });
+      }
+      if (!db.objectStoreNames.contains(SESSIONS_STORE)) {
+        db.createObjectStore(SESSIONS_STORE, { keyPath: 'id' });
       }
     };
     req.onsuccess = () => resolve(req.result);

@@ -4,7 +4,11 @@ import { createStore } from '../state/store.js';
 import { DEFAULT_CAMERA } from '../state/types.js';
 import { createSyncChannel } from '../sync/channel.js';
 import { deserializeState, fromSerializablePatch } from '../sync/messages.js';
-import { loadPersistedState, saveState } from '../state/persistence.js';
+import {
+  loadPersistedState,
+  saveState,
+  saveStateSync,
+} from '../state/persistence.js';
 import { debounce, rafThrottle } from '../util/debounce.js';
 import { createImageLoader } from '../images/loader.js';
 import { createPreferences } from '../state/preferences.js';
@@ -40,8 +44,14 @@ const canvas: HTMLCanvasElement = canvasEl;
 const preferences = createPreferences();
 applyPrefsToBody(preferences.get());
 
-const initial = loadPersistedState();
-const store = createStore(initial ?? undefined);
+// Start with default state; hydrate from IDB (with LS fallback) as
+// soon as the async load resolves. Spectator typically receives a
+// full-state message from the GM shortly after, but this lets a
+// standalone Spectator tab preserve its last-seen state across reloads.
+const store = createStore();
+void loadPersistedState().then((persisted) => {
+  if (persisted) store.loadState(persisted);
+});
 
 const imageLoader = createImageLoader(() => renderer.requestRender());
 const pingManager = createPingManager(() => renderer.requestRender());
@@ -154,7 +164,9 @@ mountZoomControls(document.body, {
   onReset: () => resetCamera(renderer),
 });
 
-const persist = debounce(() => saveState(store.getState()), 200);
+const persist = debounce(() => {
+  void saveState(store.getState());
+}, 200);
 
 function updateCanvasLabel() {
   if (!canvas) return;
@@ -300,6 +312,7 @@ window.addEventListener('keydown', (e) => {
 
 window.addEventListener('beforeunload', () => {
   persist.flush();
+  saveStateSync(store.getState());
   persistCameraDebounced.flush();
 });
 

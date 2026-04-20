@@ -45,7 +45,11 @@ import { mountSettingsModal } from '../ui/settings-modal.js';
 import { mountZoomControls } from '../ui/zoom-controls.js';
 import { createSyncChannel } from '../sync/channel.js';
 import { serializeState, toSerializablePatch } from '../sync/messages.js';
-import { loadPersistedState, saveState } from '../state/persistence.js';
+import {
+  loadPersistedState,
+  saveState,
+  saveStateSync,
+} from '../state/persistence.js';
 import { exportSession, importSession } from '../state/export.js';
 import { createPreferences } from '../state/preferences.js';
 import { loadCamera, saveCamera, clearCamera } from '../state/camera-persistence.js';
@@ -101,8 +105,13 @@ if (!canvas) throw new Error('Canvas element #canvas not found');
 const preferences = createPreferences();
 applyPrefsToBody(preferences.get());
 
-const initial = loadPersistedState();
-const store = createStore(initial ?? undefined);
+// Start with the default state so first paint is instant; hydrate from
+// IDB (falling back to the localStorage backup) as soon as the async
+// load resolves.
+const store = createStore();
+void loadPersistedState().then((persisted) => {
+  if (persisted) store.loadState(persisted);
+});
 const selection = createSelectionState();
 const dragOverlayRef = createDragOverlayRef();
 const lassoOverlayRef = createLassoOverlayRef();
@@ -750,7 +759,10 @@ const diagnosticsOverlay = mountDiagnosticsOverlay({
 });
 diagnosticsOverlay.setEnabled(preferences.get().showDiagnostics);
 
-const persist = debounce(() => saveState(store.getState()), 200);
+// Async IDB save, fire-and-forget from the debounced path.
+const persist = debounce(() => {
+  void saveState(store.getState());
+}, 200);
 
 function updateCanvasLabel() {
   if (!canvas) return;
@@ -1166,6 +1178,11 @@ window.addEventListener('keydown', (e) => {
 
 window.addEventListener('beforeunload', () => {
   persist.flush();
+  // Belt-and-suspenders: the async IDB write kicked off by flush()
+  // won't complete during unload, so also do a synchronous
+  // localStorage backup write. On next load we prefer IDB, but fall
+  // back to the LS copy so an unclean shutdown doesn't lose work.
+  saveStateSync(store.getState());
   persistCameraDebounced.flush();
 });
 
