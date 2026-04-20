@@ -99,6 +99,13 @@ import { mountDiagnosticsOverlay } from '../ui/diagnostics-overlay.js';
 import { mountHelpOverlay } from '../ui/help-overlay.js';
 import { mountDamageHealDialog } from '../ui/damage-heal-dialog.js';
 import { mountDicePanel } from '../ui/dice-panel.js';
+import { mountStatusBanners } from '../ui/status-banners.js';
+import { createConflictDetector } from '../state/conflict-detector.js';
+import {
+  consumeDirtyFlag,
+  markDirty,
+  markClean,
+} from '../state/dirty-flag.js';
 import type { ViewportRect } from '../sync/messages.js';
 import {
   zoomBy,
@@ -812,6 +819,56 @@ canvas.addEventListener('contextmenu', (e) => {
 
 const channel = createSyncChannel();
 
+// ---- Conflict detection + crash recovery ---------------------------------
+// Every GM tab gets a random id + broadcasts it every ~2 s. Two open GMs
+// see each other and surface a banner. The dirty flag is atomic: boot
+// reads + sets, beforeunload clears. If boot sees it already set, the
+// previous session wasn't cleanly closed.
+const statusBanners = mountStatusBanners();
+const gmTabId = nid();
+const conflictDetector = createConflictDetector(gmTabId, { stalenessMs: 6000 });
+const HEARTBEAT_INTERVAL_MS = 2000;
+let conflictBannerVisible = false;
+
+function checkConflictBanner() {
+  const hasConflict = conflictDetector.hasConflict(Date.now());
+  if (hasConflict && !conflictBannerVisible) {
+    statusBanners.show({
+      message:
+        'Another GM tab is open — changes from both tabs will overwrite each other. Close the other tab, or switch to Spectator.',
+      variant: 'warn',
+      dismissible: false,
+    });
+    conflictBannerVisible = true;
+  } else if (!hasConflict && conflictBannerVisible) {
+    statusBanners.hide();
+    conflictBannerVisible = false;
+  }
+}
+
+if (channel) {
+  const sendHeartbeat = () => channel.send({ type: 'gm-heartbeat', tabId: gmTabId });
+  sendHeartbeat();
+  window.setInterval(sendHeartbeat, HEARTBEAT_INTERVAL_MS);
+  window.setInterval(checkConflictBanner, HEARTBEAT_INTERVAL_MS);
+}
+
+// Crash-recovery banner — one-shot on boot.
+if (consumeDirtyFlag()) {
+  statusBanners.show({
+    message:
+      "Your last session wasn't closed cleanly. It's been restored from the autosave — no action needed.",
+    variant: 'info',
+    dismissible: true,
+    onDismiss: () => statusBanners.hide(),
+  });
+}
+// Re-mark dirty on every state change (idempotent after the first) so a
+// mid-session crash leaves the flag set.
+store.subscribe(() => {
+  markDirty();
+});
+
 function sendCameraIfBroadcasting() {
   if (channel && preferences.get().broadcastCamera) {
     channel.send({ type: 'camera', camera: renderer.camera });
@@ -836,6 +893,9 @@ if (channel) {
       if (preferences.get().showSpectatorViewport) renderer.requestRender();
     } else if (msg.type === 'dice-roll') {
       dicePanel.pushRemoteRoll(msg.roll);
+    } else if (msg.type === 'gm-heartbeat') {
+      conflictDetector.noteHeartbeat(msg.tabId, Date.now());
+      checkConflictBanner();
     }
   });
   channel.send({ type: 'hello', from: 'gm' });
@@ -1285,6 +1345,10 @@ window.addEventListener('beforeunload', () => {
   // back to the LS copy so an unclean shutdown doesn't lose work.
   saveStateSync(store.getState());
   persistCameraDebounced.flush();
+  // Signal graceful shutdown. If we crash or force-close instead, this
+  // line never runs → next boot sees the dirty flag and shows the
+  // "restored from autosave" banner.
+  markClean();
 });
 
 function applyPrefsToBody(prefs: {

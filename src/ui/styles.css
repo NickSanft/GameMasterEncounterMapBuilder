@@ -2103,6 +2103,60 @@ body.notes-open .zoom-controls {
   z-index: 30;
 }
 
+/* Status banners (conflict detection, crash recovery) — pinned to the
+ * top center so the user can't miss them, but narrow enough to leave
+ * the initiative bar room beside it. */
+.status-banner {
+  position: fixed;
+  top: 0.75rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 120;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.75rem;
+  max-width: min(680px, 92vw);
+  padding: 0.55rem 0.85rem;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  line-height: 1.35;
+  box-shadow: var(--panel-shadow);
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.status-banner[hidden] { display: none; }
+
+.status-banner-warn {
+  background: #7a1e1e;
+  color: #fff0f0;
+  border: 1px solid #a93434;
+}
+
+.status-banner-info {
+  background: #1e4a7a;
+  color: #e3f0ff;
+  border: 1px solid #3470a9;
+}
+
+.status-banner-dismiss {
+  appearance: none;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  color: inherit;
+  font-family: inherit;
+  font-size: 0.78rem;
+  padding: 0.2rem 0.6rem;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.status-banner-dismiss:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.status-banner-dismiss[hidden] { display: none; }
+
 /* Floating 🎲 dice button (bottom-left, above help button) */
 .dice-button {
   position: fixed;

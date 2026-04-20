@@ -39,6 +39,30 @@ Planned work for the remaining phases. See the plan conversation for full scope.
 
 ---
 
+## [0.41.0] — 2026-04-20 — Conflict detection + crash recovery
+
+### Added
+- **GM-tab conflict detection.** Every GM tab generates a random `tabId` on load and broadcasts a `gm-heartbeat` message over the existing sync channel every 2 seconds. Any other GM tab that sees a heartbeat with a different `tabId` surfaces a persistent red status banner: *"Another GM tab is open — changes from both tabs will overwrite each other. Close the other tab, or switch to Spectator."* The banner auto-clears when the peer stops heartbeating (staleness window: 6 s).
+- **Crash-recovery banner.** A one-shot boot-time banner — *"Your last session wasn't closed cleanly. It's been restored from the autosave — no action needed."* — appears when the previous session ended without running `beforeunload` (force-close, browser crash, laptop sleep, etc.). Dismiss button hides it; it does not come back unless another unclean shutdown occurs.
+- **Pure helpers:**
+  - `src/state/conflict-detector.ts` — `createConflictDetector({ stalenessMs })` with `noteHeartbeat`, `hasConflict(now)`, `reset`, `peers`. Pure / time-injected, so unit tests drive scenarios without real timers.
+  - `src/state/dirty-flag.ts` — `consumeDirtyFlag()` (atomic read-and-set), `markDirty()` (idempotent), `markClean()` (clear-on-graceful-exit), backed by the localStorage key `gm-encounter-maps-dirty`.
+- **Shared status-banners component** (`src/ui/status-banners.ts`) — one element pinned top-center, two variants (`warn` for conflict, `info` for recovery), optional Dismiss button. Conflict banner takes precedence; only one banner is visible at a time.
+- **Sync protocol**: new `gm-heartbeat` `SyncMessage` with a `tabId: string` payload.
+
+### Changed
+- `beforeunload` now calls `markClean()` after flushing the persist queue, signalling a graceful shutdown for the next boot.
+- Store subscribers keep the dirty flag set on every state change (idempotent after the first write).
+
+### Tests
+- **13 new unit tests** — 7 for `conflict-detector` (own-tab ignore, peer tracking, staleness window, multiple peers, reset) + 6 for `dirty-flag` (boot semantics, idempotent mark-dirty, crash lifecycle, string-coercion robustness).
+- **3 new Playwright specs** in `e2e/conflict-recovery.spec.ts`:
+  - Crash-recovery banner appears when the dirty flag is seeded before boot, and the Dismiss button hides it.
+  - No banner on a clean load.
+  - Conflict banner appears when a second GM tab is simulated via direct BroadcastChannel posts, and clears once the peer stops heartbeating.
+
+---
+
 ## [0.40.0] — 2026-04-20 — Scenes / multiple encounters
 
 ### Added
@@ -508,7 +532,8 @@ Planned work for the remaining phases. See the plan conversation for full scope.
 
 ---
 
-[Unreleased]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.40.0...HEAD
+[Unreleased]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.41.0...HEAD
+[0.41.0]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.40.0...v0.41.0
 [0.40.0]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.39.0...v0.40.0
 [0.39.0]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.38.0...v0.39.0
 [0.38.0]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.37.0...v0.38.0

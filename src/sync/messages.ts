@@ -72,7 +72,13 @@ export type SyncMessage =
   | { type: 'request-camera' }
   | { type: 'ping'; x: number; y: number; color?: string }
   | { type: 'spectator-viewport'; viewport: ViewportRect }
-  | { type: 'dice-roll'; roll: DiceRollBroadcast };
+  | { type: 'dice-roll'; roll: DiceRollBroadcast }
+  /**
+   * Liveness ping every GM tab broadcasts every few seconds so other
+   * GM tabs can detect that they're double-booked. Each tab has a
+   * session-random id; two tabs see conflicting ids and can warn.
+   */
+  | { type: 'gm-heartbeat'; tabId: string };
 
 export function serializeState(s: SessionState): SerializedSessionState {
   return {
