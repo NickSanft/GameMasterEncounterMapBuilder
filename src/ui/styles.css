@@ -1829,6 +1829,222 @@ body.notes-open .zoom-controls {
   z-index: 30;
 }
 
+/* Floating 🎲 dice button (bottom-left, above help button) */
+.dice-button {
+  position: fixed;
+  bottom: 3.6rem;
+  left: 0.85rem;
+  width: 2.4rem;
+  height: 2.4rem;
+  border-radius: 50%;
+  background: var(--panel-bg);
+  color: var(--fg);
+  border: 2px solid var(--accent);
+  font-size: 1.25rem;
+  font-family: inherit;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  line-height: 1;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+  z-index: 15;
+  transition: transform 120ms ease, box-shadow 120ms ease, filter 120ms ease;
+  user-select: none;
+}
+
+.dice-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45);
+  filter: brightness(1.1);
+}
+
+.dice-button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--accent), 0 2px 8px rgba(0, 0, 0, 0.35);
+}
+
+.dice-button:active { transform: translateY(0); }
+
+body.notes-open .dice-button {
+  left: calc(320px + 0.85rem);
+}
+
+/* Dice panel modal */
+.dice-panel {
+  min-width: 420px;
+  max-width: min(560px, 94vw);
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.dice-panel .modal-body {
+  overflow-y: auto;
+  padding-right: 0.4rem;
+  gap: 0.75rem;
+}
+
+.dice-quick {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.dice-quick button {
+  min-width: 3rem;
+  padding: 0.35rem 0.6rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.88rem;
+  font-weight: 600;
+  text-transform: none;
+}
+
+.dice-expr-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: stretch;
+}
+
+.dice-expr-row input[type='text'] {
+  flex: 1;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.dice-expr-row button.primary {
+  background: var(--accent);
+  color: var(--bg);
+  border-color: var(--accent);
+  font-weight: 600;
+  padding: 0.45rem 1rem;
+}
+
+.dice-expr-row button.primary:hover:not(:disabled) {
+  filter: brightness(1.05);
+}
+
+.dice-error {
+  margin: 0;
+  min-height: 1rem;
+  font-size: 0.82rem;
+  color: #ff8a8a;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.dice-error:empty,
+.dice-error:not(.visible) {
+  visibility: hidden;
+}
+
+.dice-history {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding-top: 0.3rem;
+  border-top: 1px solid var(--border);
+}
+
+.dice-history-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.78rem;
+  color: var(--fg-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 700;
+}
+
+.dice-clear {
+  font-size: 0.75rem;
+  padding: 0.2rem 0.55rem;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.dice-history-empty {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--fg-muted);
+  text-transform: none;
+  letter-spacing: 0;
+  text-align: center;
+  padding: 0.6rem 0;
+}
+
+.dice-history-empty[hidden] { display: none; }
+
+.dice-history-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  max-height: 18rem;
+  overflow-y: auto;
+}
+
+.dice-history-item {
+  padding: 0.35rem 0.55rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.dice-history-item.dice-nat20 {
+  border-color: #4caf50;
+  box-shadow: inset 0 0 0 1px #4caf50;
+}
+
+.dice-history-item.dice-nat1 {
+  border-color: #c0392b;
+  box-shadow: inset 0 0 0 1px #c0392b;
+}
+
+.dice-history-item.dice-from-gm {
+  border-left: 3px solid var(--accent);
+}
+
+.dice-history-item.dice-from-spectator {
+  border-left: 3px solid #7ab5d1;
+}
+
+.dice-history-line {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.75rem;
+}
+
+.dice-history-source {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.85rem;
+  color: var(--fg);
+}
+
+.dice-history-total {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--fg);
+  font-variant-numeric: tabular-nums;
+}
+
+.dice-history-item.dice-nat20 .dice-history-total { color: #4caf50; }
+.dice-history-item.dice-nat1 .dice-history-total { color: #c0392b; }
+
+.dice-history-breakdown {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.78rem;
+  color: var(--fg-muted);
+  margin-top: 0.15rem;
+  word-break: break-word;
+}
+
 /* Floating "?" help button (bottom-left) */
 .help-button {
   position: fixed;

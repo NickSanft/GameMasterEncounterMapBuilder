@@ -47,6 +47,20 @@ export interface ViewportRect {
   height: number;
 }
 
+export interface DiceRollBroadcast {
+  /** Source expression as the user typed it. */
+  source: string;
+  /** Who rolled it — affects the "GM rolled…" / "You rolled…" label. */
+  from: 'gm' | 'spectator';
+  /** Final total after modifiers. */
+  total: number;
+  /** Pretty, pre-formatted breakdown (see formatRoll). */
+  breakdown: string;
+  /** Monotonically-increasing id (timestamp) so duplicate messages can
+   * be de-duped by receivers. */
+  id: number;
+}
+
 export type SyncMessage =
   | { type: 'hello'; from: 'gm' | 'spectator' }
   | { type: 'full-state'; state: SerializedSessionState }
@@ -55,7 +69,8 @@ export type SyncMessage =
   | { type: 'camera'; camera: Camera }
   | { type: 'request-camera' }
   | { type: 'ping'; x: number; y: number; color?: string }
-  | { type: 'spectator-viewport'; viewport: ViewportRect };
+  | { type: 'spectator-viewport'; viewport: ViewportRect }
+  | { type: 'dice-roll'; roll: DiceRollBroadcast };
 
 export function serializeState(s: SessionState): SerializedSessionState {
   return {

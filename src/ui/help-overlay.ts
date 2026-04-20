@@ -78,6 +78,7 @@ const GM_SECTIONS: HelpSection[] = [
       { name: ', / .', desc: 'Rotate the selection 45° counter-clockwise / clockwise. Add Shift for 90° steps.' },
       { name: 'Alt+click stacked cell', desc: 'When two or more tokens share a cell, Alt+click cycles selection down through the stack one at a time. Right-click the stack for a full list of members.' },
       { name: 'Drag a token', desc: 'A dashed yellow line + distance pill show where you started and how far you\u2019ve moved. Unit (squares/feet) and diagonal rule are configurable in Settings → Appearance → Distance.' },
+      { name: 'Dice roller (🎲)', desc: 'Bottom-left button opens a dice panel. Quick-pick d4–d100 + custom expressions like 1d20+5, 4d6kh3, 2d20kh1 (advantage). Results are shared with the Spectator automatically.' },
     ],
   },
   {
@@ -137,6 +138,7 @@ const SPECTATOR_SECTIONS: HelpSection[] = [
       { name: 'Space+drag / middle-mouse', desc: 'Pan the camera.' },
       { name: 'Scroll wheel', desc: 'Zoom toward the cursor.' },
       { name: 'Fog of war', desc: 'Only cells the GM has revealed are fully visible. Tokens under hidden cells don\u2019t render here.' },
+      { name: 'Dice roller (🎲)', desc: 'Bottom-left button opens a dice panel. Quick-pick d4–d100 + custom expressions like 1d20+5, 4d6kh3 (stat rolling), 2d20kh1 (advantage). Rolls are shared with the GM automatically.' },
     ],
   },
 ];

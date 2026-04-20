@@ -74,6 +74,7 @@ import { mountInitiativeModal } from '../ui/initiative-modal.js';
 import { mountDiagnosticsOverlay } from '../ui/diagnostics-overlay.js';
 import { mountHelpOverlay } from '../ui/help-overlay.js';
 import { mountDamageHealDialog } from '../ui/damage-heal-dialog.js';
+import { mountDicePanel } from '../ui/dice-panel.js';
 import type { ViewportRect } from '../sync/messages.js';
 import {
   zoomBy,
@@ -409,6 +410,12 @@ mountInitiativeBar(store, 'gm', {
   onOpenTracker: () => initiativeModal.open(),
 });
 mountHelpOverlay('gm');
+const dicePanel = mountDicePanel({
+  viewMode: 'gm',
+  onLocalRoll: (roll) => {
+    channel?.send({ type: 'dice-roll', roll });
+  },
+});
 
 function ping(worldX: number, worldY: number) {
   pingManager.add(worldX, worldY);
@@ -643,6 +650,8 @@ if (channel) {
       spectatorViewportRef.current = msg.viewport;
       spectatorViewportRef.lastUpdate = Date.now();
       if (preferences.get().showSpectatorViewport) renderer.requestRender();
+    } else if (msg.type === 'dice-roll') {
+      dicePanel.pushRemoteRoll(msg.roll);
     }
   });
   channel.send({ type: 'hello', from: 'gm' });

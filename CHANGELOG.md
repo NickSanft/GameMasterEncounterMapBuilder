@@ -39,6 +39,29 @@ Planned work for the remaining phases. See the plan conversation for full scope.
 
 ---
 
+## [0.36.0] — 2026-04-20 — Dice roller
+
+### Added
+- **Dice roller panel** — new floating 🎲 button pinned to the bottom-left (above the `?` help button, below the notes panel when it's open). Opens a focused modal with quick-pick d4/d6/d8/d10/d12/d20/d100 buttons, a monospace custom-expression input, inline parse-error feedback, and a scrolling 20-entry history with totals and per-die breakdowns.
+- **Expression parser + roller** (`src/state/dice.ts`). Pure, RNG-injectable, non-mutating. Supports:
+  - Basic: `1d20`, `2d6`, `1d20+5`, `2d6-2`
+  - Multiple groups: `1d20+1d4+3`, `1d8-1d4`
+  - Keep-highest / keep-lowest: `4d6kh3` (stat rolls), `2d20kh1` (advantage), `2d20kl1` (disadvantage)
+  - Leading negative: `-1d4`
+  - Whitespace and mixed case tolerated
+  - Clear `DiceParseError` messages for bad input.
+- **`formatRoll()`** renders a compact breakdown, e.g. `[15] +5 = 20` or `[5, 6, 4, ~2~] = 15` (tildes mark dropped dice).
+- **Crit highlighting** — a kept natural 20 on a single `d20` lights up the history row green; a natural 1 goes red.
+- **Sync** — new `dice-roll` `SyncMessage` with `{ source, from: 'gm' | 'spectator', total, breakdown, id }`. GM rolls show on the Spectator and vice versa, prefixed with `GM ·` or `Spectator ·` and a colored left border. Self-echo and duplicate-by-id are both filtered out.
+- **Help overlay** documents the dice panel in both the GM and Spectator tutorials.
+- **22 new unit tests** cover parser edge cases, deterministic rolls via seeded RNG, keep-high/low masking, negative-sign groups, and the formatter.
+- **7 new Playwright specs** cover panel open/empty state, d20 quick-roll bounds, custom expression + Enter commit, inline error on malformed input, Clear history, Escape close, and the Spectator-view dice button.
+
+### Notes
+- Rolls do not persist across page reloads — history is intentionally session-local so it doesn't balloon IDB or leak into exports.
+
+---
+
 ## [0.35.0] — 2026-04-20 — Token stacking affordance
 
 ### Added
@@ -387,7 +410,8 @@ Planned work for the remaining phases. See the plan conversation for full scope.
 
 ---
 
-[Unreleased]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.35.0...HEAD
+[Unreleased]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.36.0...HEAD
+[0.36.0]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.35.0...v0.36.0
 [0.35.0]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.34.0...v0.35.0
 [0.34.0]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.33.0...v0.34.0
 [0.33.0]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.32.0...v0.33.0

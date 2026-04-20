@@ -15,6 +15,7 @@ import { mountShortcutOverlay } from '../ui/shortcut-overlay.js';
 import { mountInitiativeBar } from '../ui/initiative-bar.js';
 import { mountDiagnosticsOverlay } from '../ui/diagnostics-overlay.js';
 import { mountHelpOverlay } from '../ui/help-overlay.js';
+import { mountDicePanel } from '../ui/dice-panel.js';
 import { createPingManager } from '../state/ping-manager.js';
 import { createMeasurementOverlayRef } from '../input/context.js';
 import { createMeasureTool } from '../input/tool-measure.js';
@@ -109,6 +110,12 @@ const settingsModal = mountSettingsModal({
 const shortcutOverlay = mountShortcutOverlay('spectator');
 mountInitiativeBar(store, 'spectator');
 mountHelpOverlay('spectator');
+const dicePanel = mountDicePanel({
+  viewMode: 'spectator',
+  onLocalRoll: (roll) => {
+    channel?.send({ type: 'dice-roll', roll });
+  },
+});
 
 let rulerActive = false;
 const rulerBtn = mountSpectatorToolbar(() => setRulerActive(!rulerActive));
@@ -203,6 +210,8 @@ if (channel) {
     } else if (msg.type === 'hello' && msg.from === 'gm') {
       // GM just loaded — (re)announce our viewport so the indicator appears.
       broadcastViewportThrottled();
+    } else if (msg.type === 'dice-roll') {
+      dicePanel.pushRemoteRoll(msg.roll);
     }
   });
   channel.send({ type: 'hello', from: 'spectator' });
