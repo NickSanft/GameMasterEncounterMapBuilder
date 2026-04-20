@@ -2695,3 +2695,127 @@ body.notes-open .help-button {
 .export-image-modal button.primary:hover:not(:disabled) {
   filter: brightness(1.05);
 }
+
+/* ─────────────────────────────────────────────────────────────────────
+   Mobile + touch (Phase 47)
+
+   Tuning for phones, small tablets, and any touch-only device. The main
+   goals are: bigger hit targets, menus that scroll instead of stacking
+   off-screen, and modals that fill the width. We key off both viewport
+   width (`max-width: 720px`, typical phone) and input capability
+   (`pointer: coarse` + `hover: none`, covers iPads and 2-in-1s that are
+   wider but primarily touched).
+   ───────────────────────────────────────────────────────────────────── */
+@media (hover: none) and (pointer: coarse) {
+  /* Bigger default hit targets across the app — buttons, inputs, etc. */
+  .gm-toolbar button,
+  .gm-toolbar-actions button,
+  .session-menu button,
+  .zoom-controls button,
+  .dice-button,
+  .help-button {
+    min-height: 44px;
+    font-size: 0.95rem;
+    padding: 0.55rem 0.85rem;
+  }
+  /* Modal close button easier to hit. */
+  .modal-close {
+    min-width: 44px;
+    min-height: 44px;
+    font-size: 1.5rem;
+  }
+}
+
+@media (max-width: 720px) {
+  /* Toolbar: horizontal scroll strip along the top so every tool stays
+     reachable without pushing the canvas off. */
+  .gm-toolbar {
+    top: 2.5rem;
+    left: 0.5rem;
+    right: 0.5rem;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    gap: 0.35rem;
+    padding: 0.3rem;
+    min-width: 0;
+    scrollbar-width: thin;
+  }
+  .gm-toolbar button {
+    flex-shrink: 0;
+    padding: 0.45rem 0.6rem;
+    font-size: 0.85rem;
+  }
+  .gm-toolbar-actions {
+    flex-direction: row;
+    flex-shrink: 0;
+    gap: 0.25rem;
+    padding-left: 0.35rem;
+    border-left: 1px solid var(--border);
+  }
+  .gm-toolbar-divider {
+    width: 1px;
+    height: auto;
+    margin: 0 0.1rem;
+  }
+  /* Session menu becomes a vertical scrollable drawer pinned to the
+     right, taking less horizontal space so the canvas stays visible. */
+  .session-menu {
+    top: 0.5rem;
+    right: 0.5rem;
+    max-height: calc(100vh - 1rem);
+    overflow-y: auto;
+    min-width: 9rem;
+    padding: 0.3rem;
+    scrollbar-width: thin;
+  }
+  .session-menu button {
+    font-size: 0.85rem;
+    padding: 0.5rem 0.6rem;
+  }
+  /* Zoom controls shrink + stay bottom-right. */
+  .zoom-controls {
+    bottom: 0.5rem;
+    right: 0.5rem;
+    min-width: 3.25rem;
+    padding: 0.3rem;
+  }
+  /* Modals fill the viewport so forms aren't cramped. */
+  .modal {
+    min-width: 0 !important;
+    max-width: 96vw !important;
+    max-height: 90vh;
+    overflow-y: auto;
+  }
+  .shortcut-body {
+    grid-template-columns: 1fr !important;
+  }
+  /* Mini-map shrinks to a thumb-sized chip at the bottom so it never
+     covers up the canvas corner. */
+  .mini-map {
+    width: 140px !important;
+    height: 98px !important;
+  }
+  /* View badge gets out of the way — smaller + more transparent. */
+  .view-badge {
+    top: 0.4rem;
+    left: 0.4rem;
+    padding: 0.15rem 0.4rem;
+    font-size: 0.7rem;
+  }
+  /* Scene indicator (just below the badge) shrinks to match. */
+  .scene-indicator {
+    top: 1.9rem;
+    left: 0.4rem;
+    padding: 0.2rem 0.45rem;
+    font-size: 0.75rem;
+  }
+  /* Notes panel takes the full width when it pops open. */
+  .notes-panel {
+    width: min(320px, 92vw);
+  }
+  body.notes-open .session-menu,
+  body.notes-open .zoom-controls {
+    right: calc(min(320px, 92vw) + 0.5rem);
+  }
+}

@@ -24,6 +24,8 @@ export interface MeasureToolContext {
   renderer: Renderer;
   measurementOverlay: MeasurementOverlayRef;
   isSpaceHeld(): boolean;
+  /** Touch pinch-gesture guard — see InputContext.isPinching. */
+  isPinching?(): boolean;
   /** Optional — when omitted the ruler is freeform. */
   rulerOptions?: RulerToolOptionsRef;
   /** Optional — feet-per-square for converting target feet → world px. */

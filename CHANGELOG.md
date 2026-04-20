@@ -29,11 +29,34 @@ Planned work for the remaining phases. See the plan conversation for full scope.
 - **0.42.0** — Partial import
 - **0.43.0** — Grid labels + map tint
 - **0.44.0** — Mini-map
-- **0.47.0** — Mobile / touch support
 - **0.48.0** — PWA / service worker
 - **0.49.0** — WebWorker-ize fog
 - **0.50.0** — Additional e2e behavior tests
 - **0.51.0** — Visual regression tests
+
+---
+
+## [0.47.0] — 2026-04-20 — Mobile / touch support
+
+### Added
+- **Two-finger pinch + pan** on the canvas. Spreading or pinching two fingers zooms around the midpoint between them (the world point under the centroid stays stationary, same trick as wheel-zoom-to-cursor). Dragging both fingers together pans the camera without changing zoom. Zoom clamps to the same `[0.1, 8]` range as wheel-zoom.
+- **Automatic tool cancellation when pinch starts.** The moment the second finger lands, pan-zoom synthesises a `pointercancel` event on the canvas for every tracked finger — so any in-flight Select drag, Draw stroke, fog paint, or AoE template is cleanly reset. Lifting back down to one finger returns control to the active tool.
+- **`PanZoomHandle.isPinching()`** — threaded through the InputContext so tools can optionally consult the pinch state (e.g. to suppress re-engaging a gesture mid-pinch). Safe default of `false` for non-touch contexts.
+- **Responsive CSS.**
+  - `@media (max-width: 720px)`: toolbar lays out horizontally and scrolls instead of stacking off-screen; session menu becomes a scrollable drawer; modals fill the viewport; mini-map, view badge, scene indicator, and zoom controls all shrink to stay out of the way. Shortcut overlay collapses to a single column so its grid doesn't overflow.
+  - `@media (hover: none) and (pointer: coarse)`: every button + close glyph bumps to a 44px minimum tap target with a larger font, matching mobile Safari / Chrome guidelines.
+- **Mobile viewport metadata** on `gm.html`, `spectator.html`, and `index.html`: `viewport-fit=cover`, `user-scalable=no`, `theme-color` for iOS Safari status-bar colouring, and `mobile-web-app-capable` for the forthcoming PWA phase.
+
+### New pure helper
+- `src/input/pinch.ts` — `pinchStart(a, b, camera)` captures a snapshot (centroid, distance, camera, and world-space anchor under the centroid). `pinchUpdate(snapshot, a, b, options?)` turns the current finger positions into a new camera — `scale = currentDist / startDist`, clamped to `[minZoom, maxZoom]`. Pan is derived so the anchor stays put. `centroidOf` and `distanceBetween` are exported too for reuse.
+
+### Tests
+- **9 unit tests** for the pinch helpers — identity (no movement = no change), zoom-in / zoom-out direction, zoom clamping, anchor preservation during spread, pure translational pan, and the degenerate zero-start-distance guard.
+- **4 Playwright specs** under the *Pixel 5* device profile (narrow viewport + `hasTouch: true`): toolbar is horizontal on narrow viewports, CDP-dispatched pinch gesture doesn't crash, single-finger tap with the Token tool drops a token (via `touchscreen.tap`), and viewport meta declares `user-scalable=no` + `viewport-fit=cover`.
+
+### Implementation notes
+- The pan-zoom tracker keeps a `Map<pointerId, {x,y}>` of active touch pointers so it can detect two-finger scenarios without relying on gestureevent (which is Safari-only). Mouse / middle-button panning is unchanged — the touch branch only fires when `e.pointerType === 'touch'`.
+- Responsive rules override (rather than replace) the desktop layout, so wide-viewport workflows aren't disturbed. The `!important` flag is used sparingly (only on modal `min-width` / `max-width` where specific modals already pin those values).
 
 ---
 
@@ -641,7 +664,8 @@ Planned work for the remaining phases. See the plan conversation for full scope.
 
 ---
 
-[Unreleased]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.46.0...HEAD
+[Unreleased]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.47.0...HEAD
+[0.47.0]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.46.0...v0.47.0
 [0.46.0]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.45.0...v0.46.0
 [0.45.0]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.44.0...v0.45.0
 [0.44.0]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.43.0...v0.44.0

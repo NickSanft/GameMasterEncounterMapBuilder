@@ -242,6 +242,7 @@ const inputContext = {
   measurementOverlay: measurementOverlayRef,
   aoeOverlay: aoeOverlayRef,
   isSpaceHeld: () => panZoomRef.handle?.isSpaceHeld() ?? false,
+  isPinching: () => panZoomRef.handle?.isPinching() ?? false,
   setWheelEnabled: (enabled: boolean) => panZoomRef.handle?.setWheelEnabled(enabled),
 };
 

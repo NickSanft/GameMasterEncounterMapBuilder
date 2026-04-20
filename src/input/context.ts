@@ -8,6 +8,13 @@ export interface InputContext {
   renderer: Renderer;
   store: Store;
   isSpaceHeld(): boolean;
+  /**
+   * True while a two-finger pinch gesture is in progress. Tools should
+   * bail out of their single-finger state machines when this is true so
+   * zooming in with two fingers doesn't also drop tokens / draw strokes.
+   * Safe default for non-touch code paths: always returns false.
+   */
+  isPinching?(): boolean;
   setWheelEnabled(enabled: boolean): void;
   selection: SelectionState;
   dragOverlay: DragOverlayRef;

@@ -107,6 +107,16 @@ const GM_SECTIONS: HelpSection[] = [
     ],
   },
   {
+    title: 'Mobile / touch',
+    intro: 'The app works on phones and tablets — every tool is reachable, gestures map naturally.',
+    entries: [
+      { name: 'One finger', desc: 'Drives whatever tool is active: tap to place / select, drag to move tokens, drag to paint fog, etc. Tapping moves focus to the canvas and plays its aria-label through your screen reader.' },
+      { name: 'Two fingers (pinch)', desc: 'Zoom in/out around the midpoint between your fingers. Moving both fingers together pans the camera without changing zoom. While you\u2019re pinching, the active tool\u2019s single-finger state machine pauses so you don\u2019t accidentally drop tokens or draw strokes.' },
+      { name: 'Toolbar scrolls', desc: 'On narrow viewports the tool strip lays out horizontally and scrolls — every tool is always reachable, even on a phone.' },
+      { name: 'Bigger hit targets', desc: 'On touch-only devices (coarse pointer, no hover) every button bumps up to at least 44px tall so finger taps land reliably.' },
+    ],
+  },
+  {
     title: 'HP & conditions',
     intro: 'Optional per-token tracking, visible to the Spectator when set to "Shared" visibility.',
     entries: [
@@ -163,6 +173,15 @@ const SPECTATOR_SECTIONS: HelpSection[] = [
       { name: 'Skip to battle map', desc: 'Tab once from anywhere on the page to reveal a "Skip to battle map" link; Enter focuses the canvas directly.' },
       { name: 'Live-region narration', desc: 'Ruler on/off, your dice rolls, and rolls the GM makes are narrated through a polite aria-live region so screen-reader users hear what changed.' },
       { name: 'Focus management', desc: 'Every modal traps Tab within itself while open and returns focus to the trigger when closed. All interactive controls (including the canvas) show a visible red focus outline.' },
+    ],
+  },
+  {
+    title: 'Mobile / touch',
+    intro: 'Read-only views work great on phones + tablets too.',
+    entries: [
+      { name: 'Pinch to zoom', desc: 'Two-finger pinch zooms around the midpoint between your fingers; two-finger drag pans.' },
+      { name: 'One-finger pan', desc: 'With the Ruler tool off, a one-finger drag on the canvas pans when you hold space (on physical keyboards) — on touch, use two fingers to pan instead.' },
+      { name: 'Responsive layout', desc: 'The Spectator menu stacks into a scrollable strip on narrow viewports.' },
     ],
   },
 ];

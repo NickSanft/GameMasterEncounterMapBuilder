@@ -1,5 +1,6 @@
 import type { Renderer } from '../render/renderer.js';
 import { screenToWorld } from '../render/coords.js';
+import { pinchStart, pinchUpdate, type PinchSnapshot } from './pinch.js';
 
 const MIN_ZOOM = 0.1;
 const MAX_ZOOM = 8;
@@ -9,6 +10,12 @@ export interface PanZoomHandle {
   destroy(): void;
   isPanning(): boolean;
   isSpaceHeld(): boolean;
+  /**
+   * True while a two-finger pinch is in progress. Tools consult this to
+   * suppress their own single-finger logic (e.g. the Token tool should
+   * not drop a token mid-pinch).
+   */
+  isPinching(): boolean;
   setWheelEnabled(enabled: boolean): void;
 }
 
@@ -20,6 +27,11 @@ export function attachPanZoom(renderer: Renderer): PanZoomHandle {
   let lastX = 0;
   let lastY = 0;
   let activePointerId: number | null = null;
+
+  // Touch-state: map of active touch pointers, plus the pinch snapshot
+  // taken when the second finger lands.
+  const touchPoints = new Map<number, { x: number; y: number }>();
+  let pinchSnapshot: PinchSnapshot | null = null;
 
   function canvasPoint(e: PointerEvent | WheelEvent): { x: number; y: number } {
     const rect = canvas.getBoundingClientRect();
@@ -46,7 +58,38 @@ export function attachPanZoom(renderer: Renderer): PanZoomHandle {
     return false;
   }
 
+  function cancelPointerForTools(pointerId: number) {
+    // Synthesise a pointercancel so active tools (Select drag, Draw
+    // stroke, Measure ruler, etc.) reset their state when a second
+    // finger lands and the gesture switches to pinch.
+    const ev = new PointerEvent('pointercancel', {
+      pointerId,
+      pointerType: 'touch',
+      bubbles: true,
+      cancelable: true,
+    });
+    canvas.dispatchEvent(ev);
+  }
+
   function onPointerDown(e: PointerEvent) {
+    if (e.pointerType === 'touch') {
+      touchPoints.set(e.pointerId, canvasPoint(e));
+      // If the second finger just landed, capture a pinch snapshot and
+      // cancel any in-flight single-finger pan/tool gesture.
+      if (touchPoints.size === 2) {
+        const pts = Array.from(touchPoints.values());
+        pinchSnapshot = pinchStart(pts[0]!, pts[1]!, renderer.camera);
+        if (panning) {
+          panning = false;
+          activePointerId = null;
+        }
+        // Broadcast pointercancel for each tracked finger so tools
+        // let go of their single-touch state machines.
+        for (const id of touchPoints.keys()) cancelPointerForTools(id);
+        e.preventDefault();
+      }
+      return;
+    }
     if (!shouldStartPan(e)) return;
     panning = true;
     activePointerId = e.pointerId;
@@ -58,6 +101,20 @@ export function attachPanZoom(renderer: Renderer): PanZoomHandle {
   }
 
   function onPointerMove(e: PointerEvent) {
+    if (e.pointerType === 'touch') {
+      if (touchPoints.has(e.pointerId)) {
+        touchPoints.set(e.pointerId, canvasPoint(e));
+      }
+      if (pinchSnapshot && touchPoints.size >= 2) {
+        const pts = Array.from(touchPoints.values());
+        renderer.camera = pinchUpdate(pinchSnapshot, pts[0]!, pts[1]!, {
+          minZoom: MIN_ZOOM,
+          maxZoom: MAX_ZOOM,
+        });
+        e.preventDefault();
+      }
+      return;
+    }
     if (!panning || e.pointerId !== activePointerId) return;
     const dx = e.clientX - lastX;
     const dy = e.clientY - lastY;
@@ -72,6 +129,14 @@ export function attachPanZoom(renderer: Renderer): PanZoomHandle {
   }
 
   function endPan(e: PointerEvent) {
+    if (e.pointerType === 'touch') {
+      touchPoints.delete(e.pointerId);
+      if (touchPoints.size < 2) {
+        // Dropping below two fingers ends the pinch.
+        pinchSnapshot = null;
+      }
+      return;
+    }
     if (e.pointerId !== activePointerId) return;
     panning = false;
     activePointerId = null;
@@ -127,6 +192,9 @@ export function attachPanZoom(renderer: Renderer): PanZoomHandle {
     },
     isSpaceHeld() {
       return spaceHeld;
+    },
+    isPinching() {
+      return pinchSnapshot !== null;
     },
     setWheelEnabled(enabled: boolean) {
       wheelEnabled = enabled;

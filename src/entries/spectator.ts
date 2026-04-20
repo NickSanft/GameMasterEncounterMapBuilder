@@ -85,6 +85,7 @@ const measureTool = createMeasureTool({
   renderer,
   measurementOverlay: measurementOverlayRef,
   isSpaceHeld: () => panZoomRef.handle?.isSpaceHeld() ?? false,
+  isPinching: () => panZoomRef.handle?.isPinching() ?? false,
   rulerOptions: rulerToolOptionsRef,
   getFeetPerSquare: () => preferences.get().feetPerSquare,
   getCellSize: () => store.getState().grid.cellSize,
