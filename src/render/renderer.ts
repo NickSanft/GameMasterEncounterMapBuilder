@@ -22,6 +22,8 @@ import { drawAoeTemplates, type AoePreview } from './layer-aoe.js';
 import {
   drawSpectatorViewport,
 } from './layer-spectator-viewport.js';
+import { drawMovementIndicator } from './layer-movement-indicator.js';
+import { gridDistance, formatDistance } from '../state/distance.js';
 import type { Preferences } from '../state/preferences.js';
 import type { DragOverlay, LassoOverlay } from '../input/context.js';
 import type { Ping } from '../state/ping-manager.js';
@@ -190,6 +192,10 @@ export function createRenderer(opts: CreateRendererOptions): Renderer {
       const vp = getSpectatorViewport();
       if (vp) drawSpectatorViewport(ctx, vp, camera.zoom);
     }
+    // Movement-remaining indicator — drawn while a GM is dragging tokens.
+    if (mode === 'gm' && dragOverlay && dragOverlay.ids.length > 0) {
+      drawMovementOverlay(ctx, state, dragOverlay, camera.zoom, prefs);
+    }
     ctx.restore();
 
     if (frameListeners.size > 0) {
@@ -247,4 +253,47 @@ export function createRenderer(opts: CreateRendererOptions): Renderer {
       return () => frameListeners.delete(listener);
     },
   };
+}
+
+/**
+ * Resolve the movement-indicator line/label from the current drag overlay
+ * and draw it. Prefers a token as the origin (since dragging tokens is the
+ * common case); if only annotations / AoE templates are being dragged,
+ * falls back silently (no indicator).
+ */
+function drawMovementOverlay(
+  ctx: CanvasRenderingContext2D,
+  state: SessionState,
+  drag: DragOverlay,
+  zoom: number,
+  prefs: Preferences | null,
+): void {
+  if (drag.deltaX === 0 && drag.deltaY === 0) return;
+  const { cellSize } = state.grid;
+  // Pick the first dragged token (in selection/drag order) as the origin.
+  const firstTokenId = drag.ids.find((id) =>
+    state.tokens.some((t) => t.id === id),
+  );
+  if (!firstTokenId) return;
+  const token = state.tokens.find((t) => t.id === firstTokenId);
+  if (!token) return;
+
+  const originX = (token.x + token.size / 2) * cellSize;
+  const originY = (token.y + token.size / 2) * cellSize;
+  const endX = originX + drag.deltaX;
+  const endY = originY + drag.deltaY;
+
+  // Compute distance in cells using the preferred diagonal rule.
+  const dxCells = drag.deltaX / cellSize;
+  const dyCells = drag.deltaY / cellSize;
+  const rule = prefs?.diagonalRule ?? 'chebyshev';
+  const cells = gridDistance(dxCells, dyCells, rule);
+  // Drags smaller than half a cell don't round to any movement yet — skip
+  // the label so dragging in place doesn't flicker a "0 sq" pill.
+  if (cells === 0) return;
+  const unit = prefs?.distanceUnit ?? 'squares';
+  const feetPerSquare = prefs?.feetPerSquare ?? 5;
+  const label = formatDistance(cells, unit, feetPerSquare);
+
+  drawMovementIndicator(ctx, originX, originY, endX, endY, cellSize, zoom, label);
 }

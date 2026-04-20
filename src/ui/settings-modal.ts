@@ -1,4 +1,10 @@
-import type { PreferencesStore, LabelSize, Theme } from '../state/preferences.js';
+import type {
+  PreferencesStore,
+  LabelSize,
+  Theme,
+  DistanceUnit,
+  DiagonalRule,
+} from '../state/preferences.js';
 import type { Store } from '../state/store.js';
 import type { ViewMode } from '../state/types.js';
 import { attachFocusTrap, rememberFocus, restoreFocus, getFocusables } from '../util/focus.js';
@@ -63,6 +69,13 @@ export function mountSettingsModal(
   const themeRadios = Array.from(
     modal.querySelectorAll<HTMLInputElement>('input[name="settings-theme"]'),
   );
+  const distanceUnitRadios = Array.from(
+    modal.querySelectorAll<HTMLInputElement>('input[name="settings-distance-unit"]'),
+  );
+  const diagonalRuleRadios = Array.from(
+    modal.querySelectorAll<HTMLInputElement>('input[name="settings-diagonal-rule"]'),
+  );
+  const feetPerSquareInput = modal.querySelector<HTMLInputElement>('[data-field="feetPerSquare"]')!;
   const gmFogColorInput = modal.querySelector<HTMLInputElement>('[data-field="gmFogColor"]');
   const gmFogOpacityInput = modal.querySelector<HTMLInputElement>('[data-field="gmFogOpacity"]');
   const gmFogOpacityLabel = modal.querySelector<HTMLSpanElement>('[data-field="gmFogOpacityValue"]');
@@ -129,6 +142,9 @@ export function mountSettingsModal(
     if (followGmCameraInput) followGmCameraInput.checked = prefs.followGmCamera;
     if (showDiagnosticsInput) showDiagnosticsInput.checked = prefs.showDiagnostics;
     if (showSpectatorViewportInput) showSpectatorViewportInput.checked = prefs.showSpectatorViewport;
+    for (const r of distanceUnitRadios) r.checked = r.value === prefs.distanceUnit;
+    for (const r of diagonalRuleRadios) r.checked = r.value === prefs.diagonalRule;
+    feetPerSquareInput.value = String(prefs.feetPerSquare);
   }
 
   function open() {
@@ -216,6 +232,27 @@ export function mountSettingsModal(
       if (r.checked) preferences.update({ theme: r.value as Theme });
     });
   }
+
+  for (const r of distanceUnitRadios) {
+    r.addEventListener('change', () => {
+      if (r.checked) preferences.update({ distanceUnit: r.value as DistanceUnit });
+    });
+  }
+
+  for (const r of diagonalRuleRadios) {
+    r.addEventListener('change', () => {
+      if (r.checked) preferences.update({ diagonalRule: r.value as DiagonalRule });
+    });
+  }
+
+  feetPerSquareInput.addEventListener('change', () => {
+    const n = parseInt(feetPerSquareInput.value, 10);
+    if (!Number.isFinite(n) || n < 1 || n > 99) {
+      populate();
+      return;
+    }
+    preferences.update({ feetPerSquare: n });
+  });
 
   if (gmFogColorInput) {
     gmFogColorInput.addEventListener('change', () => {
@@ -412,6 +449,25 @@ function renderAppearancePane(viewMode: ViewMode): string {
           <label><input type="radio" name="settings-label-size" value="large" /> Large</label>
         </div>
       </label>
+      <fieldset class="settings-subgroup">
+        <legend>Distance</legend>
+        <label>Movement indicator unit
+          <div class="radio-group">
+            <label><input type="radio" name="settings-distance-unit" value="squares" /> Squares</label>
+            <label><input type="radio" name="settings-distance-unit" value="feet" /> Feet</label>
+          </div>
+        </label>
+        <label>Feet per square
+          <input type="number" data-field="feetPerSquare" min="1" max="99" step="1" />
+        </label>
+        <label>Diagonal rule
+          <div class="radio-group">
+            <label><input type="radio" name="settings-diagonal-rule" value="chebyshev" /> Chebyshev (5e default — diagonals count as 1)</label>
+            <label><input type="radio" name="settings-diagonal-rule" value="alternating" /> Alternating (PHB optional — every other diagonal counts as 2)</label>
+          </div>
+        </label>
+        <p class="settings-hint">Used by the yellow movement indicator that appears while you drag a token on the map.</p>
+      </fieldset>
       ${gmOnly}
     </section>
   `;

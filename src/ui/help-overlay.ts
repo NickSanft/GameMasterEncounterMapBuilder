@@ -76,6 +76,7 @@ const GM_SECTIONS: HelpSection[] = [
       { name: 'Arrow keys / WASD', desc: 'Nudge the selected tokens one cell at a time (+Shift = 5 cells).' },
       { name: 'E', desc: 'Open the token editor for the first selected token.' },
       { name: ', / .', desc: 'Rotate the selection 45° counter-clockwise / clockwise. Add Shift for 90° steps.' },
+      { name: 'Drag a token', desc: 'A dashed yellow line + distance pill show where you started and how far you\u2019ve moved. Unit (squares/feet) and diagonal rule are configurable in Settings → Appearance → Distance.' },
     ],
   },
   {

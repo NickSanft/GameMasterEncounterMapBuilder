@@ -1,7 +1,10 @@
 import { PREFERENCES_KEY } from '../util/constants.js';
+import type { DiagonalRule, DistanceUnit } from './distance.js';
 
 export type LabelSize = 'small' | 'medium' | 'large';
 export type Theme = 'dark' | 'light';
+
+export type { DiagonalRule, DistanceUnit };
 
 export interface Preferences {
   theme: Theme;
@@ -16,6 +19,12 @@ export interface Preferences {
   broadcastCamera: boolean;
   showDiagnostics: boolean;
   showSpectatorViewport: boolean;
+  /** Unit used in the movement-remaining indicator. */
+  distanceUnit: DistanceUnit;
+  /** Feet per grid square (5e default: 5). Used when distanceUnit = 'feet'. */
+  feetPerSquare: number;
+  /** How diagonals are counted when computing movement distance. */
+  diagonalRule: DiagonalRule;
 }
 
 export const DEFAULT_PREFERENCES: Preferences = {
@@ -31,6 +40,9 @@ export const DEFAULT_PREFERENCES: Preferences = {
   broadcastCamera: false,
   showDiagnostics: false,
   showSpectatorViewport: false,
+  distanceUnit: 'squares',
+  feetPerSquare: 5,
+  diagonalRule: 'chebyshev',
 };
 
 export interface PreferencesStore {

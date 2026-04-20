@@ -1031,6 +1031,31 @@ body.view {
   letter-spacing: 0;
 }
 
+.settings-subgroup {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.55rem 0.75rem 0.75rem;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.settings-subgroup legend {
+  padding: 0 0.35rem;
+  font-size: 0.78rem;
+  color: var(--fg-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 700;
+}
+
+.settings-subgroup .radio-group {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.35rem;
+}
+
 /* Reduced motion: zero out transitions and animations */
 body.reduced-motion *,
 body.reduced-motion *::before,
