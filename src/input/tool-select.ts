@@ -9,6 +9,7 @@ import {
   collectAnnotationLassoHits,
   collectAoeLassoHits,
 } from './lasso.js';
+import { tokensInStackAt, cycleStackSelection } from '../state/token-stack.js';
 import type { ID } from '../state/types.js';
 
 interface LassoInProgress {
@@ -54,6 +55,25 @@ export function createSelectTool(ctx: InputContext): Tool {
       : hitTestAoe(state.aoeTemplates, world.x, world.y);
 
     if (tokenHit) {
+      // Alt+click on a stacked cell cycles selection down through the stack
+      // without starting a drag, so GMs can dig into a pile of tokens one
+      // layer at a time.
+      if (e.altKey && !e.shiftKey) {
+        const stack = tokensInStackAt(state.tokens, tokenHit.x, tokenHit.y);
+        if (stack.length > 1) {
+          const current =
+            selection.ids.size === 1
+              ? stack.find((t) => selection.ids.has(t.id))?.id ?? tokenHit.id
+              : tokenHit.id;
+          const nextId = cycleStackSelection(stack, current);
+          if (nextId) {
+            selection.ids = new Set([nextId]);
+            renderer.requestRender();
+          }
+          e.preventDefault();
+          return;
+        }
+      }
       handleHitSelect(tokenHit.id, e.shiftKey);
       beginDrag(e, world.x, world.y);
       return;

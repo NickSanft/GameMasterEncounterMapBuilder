@@ -6,6 +6,7 @@ import { isTokenFullyHidden } from './fog-visibility.js';
 import type { DragOverlay } from '../input/context.js';
 import { hpBarColor, hpFraction } from '../state/token-hp.js';
 import { getConditionPreset } from '../state/conditions.js';
+import { groupTokensByStack } from '../state/token-stack.js';
 
 const NO_IMAGE: ImageProvider = () => null;
 
@@ -108,6 +109,10 @@ export function drawTokens(
     const display = withOverlay(t, overlay, cellSize);
     drawTokenStatus(ctx, display, cellSize, options.mode, labelScale, isDragged(t));
   }
+
+  // Stack-count badge — one per cell that contains ≥2 tokens. Drawn after
+  // every other token pass so it always sits on top of the stack.
+  drawStackBadges(ctx, state, cellSize, options.mode, overlay);
 }
 
 const DRAG_GHOST_ALPHA = 0.6;
@@ -438,6 +443,62 @@ function drawFacingNotch(
   ctx.lineWidth = 1.5;
   ctx.strokeStyle = 'rgba(0, 0, 0, 0.65)';
   ctx.stroke();
+}
+
+/**
+ * Render one "N" badge per cell that contains two or more tokens.
+ * Uses the grouped stacks from `groupTokensByStack` so we don't
+ * re-iterate `state.tokens` for every visible token.
+ *
+ * In Spectator mode, stacks with all members fully-hidden by fog are
+ * skipped — showing the count would leak presence through the fog.
+ * Drag overlay is honored so the badge follows the dragged token(s).
+ */
+function drawStackBadges(
+  ctx: CanvasRenderingContext2D,
+  state: SessionState,
+  cellSize: number,
+  mode: ViewMode,
+  overlay: DragOverlay | null,
+): void {
+  // When dragging, the displayed tokens have a world-space offset. Group
+  // them by *display* position so a mid-drag stack (e.g. dragging a token
+  // onto another) updates its badge in real time.
+  const visible: Token[] = [];
+  for (const t of state.tokens) {
+    if (mode === 'spectator' && isTokenFullyHidden(t, state)) continue;
+    visible.push(withOverlay(t, overlay, cellSize));
+  }
+  const groups = groupTokensByStack(visible);
+
+  for (const stack of groups.values()) {
+    if (stack.tokens.length < 2) continue;
+    const top = stack.tokens[stack.tokens.length - 1]!;
+    const cx = (top.x + top.size / 2) * cellSize;
+    const cy = (top.y + top.size / 2) * cellSize;
+    const r = (top.size * cellSize) / 2 - 4;
+    const badgeR = Math.max(9, cellSize * 0.13);
+    // Top-right corner of the top token's circle.
+    const bx = cx + r * 0.72;
+    const by = cy - r * 0.72;
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(bx, by, badgeR, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(20, 20, 20, 0.92)';
+    ctx.fill();
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = '#ffd966';
+    ctx.stroke();
+
+    const fontSize = Math.max(10, badgeR * 1.15);
+    ctx.font = `700 ${fontSize}px system-ui, -apple-system, Segoe UI, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#ffd966';
+    ctx.fillText(String(stack.tokens.length), bx, by + 0.5);
+    ctx.restore();
+  }
 }
 
 /** Hex color → should we use dark text on top for contrast? */

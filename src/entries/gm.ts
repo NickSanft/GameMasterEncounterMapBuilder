@@ -47,6 +47,7 @@ import { hitTestToken } from '../input/hit-test.js';
 import { screenToWorld } from '../render/coords.js';
 import { duplicateTokens } from '../state/token-clipboard.js';
 import { rotateBy, snapRotation } from '../state/token-rotation.js';
+import { tokensInStackAt } from '../state/token-stack.js';
 import type { Annotation, Token } from '../state/types.js';
 import { DEFAULT_ANNOTATION_COLOR } from '../state/annotation-presets.js';
 import { mountPresetBackgroundsModal } from '../ui/preset-backgrounds-modal.js';
@@ -500,6 +501,35 @@ canvas.addEventListener('contextmenu', (e) => {
     const hpTargets = state.tokens
       .filter((t) => selection.ids.has(t.id) && t.hp !== null)
       .map((t) => t.id);
+
+    // When the clicked cell holds two or more tokens, prefix the menu
+    // with a "Stack here" section that lets the GM jump selection to any
+    // member without digging through with Alt+click.
+    const stack = tokensInStackAt(state.tokens, hit.x, hit.y);
+    if (stack.length > 1) {
+      items.push({
+        label: `Stack here (${stack.length}):`,
+        disabled: true,
+        onClick: () => {},
+      });
+      // Top-most first so repeat-users' fingers find the commonly-wanted
+      // "currently visible" token at the start of the list.
+      for (let i = stack.length - 1; i >= 0; i--) {
+        const t = stack[i]!;
+        const name = t.label || 'Token';
+        const marker = t.id === hit.id ? '  → ' : '     ';
+        const tail = t.id === hit.id ? ' (current)' : '';
+        items.push({
+          label: `${marker}${name}${tail}`,
+          onClick: () => {
+            selection.ids = new Set([t.id]);
+            renderer.requestRender();
+          },
+        });
+      }
+      items.push({ kind: 'separator' });
+    }
+
     items.push(
       { label: 'Edit token…', onClick: () => tokenEditor.openFor(hit) },
       {

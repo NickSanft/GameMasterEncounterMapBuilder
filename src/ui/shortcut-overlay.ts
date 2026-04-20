@@ -36,6 +36,7 @@ const GM_SECTIONS: ShortcutSection[] = [
     entries: [
       { keys: 'Click token', desc: 'Select one token' },
       { keys: 'Shift+click token', desc: 'Toggle token in selection' },
+      { keys: 'Alt+click stacked cell', desc: 'Cycle selection down through the stack' },
       { keys: 'Drag empty', desc: 'Rubber-band select' },
       { keys: 'Shift+drag empty', desc: 'Add to selection' },
       { keys: 'Right-click', desc: 'Contextual menu' },
