@@ -39,6 +39,23 @@ Planned work for the remaining phases. See the plan conversation for full scope.
 
 ---
 
+## [0.43.0] — 2026-04-20 — Grid labels + scene lighting
+
+### Added
+- **Optional grid labels.** New *Show coordinate labels* checkbox in Settings → Grid renders chess-style column letters (A, B, …, Z, AA, AB, …) along the top gutter and row numbers (1, 2, …) along the left gutter. Great for saying "the trap is at D6" during play. Labels auto-skip every Nth slot at low zoom so they never overlap.
+- **Scene lighting tint.** New *Scene lighting* subgroup on Settings → Appearance with a color picker and a 0–100% darkness slider. Multiplies a semi-transparent overlay over the whole canvas — perfect for "the cave is dim," "it's midnight," or "the temple glows red" moods without changing the underlying map art. The Spectator view honors the same preference so the mood matches both tabs.
+- **Three new preferences**: `showGridLabels` (default `false`), `sceneLightColor` (default `#0a0530` — a deep indigo so the default slider tick darkens toward "moonlit"), `sceneLightOpacity` (default `0`). All persisted through the existing preferences store.
+
+### Pure helpers
+- `src/render/grid-labels.ts` — `columnLetter(n)` (1 → A, 26 → Z, 27 → AA, 702 → ZZ, 703 → AAA), `rowLabel(n)`, `cellName(col, row)`.
+- `src/render/layer-grid-labels.ts` — `drawGridLabels()` and `drawSceneTint()` layer helpers. Fonts / gutter offsets scale inversely with zoom so labels read at a consistent size. Tint is clamped to `[0, 1]` and is a free no-op at `0`.
+
+### Tests
+- **8 new unit tests** cover the column-letter rollover at 26/27/52/702/703 and non-finite input handling.
+- **2 new Playwright specs** verify the new Grid-tab checkbox persists across reload and that the Appearance-tab slider updates the `%` readout and persists.
+
+---
+
 ## [0.42.0] — 2026-04-20 — Partial import
 
 ### Added
@@ -546,7 +563,8 @@ Planned work for the remaining phases. See the plan conversation for full scope.
 
 ---
 
-[Unreleased]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.42.0...HEAD
+[Unreleased]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.43.0...HEAD
+[0.43.0]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.42.0...v0.43.0
 [0.42.0]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.41.0...v0.42.0
 [0.41.0]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.40.0...v0.41.0
 [0.40.0]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.39.0...v0.40.0

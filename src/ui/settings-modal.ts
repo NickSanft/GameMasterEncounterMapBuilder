@@ -59,6 +59,10 @@ export function mountSettingsModal(
   const rowsInput = modal.querySelector<HTMLInputElement>('[data-field="rows"]')!;
   const cellSizeInput = modal.querySelector<HTMLInputElement>('[data-field="cellSize"]')!;
   const showGridLinesInput = modal.querySelector<HTMLInputElement>('[data-field="showGridLines"]')!;
+  const showGridLabelsInput = modal.querySelector<HTMLInputElement>('[data-field="showGridLabels"]')!;
+  const sceneLightColorInput = modal.querySelector<HTMLInputElement>('[data-field="sceneLightColor"]')!;
+  const sceneLightOpacityInput = modal.querySelector<HTMLInputElement>('[data-field="sceneLightOpacity"]')!;
+  const sceneLightOpacityLabel = modal.querySelector<HTMLSpanElement>('[data-field="sceneLightOpacityValue"]')!;
   const persistCameraInput = modal.querySelector<HTMLInputElement>('[data-field="persistCamera"]')!;
   const reducedMotionInput = modal.querySelector<HTMLInputElement>('[data-field="reducedMotion"]')!;
   const highContrastInput = modal.querySelector<HTMLInputElement>('[data-field="highContrast"]')!;
@@ -129,6 +133,10 @@ export function mountSettingsModal(
     rowsInput.value = String(state.grid.rows);
     cellSizeInput.value = String(state.grid.cellSize);
     showGridLinesInput.checked = state.grid.showGridLines;
+    showGridLabelsInput.checked = prefs.showGridLabels;
+    sceneLightColorInput.value = prefs.sceneLightColor;
+    sceneLightOpacityInput.value = String(Math.round(prefs.sceneLightOpacity * 100));
+    sceneLightOpacityLabel.textContent = `${Math.round(prefs.sceneLightOpacity * 100)}%`;
     persistCameraInput.checked = prefs.persistCamera;
     reducedMotionInput.checked = prefs.reducedMotion;
     highContrastInput.checked = prefs.highContrast;
@@ -203,6 +211,20 @@ export function mountSettingsModal(
       kind: 'grid-update',
       changes: { showGridLines: showGridLinesInput.checked },
     });
+  });
+
+  showGridLabelsInput.addEventListener('change', () => {
+    preferences.update({ showGridLabels: showGridLabelsInput.checked });
+  });
+
+  sceneLightColorInput.addEventListener('change', () => {
+    preferences.update({ sceneLightColor: sceneLightColorInput.value });
+  });
+
+  sceneLightOpacityInput.addEventListener('input', () => {
+    const v = parseInt(sceneLightOpacityInput.value, 10) / 100;
+    preferences.update({ sceneLightOpacity: v });
+    sceneLightOpacityLabel.textContent = `${sceneLightOpacityInput.value}%`;
   });
 
   persistCameraInput.addEventListener('change', () => {
@@ -415,6 +437,11 @@ function renderGridPane(): string {
         <input type="checkbox" data-field="showGridLines" />
         <span>Show grid lines</span>
       </label>
+      <label class="check">
+        <input type="checkbox" data-field="showGridLabels" />
+        <span>Show coordinate labels (A1, B2, …)</span>
+      </label>
+      <p class="settings-hint">Chess-style A–Z column + 1–N row labels in the gutters. Useful for verbal reference during play ("there's a trap at D6").</p>
       <p class="settings-hint">Changing grid dimensions preserves fog state for cells that still exist after the resize.</p>
     </section>
   `;
@@ -467,6 +494,19 @@ function renderAppearancePane(viewMode: ViewMode): string {
           </div>
         </label>
         <p class="settings-hint">Used by the yellow movement indicator that appears while you drag a token on the map.</p>
+      </fieldset>
+      <fieldset class="settings-subgroup">
+        <legend>Scene lighting</legend>
+        <label>Tint color
+          <input type="color" data-field="sceneLightColor" />
+        </label>
+        <label>Darkness
+          <div class="slider-row">
+            <input type="range" min="0" max="100" step="1" data-field="sceneLightOpacity" />
+            <span class="slider-value" data-field="sceneLightOpacityValue">0%</span>
+          </div>
+        </label>
+        <p class="settings-hint">Multiplies a semi-transparent color over the whole canvas. Handy for "the cave is dim" or "it's midnight" mood without changing the map art.</p>
       </fieldset>
       ${gmOnly}
     </section>

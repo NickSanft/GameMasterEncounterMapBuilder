@@ -24,6 +24,7 @@ import {
 } from './layer-spectator-viewport.js';
 import { drawMovementIndicator } from './layer-movement-indicator.js';
 import { drawStrokes } from './layer-strokes.js';
+import { drawGridLabels, drawSceneTint } from './layer-grid-labels.js';
 import { gridDistance, formatDistance } from '../state/distance.js';
 import type { DrawStroke } from '../state/types.js';
 import type { Preferences } from '../state/preferences.js';
@@ -214,6 +215,25 @@ export function createRenderer(opts: CreateRendererOptions): Renderer {
     // Movement-remaining indicator — drawn while a GM is dragging tokens.
     if (mode === 'gm' && dragOverlay && dragOverlay.ids.length > 0) {
       drawMovementOverlay(ctx, state, dragOverlay, camera.zoom, prefs);
+    }
+    // Grid labels (chess-style A1 coords in the gutters) — on top of
+    // most layers but beneath the scene tint so the tint darkens them.
+    if (prefs?.showGridLabels) {
+      drawGridLabels(ctx, state.grid, camera.zoom);
+    }
+    // Scene tint — painted last (over everything) so ambient lighting
+    // actually darkens the view.
+    if (prefs && prefs.sceneLightOpacity > 0) {
+      drawSceneTint(
+        ctx,
+        cssWidth,
+        cssHeight,
+        prefs.sceneLightColor,
+        prefs.sceneLightOpacity,
+        camera.zoom,
+        camera.x,
+        camera.y,
+      );
     }
     ctx.restore();
 

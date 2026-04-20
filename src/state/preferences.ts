@@ -25,6 +25,12 @@ export interface Preferences {
   feetPerSquare: number;
   /** How diagonals are counted when computing movement distance. */
   diagonalRule: DiagonalRule;
+  /** Show A–Z column + 1–N row labels along the grid gutters. */
+  showGridLabels: boolean;
+  /** Scene-lighting tint color (applied as a semi-transparent overlay). */
+  sceneLightColor: string;
+  /** Scene-lighting opacity, 0..1. 0 = fully lit (no tint). */
+  sceneLightOpacity: number;
 }
 
 export const DEFAULT_PREFERENCES: Preferences = {
@@ -43,6 +49,9 @@ export const DEFAULT_PREFERENCES: Preferences = {
   distanceUnit: 'squares',
   feetPerSquare: 5,
   diagonalRule: 'chebyshev',
+  showGridLabels: false,
+  sceneLightColor: '#0a0530',
+  sceneLightOpacity: 0,
 };
 
 export interface PreferencesStore {
@@ -66,6 +75,24 @@ export function createPreferences(): PreferencesStore {
 
   function notify() {
     for (const l of listeners) l(prefs);
+  }
+
+  // Cross-tab sync — the browser fires a `storage` event in *other*
+  // tabs (not the tab that made the write) whenever localStorage
+  // changes for our origin. Re-reading our key on that signal means
+  // the Spectator tab picks up the GM's preference edits live (e.g.
+  // Scene lighting) without needing a reload.
+  if (typeof window !== 'undefined') {
+    window.addEventListener('storage', (e) => {
+      if (e.key !== PREFERENCES_KEY) return;
+      const next = loadFromStorage();
+      const before = prefs;
+      prefs = next;
+      // Skip a notify when the reload produced an identical blob
+      // (defensive — browsers occasionally fire spurious events).
+      if (JSON.stringify(before) === JSON.stringify(next)) return;
+      notify();
+    });
   }
 
   return {
