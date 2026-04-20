@@ -32,6 +32,14 @@ export interface Token {
   borderColor: string | null;
   hp: TokenHp | null;
   conditions: string[];
+  /**
+   * Facing angle in radians, measured clockwise from "up" (negative Y).
+   * `0` = facing up (north). `Math.PI / 2` = facing right (east).
+   * Most tokens will use multiples of 45° (`Math.PI / 4`) for tactical
+   * purposes; freeform angles are allowed but quantized by the quick-snap
+   * buttons.
+   */
+  rotation: number;
 }
 
 export interface Background {

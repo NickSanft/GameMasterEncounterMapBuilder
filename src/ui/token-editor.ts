@@ -7,6 +7,13 @@ import { TEAM_PRESETS } from '../state/team-colors.js';
 import { saveTokenToLibrary } from '../state/token-catalog.js';
 import { CONDITION_PRESETS, toggleCondition, hasCondition } from '../state/conditions.js';
 import { normalizeHp } from '../state/token-hp.js';
+import {
+  rotateBy,
+  snapRotation,
+  radiansToDegrees,
+  degreesToRadians,
+  compass8Direction,
+} from '../state/token-rotation.js';
 import { attachFocusTrap, rememberFocus, restoreFocus } from '../util/focus.js';
 import {
   cycleTo,
@@ -94,6 +101,23 @@ export function mountTokenEditor(opts: TokenEditorOptions): TokenEditorHandle {
         </div>
       </label>
 
+      <fieldset class="rotation-block">
+        <legend>Facing</legend>
+        <div class="rotation-row">
+          <label>Rotation (°)
+            <input type="number" data-field="rotation" step="15" min="0" max="359" />
+          </label>
+          <span class="rotation-compass" data-field="rotation-compass" aria-live="polite">N</span>
+          <div class="rotation-quick" role="group" aria-label="Rotation quick-snap">
+            <button type="button" data-rotate="-90" title="Rotate 90° counter-clockwise (Shift+,)">↺ 90°</button>
+            <button type="button" data-rotate="-45" title="Rotate 45° counter-clockwise (,)">↺ 45°</button>
+            <button type="button" data-rotate="45"  title="Rotate 45° clockwise (.)">↻ 45°</button>
+            <button type="button" data-rotate="90"  title="Rotate 90° clockwise (Shift+.)">↻ 90°</button>
+            <button type="button" data-rotate-to="0" title="Reset to North (0°)">N</button>
+          </div>
+        </div>
+      </fieldset>
+
       <fieldset class="hp-block">
         <legend>Hit points</legend>
         <label class="check">
@@ -171,6 +195,14 @@ export function mountTokenEditor(opts: TokenEditorOptions): TokenEditorHandle {
   );
   const conditionChips = Array.from(
     modal.querySelectorAll<HTMLButtonElement>('.condition-chip'),
+  );
+  const rotationInput = modal.querySelector<HTMLInputElement>('[data-field="rotation"]')!;
+  const rotationCompass = modal.querySelector<HTMLSpanElement>('[data-field="rotation-compass"]')!;
+  const rotationQuickBtns = Array.from(
+    modal.querySelectorAll<HTMLButtonElement>('[data-rotate]'),
+  );
+  const rotationResetBtns = Array.from(
+    modal.querySelectorAll<HTMLButtonElement>('[data-rotate-to]'),
   );
 
   let currentId: ID | null = null;
@@ -253,7 +285,14 @@ export function mountTokenEditor(opts: TokenEditorOptions): TokenEditorHandle {
     syncBorderUI(token.borderColor);
     syncHpUI(token.hp);
     syncConditionUI(token.conditions);
+    syncRotationUI(token.rotation);
     syncCounter();
+  }
+
+  function syncRotationUI(rotation: number) {
+    const deg = Math.round(radiansToDegrees(rotation));
+    rotationInput.value = String(deg);
+    rotationCompass.textContent = compass8Direction(rotation);
   }
 
   function syncHpUI(hp: TokenHp | null) {
@@ -287,6 +326,11 @@ export function mountTokenEditor(opts: TokenEditorOptions): TokenEditorHandle {
 
   function close() {
     currentId = null;
+    // Blur any focused input/button before hiding so focus doesn't stay
+    // trapped on a hidden element (which would swallow canvas shortcuts).
+    if (modal.contains(document.activeElement)) {
+      (document.activeElement as HTMLElement | null)?.blur();
+    }
     backdrop.hidden = true;
     fileInput.value = '';
     const prior = triggerFocus;
@@ -504,6 +548,70 @@ export function mountTokenEditor(opts: TokenEditorOptions): TokenEditorHandle {
       const next = toggleCondition(tok.conditions, id);
       update({ conditions: next });
       syncConditionUI(next);
+    });
+  }
+
+  function commitRotation(deg: number) {
+    const tok = currentToken();
+    if (!tok) return;
+    const rotation = degreesToRadians(deg);
+    update({ rotation });
+    syncRotationUI(rotation);
+  }
+
+  rotationInput.addEventListener('change', () => {
+    const deg = parseFloat(rotationInput.value);
+    if (!Number.isFinite(deg)) {
+      const tok = currentToken();
+      if (tok) syncRotationUI(tok.rotation);
+      return;
+    }
+    commitRotation(deg);
+  });
+  rotationInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      const deg = parseFloat(rotationInput.value);
+      if (Number.isFinite(deg)) commitRotation(deg);
+      e.preventDefault();
+    }
+  });
+
+  for (const btn of rotationQuickBtns) {
+    btn.addEventListener('click', () => {
+      const tok = currentToken();
+      if (!tok) return;
+      const deltaDeg = parseFloat(btn.dataset.rotate ?? '0');
+      if (!Number.isFinite(deltaDeg)) return;
+      // Always snap the result to the 45° grid — repeated clicks from an
+      // arbitrary starting angle stay tidy, but a 90° click on a 45° token
+      // still lands on the next 45° multiple (not rounded to a cardinal).
+      const next = snapRotation(
+        rotateBy(tok.rotation, degreesToRadians(deltaDeg)),
+        Math.PI / 4,
+      );
+      update({ rotation: next });
+      syncRotationUI(next);
+    });
+  }
+
+  for (const btn of rotationResetBtns) {
+    btn.addEventListener('click', () => {
+      const tok = currentToken();
+      if (!tok) return;
+      const deg = parseFloat(btn.dataset.rotateTo ?? '0');
+      if (!Number.isFinite(deg)) return;
+      commitRotation(deg);
+    });
+  }
+
+  // Swallow Space on quick-snap buttons so the page doesn't scroll inside
+  // the modal — but they can still be activated with Enter.
+  for (const btn of [...rotationQuickBtns, ...rotationResetBtns]) {
+    btn.addEventListener('keydown', (e) => {
+      if (e.key === ' ') {
+        e.preventDefault();
+        btn.click();
+      }
     });
   }
 

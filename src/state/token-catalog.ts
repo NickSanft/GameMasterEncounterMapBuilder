@@ -72,5 +72,6 @@ export function tokenFromCatalogEntry(
     borderColor: entry.borderColor,
     hp: null,
     conditions: [],
+    rotation: 0,
   };
 }

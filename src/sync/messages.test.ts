@@ -22,6 +22,7 @@ describe('serializeState / deserializeState', () => {
       borderColor: null,
       hp: null,
       conditions: [],
+      rotation: 0,
     });
     const serialized = serializeState(state);
     const restored = deserializeState(serialized);

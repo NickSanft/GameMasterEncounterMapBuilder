@@ -46,6 +46,7 @@ import { putImage } from '../images/store.js';
 import { hitTestToken } from '../input/hit-test.js';
 import { screenToWorld } from '../render/coords.js';
 import { duplicateTokens } from '../state/token-clipboard.js';
+import { rotateBy, snapRotation } from '../state/token-rotation.js';
 import type { Annotation, Token } from '../state/types.js';
 import { DEFAULT_ANNOTATION_COLOR } from '../state/annotation-presets.js';
 import { mountPresetBackgroundsModal } from '../ui/preset-backgrounds-modal.js';
@@ -725,6 +726,36 @@ function duplicateSelection(): boolean {
   return true;
 }
 
+/**
+ * Rotate every selected token by `deltaRad` radians. The result is snapped
+ * to the 45° grid (the finer of 45° / 90°) so repeated presses stay aligned
+ * even when the starting rotation was off-grid from a freeform editor entry.
+ * Returns true if any token actually changed.
+ */
+function rotateSelection(deltaRad: number): boolean {
+  if (selection.ids.size === 0) return false;
+  const state = store.getState();
+  const ids = Array.from(selection.ids);
+  let moved = false;
+  store.batch(() => {
+    for (const id of ids) {
+      const t = state.tokens.find((t) => t.id === id);
+      if (!t) continue;
+      const next = snapRotation(rotateBy(t.rotation, deltaRad), Math.PI / 4);
+      if (next !== t.rotation) {
+        store.applyPatch({
+          kind: 'token-update',
+          id,
+          changes: { rotation: next },
+        });
+        moved = true;
+      }
+    }
+  });
+  if (moved) renderer.requestRender();
+  return moved;
+}
+
 function moveSelection(dx: number, dy: number): boolean {
   if (selection.ids.size === 0) return false;
   const state = store.getState();
@@ -804,6 +835,7 @@ function placeTokenAt(gx: number, gy: number) {
     borderColor: null,
     hp: null,
     conditions: [],
+    rotation: 0,
   };
   store.applyPatch({ kind: 'token-add', token });
   lastPlacedRef.current = token;
@@ -920,6 +952,28 @@ window.addEventListener('keydown', (e) => {
     }
     if (e.key === 'ArrowRight' || key === 'd') {
       if (moveSelection(step, 0)) e.preventDefault();
+      return;
+    }
+  }
+
+  // Rotation shortcuts — `,` / `.` = 45° CCW/CW, Shift+, / Shift+. = 90°.
+  // Because Shift maps the physical keys to `<` and `>`, we match on the
+  // produced character rather than e.key plus shift.
+  if (selection.ids.size > 0 && !e.altKey && !e.ctrlKey && !e.metaKey) {
+    if (e.key === ',') {
+      if (rotateSelection(-Math.PI / 4)) e.preventDefault();
+      return;
+    }
+    if (e.key === '.') {
+      if (rotateSelection(Math.PI / 4)) e.preventDefault();
+      return;
+    }
+    if (e.key === '<') {
+      if (rotateSelection(-Math.PI / 2)) e.preventDefault();
+      return;
+    }
+    if (e.key === '>') {
+      if (rotateSelection(Math.PI / 2)) e.preventDefault();
       return;
     }
   }

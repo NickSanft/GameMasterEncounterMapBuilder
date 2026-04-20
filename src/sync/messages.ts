@@ -97,6 +97,7 @@ export function deserializeState(s: SerializedSessionState): SessionState {
       conditions: Array.isArray(t.conditions)
         ? t.conditions.filter((c): c is string => typeof c === 'string')
         : [],
+      rotation: typeof t.rotation === 'number' && Number.isFinite(t.rotation) ? t.rotation : 0,
     })),
     fog: Uint8Array.from(s.fog),
     annotations: (s.annotations ?? []).map((a) => ({

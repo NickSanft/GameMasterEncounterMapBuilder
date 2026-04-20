@@ -20,6 +20,7 @@ const sample: Token = {
   borderColor: '#ffaa00',
   hp: null,
   conditions: [],
+  rotation: 0,
 };
 
 beforeEach(() => {

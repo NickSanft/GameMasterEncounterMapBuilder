@@ -69,6 +69,7 @@ export function placeTemplate(
     imageId: tt.imageId,
     hp: null,
     conditions: [],
+    rotation: 0,
   }));
 }
 

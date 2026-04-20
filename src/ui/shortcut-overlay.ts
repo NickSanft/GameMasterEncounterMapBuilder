@@ -41,6 +41,7 @@ const GM_SECTIONS: ShortcutSection[] = [
       { keys: 'Right-click', desc: 'Contextual menu' },
       { keys: 'Arrow / WASD', desc: 'Move selection by 1 cell (+Shift = 5)' },
       { keys: 'E', desc: 'Edit the first selected token' },
+      { keys: ', / .', desc: 'Rotate selection 45° CCW / CW (+Shift = 90°)' },
       { keys: 'Delete / Backspace', desc: 'Delete selection' },
       { keys: 'Ctrl/Cmd+C / V / X', desc: 'Copy, paste, cut' },
       { keys: 'Ctrl/Cmd+D', desc: 'Duplicate in place' },

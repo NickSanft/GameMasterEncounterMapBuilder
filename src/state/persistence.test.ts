@@ -25,6 +25,7 @@ describe('saveState / loadPersistedState', () => {
       borderColor: '#4caf50',
       hp: null,
       conditions: [],
+      rotation: 0,
     });
     state.fog[0] = 1;
     state.fog[99] = 1;

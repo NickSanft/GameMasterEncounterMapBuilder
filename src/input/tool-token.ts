@@ -32,6 +32,7 @@ export function createTokenTool(ctx: InputContext): Tool {
         borderColor: null,
         hp: null,
         conditions: [],
+        rotation: 0,
       };
     }
     store.applyPatch({ kind: 'token-add', token: newToken });

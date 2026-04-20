@@ -14,6 +14,7 @@ function token(overrides: Partial<Token>): Token {
     borderColor: overrides.borderColor ?? null,
     hp: overrides.hp ?? null,
     conditions: overrides.conditions ?? [],
+    rotation: overrides.rotation ?? 0,
   };
 }
 

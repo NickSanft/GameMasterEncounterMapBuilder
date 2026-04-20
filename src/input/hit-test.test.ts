@@ -16,6 +16,7 @@ function token(partial: Partial<Token> & { id: string }): Token {
     borderColor: partial.borderColor ?? null,
     hp: partial.hp ?? null,
     conditions: partial.conditions ?? [],
+    rotation: partial.rotation ?? 0,
   };
 }
 

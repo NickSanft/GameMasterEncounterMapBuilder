@@ -23,6 +23,7 @@ function tok(imageId: string | null, x = 0, y = 0): Token {
     borderColor: null,
     hp: null,
     conditions: [],
+    rotation: 0,
   };
 }
 
@@ -82,6 +83,7 @@ describe('idb-cleanup', () => {
       imageId: 'lib-img',
       hp: null,
       conditions: [],
+      rotation: 0,
     });
 
     const state = createDefaultState();

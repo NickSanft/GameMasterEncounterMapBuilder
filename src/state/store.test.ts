@@ -14,6 +14,7 @@ function newToken(id: string, overrides: Partial<Token> = {}): Token {
     borderColor: null,
     hp: null,
     conditions: [],
+    rotation: 0,
     ...overrides,
   };
 }

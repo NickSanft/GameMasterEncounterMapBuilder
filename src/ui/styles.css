@@ -673,9 +673,10 @@ body.view {
   box-shadow: 0 0 0 2px var(--active-glow);
 }
 
-/* HP block + conditions (token editor) */
+/* HP block + conditions + rotation (token editor) */
 .hp-block,
-.conditions-block {
+.conditions-block,
+.rotation-block {
   border: 1px solid var(--border);
   border-radius: 6px;
   padding: 0.55rem 0.75rem 0.75rem;
@@ -686,13 +687,51 @@ body.view {
 }
 
 .hp-block legend,
-.conditions-block legend {
+.conditions-block legend,
+.rotation-block legend {
   padding: 0 0.35rem;
   font-size: 0.78rem;
   color: var(--fg-muted);
   text-transform: uppercase;
   letter-spacing: 0.06em;
   font-weight: 700;
+}
+
+.rotation-row {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  flex-wrap: wrap;
+}
+
+.rotation-row > label {
+  margin: 0;
+  flex: 0 0 auto;
+}
+
+.rotation-compass {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--fg);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.2rem 0.55rem;
+  min-width: 2.4rem;
+  text-align: center;
+  letter-spacing: 0.05em;
+}
+
+.rotation-quick {
+  display: flex;
+  gap: 0.3rem;
+  flex-wrap: wrap;
+}
+
+.rotation-quick button {
+  padding: 0.3rem 0.55rem;
+  font-size: 0.8rem;
 }
 
 .hp-row {

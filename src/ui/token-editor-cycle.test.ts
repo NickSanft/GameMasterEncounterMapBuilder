@@ -18,6 +18,7 @@ function tok(id: string, x = 0, y = 0): Token {
     borderColor: null,
     hp: null,
     conditions: [],
+    rotation: 0,
   };
 }
 

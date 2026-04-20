@@ -159,6 +159,12 @@ function drawTokenBody(
     ctx.stroke();
   }
 
+  // Facing notch — a small outward wedge at the token's rotation angle.
+  // Only drawn for rotated tokens, so unrotated tokens stay visually clean.
+  if (t.rotation !== 0) {
+    drawFacingNotch(ctx, cx, cy, r, t.rotation, t.borderColor);
+  }
+
   if (activeTurn) {
     const ar = r + (t.borderColor ? 7 : 4);
     ctx.save();
@@ -391,6 +397,47 @@ function drawTokenStatus(
   }
 
   ctx.restore();
+}
+
+/**
+ * Draw a small outward-pointing triangle at the token's facing angle.
+ * `rotation` is measured clockwise from "up" (negative Y), so the tip
+ * sits at angle `(rotation - π/2)` in canvas standard coordinates.
+ */
+function drawFacingNotch(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  r: number,
+  rotation: number,
+  borderColor: string | null,
+): void {
+  const tipR = r + (borderColor ? 6 : 4);
+  const baseR = r + 1;
+  const halfWidth = Math.max(4, r * 0.22);
+  // Canvas-standard angle: 0 = +X, π/2 = +Y. Our rotation = 0 means
+  // "facing up" (negative Y), i.e. canvas angle -π/2.
+  const angle = rotation - Math.PI / 2;
+  const tipX = cx + Math.cos(angle) * tipR;
+  const tipY = cy + Math.sin(angle) * tipR;
+  // Left/right base points, perpendicular to the facing direction.
+  const leftA = angle + Math.PI / 2;
+  const rightA = angle - Math.PI / 2;
+  const blx = cx + Math.cos(angle) * baseR + Math.cos(leftA) * halfWidth;
+  const bly = cy + Math.sin(angle) * baseR + Math.sin(leftA) * halfWidth;
+  const brx = cx + Math.cos(angle) * baseR + Math.cos(rightA) * halfWidth;
+  const bry = cy + Math.sin(angle) * baseR + Math.sin(rightA) * halfWidth;
+
+  ctx.beginPath();
+  ctx.moveTo(tipX, tipY);
+  ctx.lineTo(blx, bly);
+  ctx.lineTo(brx, bry);
+  ctx.closePath();
+  ctx.fillStyle = borderColor ?? '#ffd966';
+  ctx.fill();
+  ctx.lineWidth = 1.5;
+  ctx.strokeStyle = 'rgba(0, 0, 0, 0.65)';
+  ctx.stroke();
 }
 
 /** Hex color → should we use dark text on top for contrast? */

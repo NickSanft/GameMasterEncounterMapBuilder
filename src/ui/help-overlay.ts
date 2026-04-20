@@ -75,6 +75,17 @@ const GM_SECTIONS: HelpSection[] = [
       { name: 'Scroll wheel', desc: 'Zoom toward the cursor.' },
       { name: 'Arrow keys / WASD', desc: 'Nudge the selected tokens one cell at a time (+Shift = 5 cells).' },
       { name: 'E', desc: 'Open the token editor for the first selected token.' },
+      { name: ', / .', desc: 'Rotate the selection 45° counter-clockwise / clockwise. Add Shift for 90° steps.' },
+    ],
+  },
+  {
+    title: 'Facing & rotation',
+    intro: 'Tokens track a facing angle (0° = north). A small notch appears on rotated tokens.',
+    entries: [
+      { name: 'Rotation field', desc: 'In the token editor, type a degree value (0–359) or use ↺ 45° / ↻ 45° / ↺ 90° / ↻ 90° quick-snap buttons.' },
+      { name: 'N button', desc: 'Reset the token to face North (0°).' },
+      { name: 'Compass readout', desc: 'Shows the current heading as N, NE, E, SE, S, SW, W, or NW.' },
+      { name: ', / .', desc: 'On the canvas, rotate the selection 45° CCW / CW. Shift+,/Shift+. steps by 90°. Hold down the key to rotate quickly.' },
     ],
   },
   {
