@@ -2227,6 +2227,29 @@ body.notes-open .zoom-controls {
 
 .status-banner-dismiss[hidden] { display: none; }
 
+/* Mini-map — pinned bottom-right, sitting above the zoom controls. */
+.mini-map {
+  position: fixed;
+  bottom: calc(0.75rem + 4.25rem); /* leave room for zoom controls below */
+  right: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #14161a;
+  cursor: crosshair;
+  z-index: 14;
+  box-shadow: var(--panel-shadow);
+}
+
+.mini-map[hidden] { display: none; }
+
+.mini-map:hover {
+  border-color: var(--accent);
+}
+
+body.notes-open .mini-map {
+  right: calc(320px + 0.75rem);
+}
+
 /* Floating 🎲 dice button (bottom-left, above help button) */
 .dice-button {
   position: fixed;

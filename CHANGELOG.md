@@ -39,6 +39,26 @@ Planned work for the remaining phases. See the plan conversation for full scope.
 
 ---
 
+## [0.44.0] — 2026-04-20 — Mini-map
+
+### Added
+- **Mini-map component** (`src/ui/mini-map.ts`) — a 200×140 floating canvas pinned to the bottom-right (above the zoom controls). Renders a stylized thumbnail of the whole grid: the background image if loaded, fog of war (darkened hidden cells), every token as a colored dot with border hint, and — crucially — a yellow rectangle showing the main canvas's current viewport. Clicking anywhere inside the mini-map recenters the main camera on that world point while preserving zoom.
+- **Both views** (GM + Spectator) get the mini-map. On Spectator, the fog overlay is fully opaque (matching the main canvas), and fully-hidden tokens are filtered out — so the mini-map never leaks information.
+- **Notes-panel awareness** — the mini-map slides inward when the notes drawer is open, matching the existing zoom-control and `?`-button behavior.
+- **New preference** `showMiniMap: boolean` (default `false`) with a Settings → Grid checkbox + explanatory hint. Persists through localStorage and cross-tab syncs (so toggling it on the GM shows it on the Spectator tab too, live).
+- **Pre-0.44 behavior preserved** — mini-map is off by default; users with no configured preference see no visual change until they opt in.
+
+### Implementation notes
+- Render is fully cleared + redrawn every tick at 200×140 — cheap enough that we don't bother diffing. Redraws are rAF-throttled and subscribed to both store and camera events.
+- Uses the same `viewportFromCamera` helper introduced in Phase 29 for the Spectator-viewport indicator, so the world-space math is shared.
+- `setEnabled(false)` cleanly unsubscribes store + camera listeners, so leaving the mini-map off has zero ongoing cost.
+
+### Tests
+- **3 new Playwright specs**: hidden-by-default + Settings toggle reveals it; preference persists across reload + click-to-move camera stays responsive; Spectator view exposes the same mini-map surface.
+- Help overlay's Zoom-controls section gets a new *Mini-map* entry pointing users at the Settings toggle and explaining the click-to-recenter behavior.
+
+---
+
 ## [0.43.0] — 2026-04-20 — Grid labels + scene lighting
 
 ### Added
@@ -563,7 +583,8 @@ Planned work for the remaining phases. See the plan conversation for full scope.
 
 ---
 
-[Unreleased]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.43.0...HEAD
+[Unreleased]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.44.0...HEAD
+[0.44.0]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.43.0...v0.44.0
 [0.43.0]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.42.0...v0.43.0
 [0.42.0]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.41.0...v0.42.0
 [0.41.0]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.40.0...v0.41.0

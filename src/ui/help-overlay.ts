@@ -68,6 +68,7 @@ const GM_SECTIONS: HelpSection[] = [
       { name: '+ / −', desc: 'Zoom in or out around the center of the view.' },
       { name: 'Fit', desc: 'Zoom and pan to fit all placed content (map + tokens) on screen. Also F.' },
       { name: 'Reset', desc: 'Return to the default camera (origin + 1× zoom). Also 0.' },
+      { name: 'Mini-map', desc: 'Optional thumbnail above the zoom controls (Settings → Grid → Show mini-map). Shows the whole map + your viewport as a yellow rectangle. Click anywhere inside to recenter the main camera there.' },
     ],
   },
   {

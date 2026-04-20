@@ -60,6 +60,7 @@ export function mountSettingsModal(
   const cellSizeInput = modal.querySelector<HTMLInputElement>('[data-field="cellSize"]')!;
   const showGridLinesInput = modal.querySelector<HTMLInputElement>('[data-field="showGridLines"]')!;
   const showGridLabelsInput = modal.querySelector<HTMLInputElement>('[data-field="showGridLabels"]')!;
+  const showMiniMapInput = modal.querySelector<HTMLInputElement>('[data-field="showMiniMap"]')!;
   const sceneLightColorInput = modal.querySelector<HTMLInputElement>('[data-field="sceneLightColor"]')!;
   const sceneLightOpacityInput = modal.querySelector<HTMLInputElement>('[data-field="sceneLightOpacity"]')!;
   const sceneLightOpacityLabel = modal.querySelector<HTMLSpanElement>('[data-field="sceneLightOpacityValue"]')!;
@@ -134,6 +135,7 @@ export function mountSettingsModal(
     cellSizeInput.value = String(state.grid.cellSize);
     showGridLinesInput.checked = state.grid.showGridLines;
     showGridLabelsInput.checked = prefs.showGridLabels;
+    showMiniMapInput.checked = prefs.showMiniMap;
     sceneLightColorInput.value = prefs.sceneLightColor;
     sceneLightOpacityInput.value = String(Math.round(prefs.sceneLightOpacity * 100));
     sceneLightOpacityLabel.textContent = `${Math.round(prefs.sceneLightOpacity * 100)}%`;
@@ -215,6 +217,10 @@ export function mountSettingsModal(
 
   showGridLabelsInput.addEventListener('change', () => {
     preferences.update({ showGridLabels: showGridLabelsInput.checked });
+  });
+
+  showMiniMapInput.addEventListener('change', () => {
+    preferences.update({ showMiniMap: showMiniMapInput.checked });
   });
 
   sceneLightColorInput.addEventListener('change', () => {
@@ -442,6 +448,11 @@ function renderGridPane(): string {
         <span>Show coordinate labels (A1, B2, …)</span>
       </label>
       <p class="settings-hint">Chess-style A–Z column + 1–N row labels in the gutters. Useful for verbal reference during play ("there's a trap at D6").</p>
+      <label class="check">
+        <input type="checkbox" data-field="showMiniMap" />
+        <span>Show mini-map</span>
+      </label>
+      <p class="settings-hint">Floating bottom-right thumbnail of the whole map — background, fog, tokens, plus a ring showing your current viewport. Click anywhere in the mini-map to recenter the main camera there.</p>
       <p class="settings-hint">Changing grid dimensions preserves fog state for cells that still exist after the resize.</p>
     </section>
   `;

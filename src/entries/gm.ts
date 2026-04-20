@@ -102,6 +102,7 @@ import { mountDicePanel } from '../ui/dice-panel.js';
 import { mountStatusBanners } from '../ui/status-banners.js';
 import { mountImportOptionsModal } from '../ui/import-options-modal.js';
 import { mergeImportState } from '../state/import-merge.js';
+import { mountMiniMap } from '../ui/mini-map.js';
 import { createConflictDetector } from '../state/conflict-detector.js';
 import {
   consumeDirtyFlag,
@@ -209,6 +210,7 @@ preferences.subscribe((prefs) => {
   if (!prefs.persistCamera) clearCamera('gm');
   else persistCameraDebounced();
   diagnosticsOverlay?.setEnabled(prefs.showDiagnostics);
+  miniMap?.setEnabled(prefs.showMiniMap);
 });
 
 const inputContext = {
@@ -927,6 +929,14 @@ const diagnosticsOverlay = mountDiagnosticsOverlay({
   },
 });
 diagnosticsOverlay.setEnabled(preferences.get().showDiagnostics);
+
+const miniMap = mountMiniMap({
+  renderer,
+  store,
+  viewMode: 'gm',
+  getImage: (id) => imageLoader.get(id),
+});
+miniMap.setEnabled(preferences.get().showMiniMap);
 
 // Async IDB save, fire-and-forget from the debounced path.
 const persist = debounce(() => {

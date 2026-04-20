@@ -31,6 +31,8 @@ export interface Preferences {
   sceneLightColor: string;
   /** Scene-lighting opacity, 0..1. 0 = fully lit (no tint). */
   sceneLightOpacity: number;
+  /** Show the floating bottom-right mini-map. */
+  showMiniMap: boolean;
 }
 
 export const DEFAULT_PREFERENCES: Preferences = {
@@ -52,6 +54,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   showGridLabels: false,
   sceneLightColor: '#0a0530',
   sceneLightOpacity: 0,
+  showMiniMap: false,
 };
 
 export interface PreferencesStore {

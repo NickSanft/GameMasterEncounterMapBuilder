@@ -20,6 +20,7 @@ import { mountInitiativeBar } from '../ui/initiative-bar.js';
 import { mountDiagnosticsOverlay } from '../ui/diagnostics-overlay.js';
 import { mountHelpOverlay } from '../ui/help-overlay.js';
 import { mountDicePanel } from '../ui/dice-panel.js';
+import { mountMiniMap } from '../ui/mini-map.js';
 import { createPingManager } from '../state/ping-manager.js';
 import { createMeasurementOverlayRef } from '../input/context.js';
 import { createMeasureTool, createRulerToolOptionsRef } from '../input/tool-measure.js';
@@ -108,6 +109,7 @@ preferences.subscribe((prefs) => {
   if (!prefs.persistCamera) clearCamera('spectator');
   else persistCameraDebounced();
   diagnosticsOverlay?.setEnabled(prefs.showDiagnostics);
+  miniMap?.setEnabled(prefs.showMiniMap);
 });
 
 function applyRemoteCamera(camera: { x: number; y: number; zoom: number }) {
@@ -250,6 +252,14 @@ const diagnosticsOverlay = mountDiagnosticsOverlay({
   viewMode: 'spectator',
 });
 diagnosticsOverlay.setEnabled(preferences.get().showDiagnostics);
+
+const miniMap = mountMiniMap({
+  renderer,
+  store,
+  viewMode: 'spectator',
+  getImage: (id) => imageLoader.get(id),
+});
+miniMap.setEnabled(preferences.get().showMiniMap);
 
 preferences.subscribe((prefs) => {
   if (prefs.followGmCamera && channel) {
