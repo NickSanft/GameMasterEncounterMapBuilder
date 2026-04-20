@@ -100,6 +100,8 @@ import { mountHelpOverlay } from '../ui/help-overlay.js';
 import { mountDamageHealDialog } from '../ui/damage-heal-dialog.js';
 import { mountDicePanel } from '../ui/dice-panel.js';
 import { mountStatusBanners } from '../ui/status-banners.js';
+import { mountImportOptionsModal } from '../ui/import-options-modal.js';
+import { mergeImportState } from '../state/import-merge.js';
 import { createConflictDetector } from '../state/conflict-detector.js';
 import {
   consumeDirtyFlag,
@@ -409,6 +411,8 @@ async function saveSelectionAsTemplate() {
   }
 }
 
+const importOptionsModal = mountImportOptionsModal();
+
 mountSessionMenu(document.body, {
   onNewSession: () => {
     store.resetSession();
@@ -442,10 +446,14 @@ mountSessionMenu(document.body, {
   onImport: async (file) => {
     try {
       const text = await file.text();
-      const { state, imageIds } = await importSession(text);
+      const { state: imported, imageIds } = await importSession(text);
+      // Show the options dialog so the user can opt out of categories.
+      const selectionChoice = await importOptionsModal.open(imported);
+      if (!selectionChoice) return; // user cancelled
       for (const id of imageIds) imageLoader.invalidate(id);
       selection.ids = new Set();
-      store.applyPatch({ kind: 'session-reset', state });
+      const merged = mergeImportState(store.getState(), imported, selectionChoice);
+      store.applyPatch({ kind: 'session-reset', state: merged });
     } catch (err) {
       console.error('[gm] import failed', err);
       window.alert('Failed to import session. Check the file is a valid export.');

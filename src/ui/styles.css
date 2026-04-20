@@ -2103,6 +2103,76 @@ body.notes-open .zoom-controls {
   z-index: 30;
 }
 
+/* Import-options modal — checkbox list of categories to merge. */
+.import-options-modal {
+  min-width: 480px;
+  max-width: min(640px, 94vw);
+}
+
+.import-options-modal .modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.import-options-modal button.primary {
+  background: var(--accent);
+  color: var(--bg);
+  border-color: var(--accent);
+  font-weight: 600;
+}
+
+.import-options-modal button.primary:hover:not(:disabled) {
+  filter: brightness(1.05);
+}
+
+.import-options-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  max-height: 50vh;
+  overflow-y: auto;
+}
+
+.import-options-row {
+  padding: 0.35rem 0.55rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+
+.import-options-row label.check {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 0.65rem;
+  align-items: center;
+  cursor: pointer;
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 0.9rem;
+  margin: 0;
+}
+
+.import-options-row input[type='checkbox']:disabled + .import-options-label {
+  color: var(--fg-muted);
+  text-decoration: line-through;
+}
+
+.import-options-label {
+  color: var(--fg);
+  font-weight: 500;
+}
+
+.import-options-count {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.78rem;
+  color: var(--fg-muted);
+  white-space: nowrap;
+}
+
 /* Status banners (conflict detection, crash recovery) — pinned to the
  * top center so the user can't miss them, but narrow enough to leave
  * the initiative bar room beside it. */

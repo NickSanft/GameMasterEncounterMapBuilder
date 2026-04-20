@@ -39,6 +39,20 @@ Planned work for the remaining phases. See the plan conversation for full scope.
 
 ---
 
+## [0.42.0] — 2026-04-20 — Partial import
+
+### Added
+- **Import options modal.** Picking a JSON file from the session menu now opens a dialog with one checkbox per category — Background, Tokens, Fog of war, Annotations, AoE templates, Initiative, Drawings, Grid dimensions — instead of blowing the current scene away. Every box defaults to checked (reproducing the pre-0.42 replace-all behavior). Unchecking a category preserves whatever is already in the current scene for that slice.
+- **Auto-coupled Fog + Grid.** Because the fog Uint8Array is keyed by grid dimensions, importing Fog automatically imports Grid too — the Grid checkbox shows as locked + a small hint explains why.
+- **Empty-category row disabling.** Categories with zero rows in the source file (e.g. an export with no AoE templates) render disabled + strikethrough so the user doesn't accidentally "import nothing."
+- **Count preview** per row — "3 tokens", "12 / 600 cells revealed", "4 × 30" grid dimensions — so the user can eyeball the incoming content before committing.
+- **Pure merge helper** `src/state/import-merge.ts` (`mergeImportState`, `summarizeImport`, `DEFAULT_IMPORT_SELECTION`). Non-mutating, returns a fresh `SessionState` — fog buffer is a new `Uint8Array`, tokens / annotations / strokes are deep-copied.
+- **9 new unit tests** cover default-selection replace-all, all-false preserve-base, selective merges, fog-auto-pulls-grid coupling, non-mutation, and fresh-buffer invariants. Plus `summarizeImport` categorization.
+- **4 new Playwright specs** covering modal rendering, "uncheck tokens to preserve local token" round-trip, disabled-checkbox state for empty categories, and the Fog+Grid coupling toggle.
+- Help overlay's *Import* entry updated to describe the new dialog.
+
+---
+
 ## [0.41.0] — 2026-04-20 — Conflict detection + crash recovery
 
 ### Added
@@ -532,7 +546,8 @@ Planned work for the remaining phases. See the plan conversation for full scope.
 
 ---
 
-[Unreleased]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.41.0...HEAD
+[Unreleased]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.42.0...HEAD
+[0.42.0]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.41.0...v0.42.0
 [0.41.0]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.40.0...v0.41.0
 [0.40.0]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.39.0...v0.40.0
 [0.39.0]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.38.0...v0.39.0
