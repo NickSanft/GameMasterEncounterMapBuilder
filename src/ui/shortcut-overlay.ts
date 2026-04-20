@@ -31,6 +31,7 @@ const GM_SECTIONS: ShortcutSection[] = [
       { keys: '1–5 (Ruler)', desc: 'Snap ruler to 5 / 30 / 60 / 90 / 120 ft preset' },
       { keys: '0 (Ruler)', desc: 'Back to freeform ruler (no preset)' },
       { keys: 'Y', desc: 'AoE — place a spell/effect template' },
+      { keys: 'K', desc: 'Draw — freehand ink on the map' },
     ],
   },
   {

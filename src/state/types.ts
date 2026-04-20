@@ -92,6 +92,23 @@ export interface AoeTemplate {
   visibility: AoeVisibility;
 }
 
+export type DrawStrokeVisibility = 'gm' | 'shared';
+
+/**
+ * A freehand ink stroke laid down on the map. `points` are in world
+ * coordinates. Strokes render above annotations but below the
+ * measurement overlay. GM-only strokes are never drawn on the
+ * Spectator canvas.
+ */
+export interface DrawStroke {
+  id: ID;
+  points: Array<{ x: number; y: number }>;
+  color: string;
+  /** Stroke width in world pixels (at zoom=1). */
+  width: number;
+  visibility: DrawStrokeVisibility;
+}
+
 export interface InitiativeEntry {
   id: ID;
   tokenId: ID | null;
@@ -114,6 +131,7 @@ export interface SessionState {
   annotations: Annotation[];
   aoeTemplates: AoeTemplate[];
   initiative: InitiativeState;
+  strokes: DrawStroke[];
 }
 
 export interface Camera {
@@ -145,6 +163,10 @@ export type StatePatch =
     }
   | { kind: 'initiative-remove'; id: ID }
   | { kind: 'initiative-set-active'; activeId: ID | null; round: number }
+  | { kind: 'stroke-add'; stroke: DrawStroke }
+  | { kind: 'stroke-update'; id: ID; changes: Partial<Omit<DrawStroke, 'id'>> }
+  | { kind: 'stroke-remove'; id: ID }
+  | { kind: 'strokes-clear' }
   | { kind: 'session-reset'; state: SessionState };
 
 export const DEFAULT_GRID: GridConfig = {
@@ -179,5 +201,6 @@ export function createDefaultState(): SessionState {
     annotations: [],
     aoeTemplates: [],
     initiative: { order: [], activeId: null, round: 0 },
+    strokes: [],
   };
 }

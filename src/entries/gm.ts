@@ -9,6 +9,7 @@ import {
   createLastPlacedRef,
   createMeasurementOverlayRef,
   createAoeOverlayRef,
+  createDrawOverlayRef,
 } from '../input/context.js';
 import { createToolManager } from '../input/tool-manager.js';
 import { createSelectTool } from '../input/tool-select.js';
@@ -29,6 +30,9 @@ import {
 import { mountRulerSettings } from '../ui/ruler-settings.js';
 import { RULER_PRESETS } from '../state/ruler.js';
 import { createAoeTool, createAoeToolOptionsRef } from '../input/tool-aoe.js';
+import { createDrawTool, createDrawToolOptionsRef } from '../input/tool-draw.js';
+import { DEFAULT_STROKE_COLOR, DEFAULT_STROKE_WIDTH, hitTestStrokes } from '../state/draw.js';
+import { mountDrawSettings } from '../ui/draw-settings.js';
 import { hitTestAoe } from '../input/hit-test-aoe.js';
 import { DEFAULT_AOE_COLOR } from '../state/aoe.js';
 import { mountAoeSettings } from '../ui/aoe-settings.js';
@@ -105,6 +109,12 @@ const lassoOverlayRef = createLassoOverlayRef();
 const lastPlacedRef = createLastPlacedRef();
 const measurementOverlayRef = createMeasurementOverlayRef();
 const aoeOverlayRef = createAoeOverlayRef();
+const drawOverlayRef = createDrawOverlayRef();
+const drawToolOptionsRef = createDrawToolOptionsRef({
+  color: DEFAULT_STROKE_COLOR,
+  width: DEFAULT_STROKE_WIDTH,
+  visibility: 'shared',
+});
 const rulerToolOptionsRef = createRulerToolOptionsRef();
 const aoeToolOptionsRef = createAoeToolOptionsRef({
   kind: 'sphere',
@@ -154,6 +164,7 @@ const renderer = createRenderer({
   getAoePreview: () => aoeOverlayRef.current,
   getSpectatorViewport,
   getRulerTargetFeet: () => rulerToolOptionsRef.current.targetFeet,
+  getDrawPreview: () => drawOverlayRef.current,
 });
 
 panZoomRef.handle = attachPanZoom(renderer);
@@ -203,6 +214,13 @@ toolManager.register(
   }),
 );
 toolManager.register(createAoeTool(inputContext, aoeToolOptionsRef));
+toolManager.register(
+  createDrawTool({
+    ...inputContext,
+    drawOverlay: drawOverlayRef,
+    drawOptions: drawToolOptionsRef,
+  }),
+);
 
 const toolbarHandle = mountToolbar(
   document.body,
@@ -216,6 +234,7 @@ const toolbarHandle = mountToolbar(
     { id: 'note', label: 'Note (N)', title: 'Click to drop a map annotation.' },
     { id: 'measure', label: 'Ruler (L)', title: 'Drag to measure distance in grid squares.' },
     { id: 'aoe', label: 'AoE (Y)', title: 'Drag to place an area-of-effect template.' },
+    { id: 'draw', label: 'Draw (K)', title: 'Freehand ink on the map. Right-click a stroke to delete or toggle visibility.' },
   ],
   [
     {
@@ -239,6 +258,7 @@ toolManager.setActive('select');
 
 mountFogSettings(document.body, fogOptionsRef, toolManager);
 mountAoeSettings(document.body, aoeToolOptionsRef, toolManager);
+mountDrawSettings(document.body, drawToolOptionsRef, toolManager);
 const rulerSettings = mountRulerSettings(document.body, rulerToolOptionsRef);
 rulerSettings.setVisible(toolManager.getActive() === 'measure');
 toolManager.onChange((id) => rulerSettings.setVisible(id === 'measure'));
@@ -410,6 +430,14 @@ mountSessionMenu(document.body, {
   onInitiative: () => initiativeModal.open(),
   onTokenLibrary: () => tokenLibraryModal.open(),
   onTemplateLibrary: () => templateLibraryModal.open(),
+  onClearDrawings: () => {
+    const state = store.getState();
+    if (state.strokes.length === 0) return;
+    const ok = window.confirm(
+      `Erase all ${state.strokes.length} drawing${state.strokes.length === 1 ? '' : 's'}? This can be undone.`,
+    );
+    if (ok) store.applyPatch({ kind: 'strokes-clear' });
+  },
 });
 
 const tokenEditor = mountTokenEditor({
@@ -455,6 +483,9 @@ canvas.addEventListener('contextmenu', (e) => {
   const aoeHit = hit || annotHit
     ? null
     : hitTestAoe(state.aoeTemplates, world.x, world.y);
+  const strokeHit = hit || annotHit || aoeHit
+    ? null
+    : hitTestStrokes(state.strokes, world.x, world.y);
   const gx = Math.floor(world.x / state.grid.cellSize);
   const gy = Math.floor(world.y / state.grid.cellSize);
   const onGrid =
@@ -484,6 +515,30 @@ canvas.addEventListener('contextmenu', (e) => {
         variant: 'danger',
         onClick: () =>
           store.applyPatch({ kind: 'aoe-remove', id: aoe.id }),
+      },
+    );
+  } else if (strokeHit) {
+    const s = strokeHit;
+    items.push(
+      {
+        label:
+          s.visibility === 'shared'
+            ? 'Make stroke GM-only'
+            : 'Share stroke with Spectator',
+        onClick: () =>
+          store.applyPatch({
+            kind: 'stroke-update',
+            id: s.id,
+            changes: {
+              visibility: s.visibility === 'shared' ? 'gm' : 'shared',
+            },
+          }),
+      },
+      { kind: 'separator' },
+      {
+        label: 'Delete stroke',
+        variant: 'danger',
+        onClick: () => store.applyPatch({ kind: 'stroke-remove', id: s.id }),
       },
     );
   } else if (annotHit) {
@@ -630,11 +685,13 @@ canvas.addEventListener('contextmenu', (e) => {
 
   const label = aoeHit
     ? 'AoE actions'
-    : annotHit
-      ? 'Annotation actions'
-      : hit
-        ? 'Token actions'
-        : 'Map actions';
+    : strokeHit
+      ? 'Stroke actions'
+      : annotHit
+        ? 'Annotation actions'
+        : hit
+          ? 'Token actions'
+          : 'Map actions';
   showContextMenu({
     x: e.clientX,
     y: e.clientY,
@@ -1089,6 +1146,10 @@ window.addEventListener('keydown', (e) => {
       break;
     case 'y':
       toolManager.setActive('aoe');
+      e.preventDefault();
+      break;
+    case 'k':
+      toolManager.setActive('draw');
       e.preventDefault();
       break;
     case 'e': {

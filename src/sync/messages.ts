@@ -3,6 +3,7 @@ import type {
   AoeTemplate,
   Background,
   Camera,
+  DrawStroke,
   GridConfig,
   InitiativeState,
   SessionState,
@@ -30,6 +31,7 @@ export interface SerializedSessionState {
   annotations: Annotation[];
   aoeTemplates: AoeTemplate[];
   initiative: InitiativeState;
+  strokes: DrawStroke[];
 }
 
 export type SerializablePatch =
@@ -86,6 +88,10 @@ export function serializeState(s: SessionState): SerializedSessionState {
       activeId: s.initiative.activeId,
       round: s.initiative.round,
     },
+    strokes: s.strokes.map((st) => ({
+      ...st,
+      points: st.points.map((p) => ({ ...p })),
+    })),
   };
 }
 
@@ -144,6 +150,29 @@ export function deserializeState(s: SerializedSessionState): SessionState {
       activeId: s.initiative?.activeId ?? null,
       round: Number(s.initiative?.round) || 0,
     },
+    strokes: Array.isArray(s.strokes)
+      ? s.strokes.map((st) => ({
+          id: String(st.id ?? ''),
+          color: typeof st.color === 'string' ? st.color : '#ffd966',
+          width:
+            typeof st.width === 'number' && Number.isFinite(st.width) && st.width > 0
+              ? st.width
+              : 3,
+          visibility: st.visibility === 'gm' ? 'gm' : 'shared',
+          points: Array.isArray(st.points)
+            ? st.points
+                .filter(
+                  (p): p is { x: number; y: number } =>
+                    !!p &&
+                    typeof (p as { x?: unknown }).x === 'number' &&
+                    typeof (p as { y?: unknown }).y === 'number' &&
+                    Number.isFinite((p as { x: number }).x) &&
+                    Number.isFinite((p as { y: number }).y),
+                )
+                .map((p) => ({ x: p.x, y: p.y }))
+            : [],
+        }))
+      : [],
   };
 }
 

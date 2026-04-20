@@ -23,7 +23,9 @@ import {
   drawSpectatorViewport,
 } from './layer-spectator-viewport.js';
 import { drawMovementIndicator } from './layer-movement-indicator.js';
+import { drawStrokes } from './layer-strokes.js';
 import { gridDistance, formatDistance } from '../state/distance.js';
+import type { DrawStroke } from '../state/types.js';
 import type { Preferences } from '../state/preferences.js';
 import type { DragOverlay, LassoOverlay } from '../input/context.js';
 import type { Ping } from '../state/ping-manager.js';
@@ -70,6 +72,8 @@ interface CreateRendererOptions {
   getSpectatorViewport?(): ViewportRect | null;
   /** Active ruler-preset target feet (null = freeform). */
   getRulerTargetFeet?(): number | null;
+  /** Optional in-progress stroke (pre-commit) for the Draw tool. */
+  getDrawPreview?(): DrawStroke | null;
 }
 
 const EMPTY_HIGHLIGHT: ReadonlySet<ID> = new Set();
@@ -105,6 +109,7 @@ export function createRenderer(opts: CreateRendererOptions): Renderer {
     getAoePreview,
     getSpectatorViewport,
     getRulerTargetFeet,
+    getDrawPreview,
   } = opts;
   const maybeCtx = canvas.getContext('2d');
   if (!maybeCtx) throw new Error('2D canvas context unavailable');
@@ -171,6 +176,10 @@ export function createRenderer(opts: CreateRendererOptions): Renderer {
       dragOverlay,
     });
     drawFog(ctx, state, mode, { gmColor: gmFogColor, gmOpacity: gmFogOpacity });
+    drawStrokes(ctx, state.strokes, {
+      mode,
+      preview: getDrawPreview ? getDrawPreview() : null,
+    });
     drawAnnotations(ctx, state, {
       mode,
       highlightIds: highlights,

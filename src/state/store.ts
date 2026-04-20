@@ -37,6 +37,10 @@ function snapshot(s: SessionState): SessionState {
       activeId: s.initiative.activeId,
       round: s.initiative.round,
     },
+    strokes: s.strokes.map((st) => ({
+      ...st,
+      points: st.points.map((p) => ({ ...p })),
+    })),
   };
 }
 
@@ -54,6 +58,8 @@ function coalesceKey(patch: StatePatch): string | null {
       return `aoe-update:${patch.id}`;
     case 'initiative-update':
       return `initiative-update:${patch.id}`;
+    case 'stroke-update':
+      return `stroke-update:${patch.id}`;
     default:
       return null;
   }
@@ -239,6 +245,28 @@ export function createStore(initial?: SessionState): Store {
         };
         break;
       }
+      case 'stroke-add':
+        state = { ...state, strokes: [...state.strokes, patch.stroke] };
+        break;
+      case 'stroke-update': {
+        const idx = state.strokes.findIndex((s) => s.id === patch.id);
+        if (idx === -1) return;
+        const existing = state.strokes[idx]!;
+        const next = { ...existing, ...patch.changes };
+        const strokes = state.strokes.slice();
+        strokes[idx] = next;
+        state = { ...state, strokes };
+        break;
+      }
+      case 'stroke-remove':
+        state = {
+          ...state,
+          strokes: state.strokes.filter((s) => s.id !== patch.id),
+        };
+        break;
+      case 'strokes-clear':
+        state = { ...state, strokes: [] };
+        break;
       case 'session-reset':
         state = patch.state;
         break;

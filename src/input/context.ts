@@ -33,6 +33,14 @@ export function createAoeOverlayRef(): AoeOverlayRef {
   return { current: null };
 }
 
+export interface DrawOverlayRef {
+  current: import('../state/types.js').DrawStroke | null;
+}
+
+export function createDrawOverlayRef(): DrawOverlayRef {
+  return { current: null };
+}
+
 export interface LastPlacedRef {
   current: Token | null;
 }

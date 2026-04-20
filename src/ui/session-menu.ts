@@ -10,6 +10,7 @@ export interface SessionMenuActions {
   onInitiative(): void;
   onTokenLibrary(): void;
   onTemplateLibrary(): void;
+  onClearDrawings(): void;
 }
 
 export function mountSessionMenu(
@@ -102,6 +103,15 @@ export function mountSessionMenu(
     actions.onShortcuts();
   });
 
+  const clearDrawingsBtn = createButton(
+    'Clear Drawings',
+    'Erase every freehand stroke on the map',
+  );
+  clearDrawingsBtn.addEventListener('click', () => {
+    clearDrawingsBtn.blur();
+    actions.onClearDrawings();
+  });
+
   menu.appendChild(uploadBtn);
   menu.appendChild(presetBtn);
   menu.appendChild(tokenLibBtn);
@@ -110,6 +120,7 @@ export function mountSessionMenu(
   menu.appendChild(exportBtn);
   menu.appendChild(importBtn);
   menu.appendChild(notesBtn);
+  menu.appendChild(clearDrawingsBtn);
   menu.appendChild(shortcutsBtn);
   menu.appendChild(settingsBtn);
   menu.appendChild(newBtn);

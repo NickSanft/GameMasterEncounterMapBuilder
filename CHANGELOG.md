@@ -39,6 +39,27 @@ Planned work for the remaining phases. See the plan conversation for full scope.
 
 ---
 
+## [0.38.0] — 2026-04-20 — Freehand draw tool
+
+### Added
+- **Freehand draw tool** (`K`) — new tool on the GM toolbar. Drag anywhere on the canvas to paint a polyline. Release commits a single undoable `stroke-add` patch. A click without drag leaves a dot-shaped stroke.
+- **Draw settings panel** (matches the AoE/ruler/fog panel style, shown beside the toolbar while Draw is active) with:
+  - Six preset color swatches (gold / red / green / blue / white / black) plus a custom-color picker.
+  - Four width buttons (2 / 4 / 6 / 10 px).
+  - Shared / GM-only visibility toggle.
+- **Shared vs GM-only strokes** — GM-only strokes never render on the Spectator canvas. On the GM canvas they're drawn with a subtle dashed white halo so the GM can tell at a glance which ink is hidden from players.
+- **Right-click a stroke** (with Select active) → "Stroke actions" menu with "Make stroke GM-only" / "Share stroke with Spectator" toggle and "Delete stroke". Uses the new `hitTestStrokes` helper that tests against each segment with a `width/2 + slop` tolerance so thin strokes remain clickable.
+- **Session menu "Clear Drawings"** — confirms and wipes every stroke in a single undoable `strokes-clear` patch.
+- **Schema & sync** — new `DrawStroke` type, `SessionState.strokes[]`, four new `StatePatch` kinds (`stroke-add`, `stroke-update`, `stroke-remove`, `strokes-clear`), coalescing for mid-drag updates, and a migration in `deserializeState` that drops malformed points and clamps invalid widths/colors/visibilities. Broadcast to the Spectator via the existing patch-sync channel; no new message type needed.
+- **Pure helpers** `src/state/draw.ts`: `appendStrokePoint` (distance-threshold dedupe), `hitTestStroke` / `hitTestStrokes`, `DEFAULT_STROKE_COLOR`, `DEFAULT_STROKE_WIDTH`. **13 new unit tests** cover point-appending behavior, hit-test geometry at endpoints and midpoints, single-point strokes, and empty strokes.
+- **6 new Playwright specs** cover the toolbar button + `K` shortcut, the settings-panel controls, color-swatch active state, drag-to-draw-a-stroke verified via right-click, the Clear Drawings session-menu entry, and the full draw → right-click → delete round-trip.
+- **Help & Shortcut overlays** updated — new "K — Draw" tool entry, a Draw tutorial entry in the Help overlay, and a Clear Drawings entry in the session-menu tutorial section.
+
+### Notes
+- Strokes are *not* selectable via the Select tool's lasso or arrow-key move in this phase — right-click remains the interaction. A future phase can promote them to first-class selectables if the need arises.
+
+---
+
 ## [0.37.0] — 2026-04-20 — Ruler presets
 
 ### Added
@@ -428,7 +449,8 @@ Planned work for the remaining phases. See the plan conversation for full scope.
 
 ---
 
-[Unreleased]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.37.0...HEAD
+[Unreleased]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.38.0...HEAD
+[0.38.0]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.37.0...v0.38.0
 [0.37.0]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.36.0...v0.37.0
 [0.36.0]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.35.0...v0.36.0
 [0.35.0]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.34.0...v0.35.0
