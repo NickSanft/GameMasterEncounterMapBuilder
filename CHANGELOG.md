@@ -29,12 +29,48 @@ Planned work for the remaining phases. See the plan conversation for full scope.
 - **0.42.0** — Partial import
 - **0.43.0** — Grid labels + map tint
 - **0.44.0** — Mini-map
-- **0.46.0** — Keyboard focus + aria-live
 - **0.47.0** — Mobile / touch support
 - **0.48.0** — PWA / service worker
 - **0.49.0** — WebWorker-ize fog
 - **0.50.0** — Additional e2e behavior tests
 - **0.51.0** — Visual regression tests
+
+---
+
+## [0.46.0] — 2026-04-20 — Keyboard focus + aria-live
+
+### Added
+- **Skip-to-canvas link** on both `gm.html` and `spectator.html`. Visually hidden by default; the first Tab reveals it at the top-left, and pressing Enter drops focus directly on the battle map — keyboard users no longer have to Tab through the entire session menu + toolbar to reach the canvas.
+- **Focusable canvas.** The `<canvas>` now carries `tabindex="0"` so screen-reader users land on it naturally during Tab order traversal (it already had the `role="img"` label from Phase 25 onward). The global `:focus-visible` rule already styled a red outline around `[tabindex]:focus-visible`, so a crisp focus ring is visible immediately.
+- **Central aria-live announcer** (`src/util/announcer.ts`). Two visually-hidden regions — `polite` (default) and `assertive` — are injected at entry boot. The `announce(message, priority?)` API routes to the right region and flips a trailing non-breaking-space toggle so that identical repeats (e.g. "Token placed" after another "Token placed") still register as a change for assistive tech.
+- **Narrated user events.** The following now emit live-region announcements so screen-reader users hear what changed without having to re-read the canvas:
+  - Tool switches → *"{Tool} tool active"* (polite) — covers S/T/R/H/M/N/L/Y/K and the Spectator Ruler.
+  - Context-menu token placement → *"Token N placed."*
+  - Selection delete → *"Deleted N token(s) and M annotation(s)."*
+  - Damage/Heal apply → *"Dealt 7 HP to Thrain."* / *"Healed 3 HP to 2 tokens."*
+  - Scene switch → *"Switched to scene: Forest clearing."*
+  - New session → *"New session started. All tokens, fog, and background cleared."*
+  - Clear Drawings → *"3 drawings cleared."*
+  - Export / Export Image / Import success → brief confirmation; failures emit *assertive* errors.
+  - Dice rolls (local and remote from the other tab) → *"You rolled 1d20+5: 17."* / *"GM rolled 4d6kh3: 14."*
+  - GM-tab conflict detected → *"Warning: another GM tab is open."* (assertive — same severity as the banner).
+
+### Focus management
+- **Context menu** now remembers the triggering element (usually the canvas) and restores focus on dismiss, so Escape-ing a right-click menu lands the user back where they started instead of on `<body>`.
+- `damage-heal-dialog` exposes an optional `onAnnounce(summary)` hook so the GM entry can forward results into its announcer without coupling the dialog to the announcer module.
+- Full audit of the 14 `role="dialog"` modals confirms each one already uses the `attachFocusTrap` + `rememberFocus` / `restoreFocus` primitives introduced back in Phase 17.
+
+### CSS
+- New `.sr-only` utility class (the widely-used visually-hidden recipe) — used by the announcer regions.
+- New `.skip-link` visual — slides in from off-screen on focus, themed with `var(--accent)` so it works in both dark and light themes. Honours `body.reduced-motion` by disabling the transition.
+
+### Tests
+- **5 unit tests** for the announcer — region mounting, polite / assertive routing, repeat-text toggling, and `destroy()` DOM cleanup.
+- **6 Playwright specs** covering: Tab-from-body reveals the skip link (both GM + Spectator), skip-link activation focuses the canvas, live regions are mounted with the right ARIA attributes, tool-switch updates the polite region, context-menu token placement announces "Token 1 placed", and canvas shows a visible focus ring when keyboard-focused.
+
+### Implementation notes
+- The announcer writes `role="status"` + `aria-atomic="true"` on both regions so partial updates aren't concatenated by the screen reader; each announce replaces the region text wholesale.
+- Announcements are best-effort hints: they're safe to drop if the browser strips the live-region semantics (e.g. rarely-used engines), and they never block user actions.
 
 ---
 
@@ -605,7 +641,8 @@ Planned work for the remaining phases. See the plan conversation for full scope.
 
 ---
 
-[Unreleased]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.45.0...HEAD
+[Unreleased]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.46.0...HEAD
+[0.46.0]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.45.0...v0.46.0
 [0.45.0]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.44.0...v0.45.0
 [0.44.0]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.43.0...v0.44.0
 [0.43.0]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.42.0...v0.43.0

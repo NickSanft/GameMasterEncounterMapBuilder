@@ -34,6 +34,7 @@ import {
   ZOOM_BUTTON_STEP,
 } from '../render/camera-controls.js';
 import { isEditableFocus } from '../util/focus.js';
+import { createAnnouncer } from '../util/announcer.js';
 import type { PanZoomHandle } from '../input/pan-zoom.js';
 
 const canvasEl = document.getElementById('canvas');
@@ -44,6 +45,8 @@ const canvas: HTMLCanvasElement = canvasEl;
 
 const preferences = createPreferences();
 applyPrefsToBody(preferences.get());
+
+const announcer = createAnnouncer();
 
 // Start with default state; hydrate from IDB (with LS fallback) as
 // soon as the async load resolves. Spectator typically receives a
@@ -133,6 +136,7 @@ const dicePanel = mountDicePanel({
   viewMode: 'spectator',
   onLocalRoll: (roll) => {
     channel?.send({ type: 'dice-roll', roll });
+    announcer.announce(`You rolled ${roll.source}: ${roll.total}.`);
   },
 });
 
@@ -152,6 +156,7 @@ function setRulerActive(active: boolean) {
   rulerBtn.setAttribute('aria-pressed', active ? 'true' : 'false');
   canvas.style.cursor = active ? 'crosshair' : '';
   rulerSettings.setVisible(active);
+  announcer.announce(active ? 'Ruler tool active.' : 'Ruler tool off.');
 }
 
 mountSpectatorMenu({
@@ -235,6 +240,9 @@ if (channel) {
       broadcastViewportThrottled();
     } else if (msg.type === 'dice-roll') {
       dicePanel.pushRemoteRoll(msg.roll);
+      if (msg.roll.from !== 'spectator') {
+        announcer.announce(`GM rolled ${msg.roll.source}: ${msg.roll.total}.`);
+      }
     }
   });
   channel.send({ type: 'hello', from: 'spectator' });

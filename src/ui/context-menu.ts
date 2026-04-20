@@ -22,16 +22,27 @@ export interface ContextMenuOptions {
 
 let currentMenu: HTMLElement | null = null;
 let currentCleanup: (() => void) | null = null;
+let triggerFocusOnOpen: HTMLElement | null = null;
 
 export function dismissContextMenu(): void {
   currentCleanup?.();
   currentCleanup = null;
   currentMenu?.remove();
   currentMenu = null;
+  // Return focus to wherever the user came from (typically the canvas)
+  // so keyboard-only users don't lose their place after pressing Escape.
+  const returnTo = triggerFocusOnOpen;
+  triggerFocusOnOpen = null;
+  if (returnTo && typeof returnTo.focus === 'function') {
+    returnTo.focus();
+  }
 }
 
 export function showContextMenu(opts: ContextMenuOptions): void {
   dismissContextMenu();
+
+  const active = document.activeElement;
+  triggerFocusOnOpen = active instanceof HTMLElement ? active : null;
 
   const menu = document.createElement('div');
   menu.className = 'context-menu';

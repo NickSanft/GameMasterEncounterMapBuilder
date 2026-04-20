@@ -59,6 +59,51 @@ textarea:focus-visible,
   outline-offset: 2px;
 }
 
+/* Screen-reader-only — visually hidden but still in the a11y tree.
+   Matches the widely-used "visually-hidden" / "sr-only" recipe. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* Skip link — hidden until focused, then pops to the top-left so
+   keyboard users can bypass the session menu and drop straight into
+   the canvas. Used by .skip-link on gm.html and spectator.html. */
+.skip-link {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 10000;
+  transform: translateY(-150%);
+  transition: transform 140ms ease;
+  background: var(--accent);
+  color: #fff;
+  padding: 0.55rem 0.9rem;
+  border-radius: 0 0 6px 0;
+  font-weight: 600;
+  text-decoration: none;
+  font-size: 0.95rem;
+}
+
+.skip-link:focus,
+.skip-link:focus-visible {
+  transform: translateY(0);
+  outline: 2px solid var(--fg);
+  outline-offset: -4px;
+}
+
+body.reduced-motion .skip-link {
+  transition: none;
+}
+
 /* Landing page */
 body.landing {
   display: grid;

@@ -121,6 +121,7 @@ import {
 import type { PanZoomHandle } from '../input/pan-zoom.js';
 import { EXPORT_FILENAME_PREFIX } from '../util/constants.js';
 import { isEditableFocus } from '../util/focus.js';
+import { createAnnouncer } from '../util/announcer.js';
 
 const canvasEl = document.getElementById('canvas');
 if (!(canvasEl instanceof HTMLCanvasElement)) {
@@ -130,6 +131,21 @@ const canvas: HTMLCanvasElement = canvasEl;
 
 const preferences = createPreferences();
 applyPrefsToBody(preferences.get());
+
+const announcer = createAnnouncer();
+
+// Tool id → human-readable label for live-region announcements.
+const TOOL_LABELS: Record<string, string> = {
+  select: 'Select',
+  token: 'Token',
+  'fog-reveal': 'Reveal fog',
+  'fog-hide': 'Hide fog',
+  background: 'Map',
+  note: 'Note',
+  measure: 'Ruler',
+  aoe: 'AoE',
+  draw: 'Draw',
+};
 
 // Start with the default state so first paint is instant; hydrate from
 // IDB asynchronously (see `hydrateFromIdb` at the bottom of this file,
@@ -289,6 +305,11 @@ const toolbarHandle = mountToolbar(
 
 toolManager.setActive('select');
 
+toolManager.onChange((id) => {
+  const label = TOOL_LABELS[id] ?? id;
+  announcer.announce(`${label} tool active`);
+});
+
 mountFogSettings(document.body, fogOptionsRef, toolManager);
 mountAoeSettings(document.body, aoeToolOptionsRef, toolManager);
 mountDrawSettings(document.body, drawToolOptionsRef, toolManager);
@@ -421,6 +442,7 @@ const exportImageModal = mountExportImageModal();
 mountSessionMenu(document.body, {
   onNewSession: () => {
     store.resetSession();
+    announcer.announce('New session started. All tokens, fog, and background cleared.');
   },
   onUploadBackground: async (file) => {
     try {
@@ -443,9 +465,11 @@ mountSessionMenu(document.body, {
       a.click();
       a.remove();
       URL.revokeObjectURL(url);
+      announcer.announce('Session exported to JSON.');
     } catch (err) {
       console.error('[gm] export failed', err);
       window.alert('Failed to export session.');
+      announcer.announce('Failed to export session.', 'assertive');
     }
   },
   onExportImage: async () => {
@@ -457,7 +481,10 @@ mountSessionMenu(document.body, {
         scale: 2,
         filename: `${EXPORT_FILENAME_PREFIX}-${today}`,
       });
-      if (!chosen) return;
+      if (!chosen) {
+        announcer.announce('Export image cancelled.');
+        return;
+      }
       const rect = canvas.getBoundingClientRect();
       const result = await renderSnapshot({
         state: store.getState(),
@@ -478,6 +505,9 @@ mountSessionMenu(document.body, {
       a.click();
       a.remove();
       URL.revokeObjectURL(url);
+      announcer.announce(
+        `Exported image: ${result.pixelWidth} by ${result.pixelHeight} pixels.`,
+      );
     } catch (err) {
       console.error('[gm] export image failed', err);
       window.alert(
@@ -485,6 +515,7 @@ mountSessionMenu(document.body, {
           ? `Failed to export image: ${err.message}`
           : 'Failed to export image.',
       );
+      announcer.announce('Failed to export image.', 'assertive');
     }
   },
   onImport: async (file) => {
@@ -493,14 +524,19 @@ mountSessionMenu(document.body, {
       const { state: imported, imageIds } = await importSession(text);
       // Show the options dialog so the user can opt out of categories.
       const selectionChoice = await importOptionsModal.open(imported);
-      if (!selectionChoice) return; // user cancelled
+      if (!selectionChoice) {
+        announcer.announce('Import cancelled.');
+        return;
+      }
       for (const id of imageIds) imageLoader.invalidate(id);
       selection.ids = new Set();
       const merged = mergeImportState(store.getState(), imported, selectionChoice);
       store.applyPatch({ kind: 'session-reset', state: merged });
+      announcer.announce('Session imported.');
     } catch (err) {
       console.error('[gm] import failed', err);
       window.alert('Failed to import session. Check the file is a valid export.');
+      announcer.announce('Failed to import session.', 'assertive');
     }
   },
   onSettings: () => settingsModal.open(),
@@ -513,10 +549,14 @@ mountSessionMenu(document.body, {
   onClearDrawings: () => {
     const state = store.getState();
     if (state.strokes.length === 0) return;
+    const count = state.strokes.length;
     const ok = window.confirm(
-      `Erase all ${state.strokes.length} drawing${state.strokes.length === 1 ? '' : 's'}? This can be undone.`,
+      `Erase all ${count} drawing${count === 1 ? '' : 's'}? This can be undone.`,
     );
-    if (ok) store.applyPatch({ kind: 'strokes-clear' });
+    if (ok) {
+      store.applyPatch({ kind: 'strokes-clear' });
+      announcer.announce(`${count} drawing${count === 1 ? '' : 's'} cleared.`);
+    }
   },
 });
 
@@ -526,7 +566,10 @@ const tokenEditor = mountTokenEditor({
   imageLoader,
 });
 const annotationEditor = mountAnnotationEditor({ store });
-const damageHealDialog = mountDamageHealDialog({ store });
+const damageHealDialog = mountDamageHealDialog({
+  store,
+  onAnnounce: (msg) => announcer.announce(msg),
+});
 
 const notesPanel = mountNotesPanel();
 const shortcutOverlay = mountShortcutOverlay('gm');
@@ -582,6 +625,13 @@ async function switchToScene(id: string): Promise<void> {
   // Full state to the Spectator so it reflects the new scene.
   channel?.send({ type: 'full-state', state: serializeState(store.getState()) });
   await refreshSceneIndicator();
+  try {
+    const list = await listScenes();
+    const active = list.find((s) => s.id === id);
+    if (active) announcer.announce(`Switched to scene: ${active.name}`);
+  } catch {
+    // Indicator refresh failure is not user-facing; skip the announcement.
+  }
 }
 
 async function handleDeleteActiveScene(): Promise<void> {
@@ -628,6 +678,7 @@ const dicePanel = mountDicePanel({
   viewMode: 'gm',
   onLocalRoll: (roll) => {
     channel?.send({ type: 'dice-roll', roll });
+    announcer.announce(`You rolled ${roll.source}: ${roll.total}.`);
   },
 });
 
@@ -891,6 +942,10 @@ function checkConflictBanner() {
       variant: 'warn',
       dismissible: false,
     });
+    announcer.announce(
+      'Warning: another GM tab is open. Changes may overwrite each other.',
+      'assertive',
+    );
     conflictBannerVisible = true;
   } else if (!hasConflict && conflictBannerVisible) {
     statusBanners.hide();
@@ -945,6 +1000,9 @@ if (channel) {
       if (preferences.get().showSpectatorViewport) renderer.requestRender();
     } else if (msg.type === 'dice-roll') {
       dicePanel.pushRemoteRoll(msg.roll);
+      if (msg.roll.from !== 'gm') {
+        announcer.announce(`Spectator rolled ${msg.roll.source}: ${msg.roll.total}.`);
+      }
     } else if (msg.type === 'gm-heartbeat') {
       conflictDetector.noteHeartbeat(msg.tabId, Date.now());
       checkConflictBanner();
@@ -1139,17 +1197,27 @@ function deleteSelection(): boolean {
   if (selection.ids.size === 0) return false;
   const ids = Array.from(selection.ids);
   const state = store.getState();
+  let tokenCount = 0;
+  let annotationCount = 0;
   store.batch(() => {
     for (const id of ids) {
       if (state.tokens.some((t) => t.id === id)) {
         store.applyPatch({ kind: 'token-remove', id });
+        tokenCount++;
       } else if (state.annotations.some((a) => a.id === id)) {
         store.applyPatch({ kind: 'annotation-remove', id });
+        annotationCount++;
       }
     }
   });
   selection.ids = new Set();
   renderer.requestRender();
+  const parts: string[] = [];
+  if (tokenCount > 0) parts.push(`${tokenCount} token${tokenCount === 1 ? '' : 's'}`);
+  if (annotationCount > 0) {
+    parts.push(`${annotationCount} annotation${annotationCount === 1 ? '' : 's'}`);
+  }
+  if (parts.length > 0) announcer.announce(`Deleted ${parts.join(' and ')}.`);
   return true;
 }
 
@@ -1185,6 +1253,7 @@ function placeTokenAt(gx: number, gy: number) {
   };
   store.applyPatch({ kind: 'token-add', token });
   lastPlacedRef.current = token;
+  announcer.announce(`${token.label} placed.`);
 }
 
 function pasteClipboardAt(gx: number, gy: number): boolean {

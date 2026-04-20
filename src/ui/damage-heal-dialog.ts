@@ -17,6 +17,12 @@ export interface DamageHealDialogHandle {
 export interface DamageHealDialogOptions {
   store: Store;
   onAfterChange?(): void;
+  /**
+   * Optional callback fired after a non-zero amount is applied, given the
+   * summary (e.g. "Dealt 7 damage to 2 tokens") so the caller can route
+   * it to an aria-live announcer.
+   */
+  onAnnounce?(summary: string): void;
 }
 
 /**
@@ -157,6 +163,14 @@ export function mountDamageHealDialog(
       }
     });
     opts.onAfterChange?.();
+    if (opts.onAnnounce) {
+      const verb = amount > 0 ? 'Dealt' : 'Healed';
+      const magnitude = Math.abs(amount);
+      const suffix = tokens.length === 1
+        ? `${tokens[0]!.label || 'token'}`
+        : `${tokens.length} tokens`;
+      opts.onAnnounce(`${verb} ${magnitude} HP to ${suffix}.`);
+    }
     close();
   }
 

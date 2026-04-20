@@ -97,6 +97,16 @@ const GM_SECTIONS: HelpSection[] = [
     ],
   },
   {
+    title: 'Accessibility',
+    intro: 'The app is designed to be usable end-to-end from a keyboard + screen reader.',
+    entries: [
+      { name: 'Skip to battle map', desc: 'Press Tab once from anywhere on the page — a "Skip to battle map" link pops to the top-left. Enter jumps focus directly to the canvas, skipping the session menu + toolbar.' },
+      { name: 'Focus ring', desc: 'Every interactive control has a visible red outline when keyboard-focused, including the canvas itself. Tab traversal follows DOM order; focus-trap keeps Tab inside any open modal.' },
+      { name: 'Live-region narration', desc: 'Tool switches, token placement / deletion, damage & healing, scene switches, dice rolls, and import/export outcomes are narrated through a polite aria-live region so screen-reader users hear what changed. Warnings like "another GM tab is open" use assertive priority.' },
+      { name: 'Restoring focus', desc: 'Closing a modal, context menu, or overlay always returns focus to the element that opened it — so Escape never strands you on <body>.' },
+    ],
+  },
+  {
     title: 'HP & conditions',
     intro: 'Optional per-token tracking, visible to the Spectator when set to "Shared" visibility.',
     entries: [
@@ -144,6 +154,15 @@ const SPECTATOR_SECTIONS: HelpSection[] = [
       { name: 'Scroll wheel', desc: 'Zoom toward the cursor.' },
       { name: 'Fog of war', desc: 'Only cells the GM has revealed are fully visible. Tokens under hidden cells don\u2019t render here.' },
       { name: 'Dice roller (🎲)', desc: 'Bottom-left button opens a dice panel. Quick-pick d4–d100 + custom expressions like 1d20+5, 4d6kh3 (stat rolling), 2d20kh1 (advantage). Rolls are shared with the GM automatically.' },
+    ],
+  },
+  {
+    title: 'Accessibility',
+    intro: 'Keyboard + screen reader parity with the GM view.',
+    entries: [
+      { name: 'Skip to battle map', desc: 'Tab once from anywhere on the page to reveal a "Skip to battle map" link; Enter focuses the canvas directly.' },
+      { name: 'Live-region narration', desc: 'Ruler on/off, your dice rolls, and rolls the GM makes are narrated through a polite aria-live region so screen-reader users hear what changed.' },
+      { name: 'Focus management', desc: 'Every modal traps Tab within itself while open and returns focus to the trigger when closed. All interactive controls (including the canvas) show a visible red focus outline.' },
     ],
   },
 ];
