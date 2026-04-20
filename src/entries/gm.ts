@@ -22,7 +22,12 @@ import {
 import { createBackgroundTool } from '../input/tool-background.js';
 import { createNoteTool } from '../input/tool-note.js';
 import { hitTestAnnotation } from '../input/hit-test-annotation.js';
-import { createMeasureTool } from '../input/tool-measure.js';
+import {
+  createMeasureTool,
+  createRulerToolOptionsRef,
+} from '../input/tool-measure.js';
+import { mountRulerSettings } from '../ui/ruler-settings.js';
+import { RULER_PRESETS } from '../state/ruler.js';
 import { createAoeTool, createAoeToolOptionsRef } from '../input/tool-aoe.js';
 import { hitTestAoe } from '../input/hit-test-aoe.js';
 import { DEFAULT_AOE_COLOR } from '../state/aoe.js';
@@ -100,6 +105,7 @@ const lassoOverlayRef = createLassoOverlayRef();
 const lastPlacedRef = createLastPlacedRef();
 const measurementOverlayRef = createMeasurementOverlayRef();
 const aoeOverlayRef = createAoeOverlayRef();
+const rulerToolOptionsRef = createRulerToolOptionsRef();
 const aoeToolOptionsRef = createAoeToolOptionsRef({
   kind: 'sphere',
   color: DEFAULT_AOE_COLOR,
@@ -147,6 +153,7 @@ const renderer = createRenderer({
   getMeasurement: () => measurementOverlayRef.current,
   getAoePreview: () => aoeOverlayRef.current,
   getSpectatorViewport,
+  getRulerTargetFeet: () => rulerToolOptionsRef.current.targetFeet,
 });
 
 panZoomRef.handle = attachPanZoom(renderer);
@@ -187,7 +194,14 @@ toolManager.register(createBackgroundTool(inputContext));
 toolManager.register(
   createNoteTool(inputContext, (a) => annotationEditor.openFor(a)),
 );
-toolManager.register(createMeasureTool(inputContext));
+toolManager.register(
+  createMeasureTool({
+    ...inputContext,
+    rulerOptions: rulerToolOptionsRef,
+    getFeetPerSquare: () => preferences.get().feetPerSquare,
+    getCellSize: () => store.getState().grid.cellSize,
+  }),
+);
 toolManager.register(createAoeTool(inputContext, aoeToolOptionsRef));
 
 const toolbarHandle = mountToolbar(
@@ -225,6 +239,9 @@ toolManager.setActive('select');
 
 mountFogSettings(document.body, fogOptionsRef, toolManager);
 mountAoeSettings(document.body, aoeToolOptionsRef, toolManager);
+const rulerSettings = mountRulerSettings(document.body, rulerToolOptionsRef);
+rulerSettings.setVisible(toolManager.getActive() === 'measure');
+toolManager.onChange((id) => rulerSettings.setVisible(id === 'measure'));
 
 mountZoomControls(document.body, {
   onZoomIn: () => zoomBy(renderer, ZOOM_BUTTON_STEP),
@@ -950,6 +967,28 @@ window.addEventListener('keydown', (e) => {
       return;
     }
     return;
+  }
+
+  // Ruler preset hotkeys (0–5) — only when the Ruler tool is active so
+  // they don't stomp on the camera-reset binding.
+  if (
+    toolManager.getActive() === 'measure' &&
+    !e.altKey &&
+    !e.ctrlKey &&
+    !e.metaKey &&
+    !e.shiftKey
+  ) {
+    const preset = RULER_PRESETS.find((p) => p.shortcut === e.key);
+    if (preset) {
+      rulerToolOptionsRef.current = {
+        ...rulerToolOptionsRef.current,
+        targetFeet: preset.feet,
+      };
+      rulerSettings.sync();
+      renderer.requestRender();
+      e.preventDefault();
+      return;
+    }
   }
 
   if (e.key === '+' || e.key === '=') {

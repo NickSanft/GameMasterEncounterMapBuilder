@@ -68,6 +68,8 @@ interface CreateRendererOptions {
   getMeasurement?(): MeasurementOverlay | null;
   getAoePreview?(): AoePreview | null;
   getSpectatorViewport?(): ViewportRect | null;
+  /** Active ruler-preset target feet (null = freeform). */
+  getRulerTargetFeet?(): number | null;
 }
 
 const EMPTY_HIGHLIGHT: ReadonlySet<ID> = new Set();
@@ -102,6 +104,7 @@ export function createRenderer(opts: CreateRendererOptions): Renderer {
     getMeasurement,
     getAoePreview,
     getSpectatorViewport,
+    getRulerTargetFeet,
   } = opts;
   const maybeCtx = canvas.getContext('2d');
   if (!maybeCtx) throw new Error('2D canvas context unavailable');
@@ -183,7 +186,14 @@ export function createRenderer(opts: CreateRendererOptions): Renderer {
     const lasso = getLassoOverlay ? getLassoOverlay() : null;
     if (lasso) drawLasso(ctx, lasso);
     const measurement = getMeasurement ? getMeasurement() : null;
-    if (measurement) drawMeasurement(ctx, measurement, state.grid.cellSize);
+    if (measurement) {
+      drawMeasurement(ctx, measurement, state.grid.cellSize, {
+        diagonalRule: prefs?.diagonalRule ?? 'chebyshev',
+        distanceUnit: prefs?.distanceUnit ?? 'squares',
+        feetPerSquare: prefs?.feetPerSquare ?? 5,
+        targetFeet: getRulerTargetFeet ? getRulerTargetFeet() : null,
+      });
+    }
     const pings = getPings ? getPings() : null;
     if (pings && pings.length > 0) {
       drawPings(ctx, pings, state.grid.cellSize, performance.now());

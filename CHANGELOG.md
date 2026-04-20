@@ -39,6 +39,24 @@ Planned work for the remaining phases. See the plan conversation for full scope.
 
 ---
 
+## [0.37.0] — 2026-04-20 — Ruler presets
+
+### Added
+- **Ruler preset panel** — while the Ruler tool is active, a new side panel (matching the AoE/fog panel style) offers six buttons: Free, 5 ft, 30 ft, 60 ft, 90 ft, 120 ft. Clicking a preset clamps the ruler endpoint to exactly that radius from the start so the GM can measure "does this enemy fit in my 30-ft thunderwave?" with one drag.
+- **Preset ring** — while a preset is active, a faint dashed circle at the target radius is drawn around the drag origin on the canvas, so the valid endpoints are visually obvious even before you drag there.
+- **Keyboard shortcuts** — while Ruler is active: `1`–`5` snap to the five feet presets; `0` returns to Free. Gated so the `0` binding only short-circuits camera-reset when Ruler is the active tool.
+- **Ruler label** now honors the distance preferences introduced in 0.34.0: `distanceUnit` (squares / feet), `feetPerSquare`, and `diagonalRule` (chebyshev / alternating). Appends `· preset` when a clamp target is set so there's no ambiguity. The Euclidean measurement (`N sq diag`) is still shown for completeness.
+- **Spectator parity** — the Spectator's Ruler tool gets the same preset panel and hotkeys, so players measuring their own ranges match what the GM sees.
+- **Pure helpers** `src/state/ruler.ts`: `RULER_PRESETS`, `clampToRadius`, `feetToWorldPx`, `formatRulerLabel`. Non-mutating, safe against zero-length / non-finite inputs.
+- **13 new unit tests** cover the preset catalog, clamp math (scale up + down, negative direction, zero-length no-op), feet→world-px conversion with fps fallbacks, and label formatting.
+- **6 new Playwright specs** cover: panel visibility gating, default-Free active class, click-to-change preset, keyboard `1`–`5`/`0` updating active class, `0` not resetting camera while Ruler is active, switching away from Ruler preserving the preset for next time, and Spectator-view parity.
+
+### Changed
+- `drawMeasurement` now takes an options object (`diagonalRule`, `distanceUnit`, `feetPerSquare`, `targetFeet`). Defaults to the pre-0.37 behavior when no options are passed so the test-only callsites don't need changes.
+- `mountRulerSettings` decoupled from `ToolManager` so it can be driven by either the GM's tool system or the Spectator's simpler `rulerActive` boolean.
+
+---
+
 ## [0.36.0] — 2026-04-20 — Dice roller
 
 ### Added
@@ -410,7 +428,8 @@ Planned work for the remaining phases. See the plan conversation for full scope.
 
 ---
 
-[Unreleased]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.36.0...HEAD
+[Unreleased]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.37.0...HEAD
+[0.37.0]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.36.0...v0.37.0
 [0.36.0]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.35.0...v0.36.0
 [0.35.0]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.34.0...v0.35.0
 [0.34.0]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.33.0...v0.34.0

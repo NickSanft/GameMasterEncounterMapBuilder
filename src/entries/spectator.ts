@@ -18,7 +18,9 @@ import { mountHelpOverlay } from '../ui/help-overlay.js';
 import { mountDicePanel } from '../ui/dice-panel.js';
 import { createPingManager } from '../state/ping-manager.js';
 import { createMeasurementOverlayRef } from '../input/context.js';
-import { createMeasureTool } from '../input/tool-measure.js';
+import { createMeasureTool, createRulerToolOptionsRef } from '../input/tool-measure.js';
+import { mountRulerSettings } from '../ui/ruler-settings.js';
+import { RULER_PRESETS } from '../state/ruler.js';
 import { viewportFromCamera } from '../render/viewport.js';
 import {
   zoomBy,
@@ -58,15 +60,20 @@ const renderer = createRenderer({
   getPreferences: () => preferences.get(),
   getPings: () => pingManager.getActive(),
   getMeasurement: () => measurementOverlayRef.current,
+  getRulerTargetFeet: () => rulerToolOptionsRef.current.targetFeet,
 });
 
 panZoomRef.handle = attachPanZoom(renderer);
 
+const rulerToolOptionsRef = createRulerToolOptionsRef();
 const measureTool = createMeasureTool({
   canvas,
   renderer,
   measurementOverlay: measurementOverlayRef,
   isSpaceHeld: () => panZoomRef.handle?.isSpaceHeld() ?? false,
+  rulerOptions: rulerToolOptionsRef,
+  getFeetPerSquare: () => preferences.get().feetPerSquare,
+  getCellSize: () => store.getState().grid.cellSize,
 });
 
 const FOLLOW_PAUSE_MS = 2000;
@@ -119,6 +126,7 @@ const dicePanel = mountDicePanel({
 
 let rulerActive = false;
 const rulerBtn = mountSpectatorToolbar(() => setRulerActive(!rulerActive));
+const rulerSettings = mountRulerSettings(document.body, rulerToolOptionsRef);
 
 function setRulerActive(active: boolean) {
   if (active === rulerActive) return;
@@ -131,6 +139,7 @@ function setRulerActive(active: boolean) {
   rulerBtn.classList.toggle('active', active);
   rulerBtn.setAttribute('aria-pressed', active ? 'true' : 'false');
   canvas.style.cursor = active ? 'crosshair' : '';
+  rulerSettings.setVisible(active);
 }
 
 mountSpectatorMenu({
@@ -273,6 +282,19 @@ window.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && rulerActive) {
     setRulerActive(false);
     e.preventDefault();
+  }
+  // Ruler preset hotkeys mirror the GM bindings.
+  if (rulerActive && !e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
+    const preset = RULER_PRESETS.find((p) => p.shortcut === e.key);
+    if (preset) {
+      rulerToolOptionsRef.current = {
+        ...rulerToolOptionsRef.current,
+        targetFeet: preset.feet,
+      };
+      rulerSettings.sync();
+      renderer.requestRender();
+      e.preventDefault();
+    }
   }
 });
 

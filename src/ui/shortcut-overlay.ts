@@ -28,6 +28,8 @@ const GM_SECTIONS: ShortcutSection[] = [
       { keys: 'M', desc: 'Map positioning' },
       { keys: 'N', desc: 'Note — drop a map annotation' },
       { keys: 'L', desc: 'Ruler — drag to measure distance' },
+      { keys: '1–5 (Ruler)', desc: 'Snap ruler to 5 / 30 / 60 / 90 / 120 ft preset' },
+      { keys: '0 (Ruler)', desc: 'Back to freeform ruler (no preset)' },
       { keys: 'Y', desc: 'AoE — place a spell/effect template' },
     ],
   },
@@ -86,6 +88,8 @@ const SPECTATOR_SECTIONS: ShortcutSection[] = [
     title: 'Tools',
     entries: [
       { keys: 'L', desc: 'Ruler — drag to measure distance' },
+      { keys: '1–5 (Ruler)', desc: 'Snap ruler to 5 / 30 / 60 / 90 / 120 ft preset' },
+      { keys: '0 (Ruler)', desc: 'Back to freeform ruler (no preset)' },
     ],
   },
   {

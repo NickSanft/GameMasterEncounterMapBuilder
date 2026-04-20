@@ -258,7 +258,8 @@ body.view {
 
 /* Fog settings panel — to the right of the toolbar when fog tool is active */
 .fog-settings,
-.aoe-settings {
+.aoe-settings,
+.ruler-settings {
   position: absolute;
   top: 3.25rem;
   left: 8.75rem;
@@ -275,6 +276,31 @@ body.view {
 
 .aoe-settings .aoe-kinds button {
   padding: 0.3rem 0.3rem;
+}
+
+.ruler-settings {
+  min-width: 9rem;
+}
+
+.ruler-presets {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.25rem;
+}
+
+.ruler-presets button {
+  padding: 0.3rem 0.25rem;
+  font-size: 0.78rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.ruler-hint {
+  font-size: 0.68rem;
+  color: var(--fg-muted);
+  text-transform: none;
+  letter-spacing: 0;
+  line-height: 1.35;
+  margin-top: 0.15rem;
 }
 
 .aoe-color-input {

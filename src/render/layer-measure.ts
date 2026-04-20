@@ -1,3 +1,6 @@
+import { gridDistance, type DiagonalRule, type DistanceUnit } from '../state/distance.js';
+import { formatRulerLabel } from '../state/ruler.js';
+
 export interface MeasurementOverlay {
   startX: number;
   startY: number;
@@ -5,17 +8,33 @@ export interface MeasurementOverlay {
   endY: number;
 }
 
+export interface MeasurementRenderOptions {
+  diagonalRule: DiagonalRule;
+  distanceUnit: DistanceUnit;
+  feetPerSquare: number;
+  /** Active ruler-preset target in feet, or null for freeform. */
+  targetFeet: number | null;
+}
+
+const DEFAULT_OPTS: MeasurementRenderOptions = {
+  diagonalRule: 'chebyshev',
+  distanceUnit: 'squares',
+  feetPerSquare: 5,
+  targetFeet: null,
+};
+
 export function drawMeasurement(
   ctx: CanvasRenderingContext2D,
   overlay: MeasurementOverlay,
   cellSize: number,
+  options: MeasurementRenderOptions = DEFAULT_OPTS,
 ): void {
   const dx = overlay.endX - overlay.startX;
   const dy = overlay.endY - overlay.startY;
-  const gridDx = Math.abs(dx) / cellSize;
-  const gridDy = Math.abs(dy) / cellSize;
-  const chebyshev = Math.max(gridDx, gridDy);
-  const euclidean = Math.sqrt(gridDx * gridDx + gridDy * gridDy);
+  const gridDx = dx / cellSize;
+  const gridDy = dy / cellSize;
+  const cells = gridDistance(gridDx, gridDy, options.diagonalRule);
+  const euclidean = Math.hypot(gridDx, gridDy);
 
   ctx.save();
 
@@ -38,11 +57,34 @@ export function drawMeasurement(
   ctx.arc(overlay.endX, overlay.endY, 4, 0, Math.PI * 2);
   ctx.fill();
 
-  // Label near end
-  const sq = chebyshev.toFixed(1);
-  const ft = (chebyshev * 5).toFixed(0);
-  const eu = euclidean.toFixed(1);
-  const text = `${sq} sq · ${ft} ft · ${eu} sq diag`;
+  // Preset ring — when a clamp target is active, draw a faint circle at
+  // that radius so the GM can see *where* valid endpoints lie.
+  if (options.targetFeet !== null) {
+    const fps =
+      Number.isFinite(options.feetPerSquare) && options.feetPerSquare > 0
+        ? options.feetPerSquare
+        : 5;
+    const radius = (options.targetFeet / fps) * cellSize;
+    ctx.save();
+    ctx.strokeStyle = 'rgba(255, 217, 102, 0.35)';
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([4, 4]);
+    ctx.beginPath();
+    ctx.arc(overlay.startX, overlay.startY, radius, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // Label near end.
+  const baseLabel = formatRulerLabel(
+    cells,
+    options.distanceUnit,
+    options.feetPerSquare,
+    options.targetFeet,
+  );
+  const euLabel = `${euclidean.toFixed(1)} sq diag`;
+  const text = `${baseLabel} · ${euLabel}`;
+
   const fontSize = 13;
   ctx.font = `600 ${fontSize}px system-ui, -apple-system, Segoe UI, sans-serif`;
   ctx.textAlign = 'left';

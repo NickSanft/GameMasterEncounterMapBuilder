@@ -29,7 +29,7 @@ const GM_SECTIONS: HelpSection[] = [
       { name: 'Hide', desc: 'Drag across cells to re-hide them under fog of war.' },
       { name: 'Map', desc: 'Drag the background image to reposition it under the grid. Scroll wheel scales it up or down so the art lines up with your chosen cell size.' },
       { name: 'Note', desc: 'Click anywhere on the map to drop a text annotation (loot, traps, callouts). Right-click a note to make it GM-only or share it with the Spectator.' },
-      { name: 'Ruler', desc: 'Drag between two points to measure distance in grid squares. Release to clear. Great for reach and movement checks.' },
+      { name: 'Ruler', desc: 'Drag between two points to measure distance in grid squares. Release to clear. A side panel lets you pick 5 / 30 / 60 / 90 / 120 ft presets (shortcut keys 1–5) that snap the endpoint to that reach; 0 goes back to freeform.' },
       { name: 'AoE', desc: 'Drag to place a spell or effect template — sphere, cone, line, or cube. Choose the shape and color from the panel that appears when the tool is active.' },
       { name: 'Undo / Redo', desc: 'Step backward or forward through your last actions. Also Ctrl/Cmd+Z and Ctrl/Cmd+Shift+Z.' },
     ],
@@ -107,7 +107,7 @@ const SPECTATOR_SECTIONS: HelpSection[] = [
   {
     title: 'Tools (left side)',
     entries: [
-      { name: 'Ruler', desc: 'Drag between two points to measure distance in grid squares. Release to clear. Great for planning moves on your own.' },
+      { name: 'Ruler', desc: 'Drag between two points to measure distance in grid squares. Release to clear. 1–5 snap the endpoint to 5/30/60/90/120 ft preset reaches; 0 = freeform.' },
     ],
   },
   {
