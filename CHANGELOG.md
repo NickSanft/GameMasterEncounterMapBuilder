@@ -29,13 +29,35 @@ Planned work for the remaining phases. See the plan conversation for full scope.
 - **0.42.0** — Partial import
 - **0.43.0** — Grid labels + map tint
 - **0.44.0** — Mini-map
-- **0.45.0** — Export snapshot (PNG)
 - **0.46.0** — Keyboard focus + aria-live
 - **0.47.0** — Mobile / touch support
 - **0.48.0** — PWA / service worker
 - **0.49.0** — WebWorker-ize fog
 - **0.50.0** — Additional e2e behavior tests
 - **0.51.0** — Visual regression tests
+
+---
+
+## [0.45.0] — 2026-04-19 — Export snapshot (PNG)
+
+### Added
+- **Export Image…** entry in the session menu. Opens a new dialog with three knobs:
+  - **Scope** — *Whole map* (render every grid cell at the chosen scale, independent of the current camera) or *Visible area* (capture exactly what the main canvas is showing right now — handy for zoomed-in cutouts).
+  - **Fog of war** — *GM view* (translucent fog so hidden cells remain visible-but-dimmed, useful for DM handouts between sessions) or *Spectator view* (opaque fog matching what players actually see).
+  - **Resolution scale** — *1×* (standard), *2×* (crisp on Retina displays), or *4×* (print-quality, large file).
+- **Filename field** — sensible default (`gm-encounter-maps-YYYY-MM-DD`); the app always appends `.png`.
+- **New offscreen renderer** `src/render/snapshot.ts` — paints the full visible layer stack (background, grid, tokens, AoE, fog, strokes, annotations, grid labels, scene tint) into a detached canvas at the chosen resolution, then converts to a PNG blob via `canvas.toBlob`. Live-only overlays (pings, measurement ruler, lasso, drag ghost, movement indicator, Spectator-viewport rectangle) are intentionally excluded — this is a print-quality snapshot, not a screenshot.
+- **Shared pure helper** `planSnapshot()` derives the output pixel dimensions and virtual camera from scope+scale+live-camera state. Factored out of the renderer so we could unit-test the geometry in isolation (jsdom doesn't implement `getContext('2d')`, so the rendering itself is covered by Playwright).
+
+### Tests
+- **7 unit tests** for `planSnapshot()` covering both scopes, scale multiplication, live-camera override semantics, zero-/NaN-dimension guards, and the 1-pixel floor.
+- **3 Playwright specs**: modal renders with all three radio groups + default values; Export PNG produces a download whose suggested filename respects the chosen stem; Cancel closes without triggering a download.
+- Help overlay's *Session menu* section gets a new *Export Image…* entry so the feature is discoverable without having to click into the menu.
+
+### Implementation notes
+- The `SnapshotOptions` `mode` parameter controls only fog rendering — GM-only tokens are still filtered out when you export in Spectator mode, so an Export-Image → Spectator from the GM tab produces exactly what your players see (no leaking of hidden-cell token labels).
+- Downloads flow through a transient `<a download>` element attached to `document.body`; the blob URL is revoked immediately after click so there's no long-lived memory handle.
+- Errors surface as `window.alert()` with the underlying message (e.g. *"Grid has zero dimensions — nothing to export."*) rather than silently failing.
 
 ---
 
@@ -583,7 +605,8 @@ Planned work for the remaining phases. See the plan conversation for full scope.
 
 ---
 
-[Unreleased]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.44.0...HEAD
+[Unreleased]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.45.0...HEAD
+[0.45.0]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.44.0...v0.45.0
 [0.44.0]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.43.0...v0.44.0
 [0.43.0]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.42.0...v0.43.0
 [0.42.0]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.41.0...v0.42.0

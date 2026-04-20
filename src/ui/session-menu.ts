@@ -3,6 +3,7 @@ export interface SessionMenuActions {
   onUploadBackground(file: File): void | Promise<void>;
   onPresetBackground(): void;
   onExport(): void | Promise<void>;
+  onExportImage(): void | Promise<void>;
   onImport(file: File): void | Promise<void>;
   onSettings(): void;
   onToggleNotes(): void;
@@ -45,6 +46,15 @@ export function mountSessionMenu(
   exportBtn.addEventListener('click', async () => {
     exportBtn.blur();
     await actions.onExport();
+  });
+
+  const exportImageBtn = createButton(
+    'Export Image…',
+    'Render the map as a PNG image for handouts, VTT use, or print',
+  );
+  exportImageBtn.addEventListener('click', async () => {
+    exportImageBtn.blur();
+    await actions.onExportImage();
   });
 
   const importBtn = createButton('Import', 'Load a session from a JSON file');
@@ -129,6 +139,7 @@ export function mountSessionMenu(
   menu.appendChild(templateLibBtn);
   menu.appendChild(initiativeBtn);
   menu.appendChild(exportBtn);
+  menu.appendChild(exportImageBtn);
   menu.appendChild(importBtn);
   menu.appendChild(notesBtn);
   menu.appendChild(clearDrawingsBtn);

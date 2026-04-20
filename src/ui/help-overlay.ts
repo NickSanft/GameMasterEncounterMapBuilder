@@ -45,6 +45,7 @@ const GM_SECTIONS: HelpSection[] = [
       { name: 'Template Library', desc: 'Save a group of selected tokens as a named template, preserving their relative positions. Drop the whole pack with one click.' },
       { name: 'Initiative', desc: 'Open the combat initiative tracker. Add entries, link them to tokens on the map, and cycle through turns. The active combatant glows on the canvas.' },
       { name: 'Export', desc: 'Download the current session (map, tokens, fog, annotations, AoE, initiative) as a JSON file so you can share or back it up.' },
+      { name: 'Export Image…', desc: 'Render the scene to a PNG for handouts, VTT tiles, or printing. Pick Whole map or Visible area, GM fog or Spectator fog, and a 1×/2×/4× resolution scale. Filename is the one stem — the app adds .png.' },
       { name: 'Import', desc: 'Load a previously exported JSON file. A dialog lets you pick which slices (Background / Tokens / Fog / Annotations / AoE / Initiative / Drawings / Grid) to merge into the current scene. Unchecked slices keep your current data.' },
       { name: 'Notes', desc: 'Toggle a plain-text scratchpad you can use for DM notes, stat blocks, or scratch math during play.' },
       { name: 'Clear Drawings', desc: 'Erase every freehand stroke on the map at once (undoable).' },

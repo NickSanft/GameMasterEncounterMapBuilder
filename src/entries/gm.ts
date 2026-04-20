@@ -103,6 +103,8 @@ import { mountStatusBanners } from '../ui/status-banners.js';
 import { mountImportOptionsModal } from '../ui/import-options-modal.js';
 import { mergeImportState } from '../state/import-merge.js';
 import { mountMiniMap } from '../ui/mini-map.js';
+import { mountExportImageModal } from '../ui/export-image-modal.js';
+import { renderSnapshot } from '../render/snapshot.js';
 import { createConflictDetector } from '../state/conflict-detector.js';
 import {
   consumeDirtyFlag,
@@ -414,6 +416,7 @@ async function saveSelectionAsTemplate() {
 }
 
 const importOptionsModal = mountImportOptionsModal();
+const exportImageModal = mountExportImageModal();
 
 mountSessionMenu(document.body, {
   onNewSession: () => {
@@ -443,6 +446,45 @@ mountSessionMenu(document.body, {
     } catch (err) {
       console.error('[gm] export failed', err);
       window.alert('Failed to export session.');
+    }
+  },
+  onExportImage: async () => {
+    try {
+      const today = new Date().toISOString().slice(0, 10);
+      const chosen = await exportImageModal.open({
+        scope: 'whole-map',
+        mode: 'gm',
+        scale: 2,
+        filename: `${EXPORT_FILENAME_PREFIX}-${today}`,
+      });
+      if (!chosen) return;
+      const rect = canvas.getBoundingClientRect();
+      const result = await renderSnapshot({
+        state: store.getState(),
+        mode: chosen.mode,
+        scope: chosen.scope,
+        scale: chosen.scale,
+        liveCamera: renderer.camera,
+        liveCssWidth: rect.width,
+        liveCssHeight: rect.height,
+        getImage: (id) => imageLoader.get(id),
+        preferences: preferences.get(),
+      });
+      const url = URL.createObjectURL(result.blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${chosen.filename}.png`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('[gm] export image failed', err);
+      window.alert(
+        err instanceof Error && err.message
+          ? `Failed to export image: ${err.message}`
+          : 'Failed to export image.',
+      );
     }
   },
   onImport: async (file) => {
