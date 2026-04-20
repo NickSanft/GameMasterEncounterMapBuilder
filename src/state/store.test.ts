@@ -12,6 +12,8 @@ function newToken(id: string, overrides: Partial<Token> = {}): Token {
     imageId: null,
     size: 1,
     borderColor: null,
+    hp: null,
+    conditions: [],
     ...overrides,
   };
 }

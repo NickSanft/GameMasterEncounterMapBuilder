@@ -21,6 +21,8 @@ function tok(imageId: string | null, x = 0, y = 0): Token {
     imageId,
     size: 1,
     borderColor: null,
+    hp: null,
+    conditions: [],
   };
 }
 
@@ -78,6 +80,8 @@ describe('idb-cleanup', () => {
       size: 1,
       borderColor: null,
       imageId: 'lib-img',
+      hp: null,
+      conditions: [],
     });
 
     const state = createDefaultState();

@@ -30,6 +30,8 @@ export function createTokenTool(ctx: InputContext): Tool {
         imageId: null,
         size: 1,
         borderColor: null,
+        hp: null,
+        conditions: [],
       };
     }
     store.applyPatch({ kind: 'token-add', token: newToken });

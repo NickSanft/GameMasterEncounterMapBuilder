@@ -70,11 +70,21 @@ const GM_SECTIONS: HelpSection[] = [
   {
     title: 'Canvas interactions',
     entries: [
-      { name: 'Right-click', desc: 'Context menu — place a token, paste, ping, reveal/hide 5×5, fit, or act on what you clicked (token / annotation / AoE).' },
+      { name: 'Right-click', desc: 'Context menu — place a token, paste, ping, reveal/hide 5×5, fit, damage/heal, or act on what you clicked (token / annotation / AoE).' },
       { name: 'Space+drag / middle-mouse', desc: 'Pan the camera without switching tools.' },
       { name: 'Scroll wheel', desc: 'Zoom toward the cursor.' },
       { name: 'Arrow keys / WASD', desc: 'Nudge the selected tokens one cell at a time (+Shift = 5 cells).' },
       { name: 'E', desc: 'Open the token editor for the first selected token.' },
+    ],
+  },
+  {
+    title: 'HP & conditions',
+    intro: 'Optional per-token tracking, visible to the Spectator when set to "Shared" visibility.',
+    entries: [
+      { name: 'Track HP', desc: 'Toggle in the token editor. Once enabled, the editor exposes Current / Max fields and a Shared/GM-only visibility toggle.' },
+      { name: 'HP bar', desc: 'A small color-coded bar (green → yellow → orange → red) appears under the token with "current / max" text. GM-only HP is tagged "(GM)" on the GM canvas.' },
+      { name: 'Conditions', desc: 'Pick from the standard D&D 5e set (Blinded, Charmed, Poisoned, Stunned, etc.) in the token editor. Small colored dots appear above the token.' },
+      { name: 'Damage / Heal…', desc: 'Right-click a token (or a selection) → "Damage / Heal…" opens a dialog. Positive = damage, negative = healing. Apply with Enter. Applies to every HP-tracked token in the selection at once.' },
     ],
   },
 ];

@@ -17,6 +17,8 @@ function token(id: string, imageId: string | null = null, borderColor: string | 
     imageId,
     size: 1,
     borderColor,
+    hp: null,
+    conditions: [],
   };
 }
 

@@ -8,7 +8,18 @@ import type {
   SessionState,
   StatePatch,
   Token,
+  TokenHp,
 } from '../state/types.js';
+
+function normalizeHp(hp: unknown): TokenHp | null {
+  if (!hp || typeof hp !== 'object') return null;
+  const h = hp as Partial<TokenHp>;
+  if (typeof h.current !== 'number' || typeof h.max !== 'number') return null;
+  const max = Math.max(0, Math.floor(h.max));
+  const current = Math.max(0, Math.min(max, Math.floor(h.current)));
+  const visibility: TokenHp['visibility'] = h.visibility === 'gm' ? 'gm' : 'shared';
+  return { current, max, visibility };
+}
 
 export interface SerializedSessionState {
   version: 1;
@@ -79,7 +90,14 @@ export function deserializeState(s: SerializedSessionState): SessionState {
       scaleX,
       scaleY,
     },
-    tokens: s.tokens.map((t) => ({ ...t, borderColor: t.borderColor ?? null })),
+    tokens: s.tokens.map((t) => ({
+      ...t,
+      borderColor: t.borderColor ?? null,
+      hp: normalizeHp(t.hp),
+      conditions: Array.isArray(t.conditions)
+        ? t.conditions.filter((c): c is string => typeof c === 'string')
+        : [],
+    })),
     fog: Uint8Array.from(s.fog),
     annotations: (s.annotations ?? []).map((a) => ({
       id: a.id,

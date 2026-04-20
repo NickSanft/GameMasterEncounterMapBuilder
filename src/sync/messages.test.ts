@@ -20,6 +20,8 @@ describe('serializeState / deserializeState', () => {
       imageId: null,
       size: 1,
       borderColor: null,
+      hp: null,
+      conditions: [],
     });
     const serialized = serializeState(state);
     const restored = deserializeState(serialized);

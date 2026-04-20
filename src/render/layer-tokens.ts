@@ -4,6 +4,8 @@ import type { LabelSize } from '../state/preferences.js';
 import { shapeForBorderColor, type MarkerShape } from '../state/team-colors.js';
 import { isTokenFullyHidden } from './fog-visibility.js';
 import type { DragOverlay } from '../input/context.js';
+import { hpBarColor, hpFraction } from '../state/token-hp.js';
+import { getConditionPreset } from '../state/conditions.js';
 
 const NO_IMAGE: ImageProvider = () => null;
 
@@ -98,6 +100,13 @@ export function drawTokens(
   }
   for (const t of selected) {
     drawTokenLabel(ctx, t, cellSize, labelScale, true, isDragged(t));
+  }
+  // HP bars and condition chips live on top of labels / active-turn rings so
+  // they remain legible regardless of layering beneath.
+  for (const t of state.tokens) {
+    if (options.mode === 'spectator' && isTokenFullyHidden(t, state)) continue;
+    const display = withOverlay(t, overlay, cellSize);
+    drawTokenStatus(ctx, display, cellSize, options.mode, labelScale, isDragged(t));
   }
 }
 
@@ -274,6 +283,127 @@ function drawMarker(
   ctx.lineWidth = 1.5;
   ctx.strokeStyle = '#ffffff';
   ctx.stroke();
+}
+
+/**
+ * Draw HP bar + numeric readout (below the label) and condition chips
+ * (above the token). Called once per token after body + label layers so
+ * status glyphs always sit on top.
+ */
+function drawTokenStatus(
+  ctx: CanvasRenderingContext2D,
+  t: Token,
+  cellSize: number,
+  mode: ViewMode,
+  labelScale: number,
+  isDragged: boolean,
+): void {
+  ctx.save();
+  if (isDragged) ctx.globalAlpha = DRAG_GHOST_ALPHA;
+
+  const cx = (t.x + t.size / 2) * cellSize;
+  const cy = (t.y + t.size / 2) * cellSize;
+  const r = (t.size * cellSize) / 2 - 4;
+
+  // Conditions chip row — drawn above the token, left-to-right.
+  if (t.conditions.length > 0) {
+    const chipR = Math.max(5, cellSize * 0.09);
+    const gap = chipR * 0.5;
+    const total = t.conditions.length;
+    const rowWidth = total * (chipR * 2) + (total - 1) * gap;
+    let x = cx - rowWidth / 2 + chipR;
+    const y = cy - r - chipR - 4;
+    for (const id of t.conditions) {
+      const preset = getConditionPreset(id);
+      const color = preset?.color ?? '#888888';
+      ctx.beginPath();
+      ctx.arc(x, y, chipR, 0, Math.PI * 2);
+      ctx.fillStyle = color;
+      ctx.fill();
+      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = 'rgba(0, 0, 0, 0.6)';
+      ctx.stroke();
+      // Show glyph at larger scales only (otherwise it's unreadable).
+      if (chipR >= 9 && preset) {
+        const fontSize = Math.max(8, chipR * 1.0);
+        ctx.font = `700 ${fontSize}px system-ui, sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        // Pick white or black text for contrast against the chip color.
+        ctx.fillStyle = preferBlackText(color) ? '#000' : '#fff';
+        ctx.fillText(preset.symbol, x, y);
+      }
+      x += chipR * 2 + gap;
+    }
+  }
+
+  // HP bar + readout — drawn below the label.
+  if (t.hp) {
+    // Players see shared HP only; GM always sees it. Spectator sees shared HP
+    // as exact numbers; gm-only HP still occupies the layout slot on GM view
+    // so batch-editing tokens doesn't look jarring.
+    const isSharedOrGm = mode === 'gm' || t.hp.visibility === 'shared';
+    if (isSharedOrGm) {
+      const baseFontSize = Math.max(11, cellSize * 0.22);
+      const labelH = baseFontSize * labelScale + 6;
+      const barW = Math.max(cellSize * 0.8 * t.size, 36);
+      const barH = Math.max(5, cellSize * 0.07);
+      const barX = cx - barW / 2;
+      const barY = cy + r + (t.borderColor ? 8 : 6) + labelH + 4;
+
+      // Bar background
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+      roundRect(ctx, barX, barY, barW, barH, 2);
+      ctx.fill();
+
+      // Bar fill
+      const frac = hpFraction(t.hp);
+      ctx.fillStyle = hpBarColor(frac);
+      roundRect(ctx, barX + 1, barY + 1, (barW - 2) * frac, barH - 2, 1.5);
+      ctx.fill();
+
+      // Outline
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.35)';
+      roundRect(ctx, barX, barY, barW, barH, 2);
+      ctx.stroke();
+
+      // Numeric readout
+      const hpFontSize = Math.max(10, cellSize * 0.16) * labelScale;
+      ctx.font = `600 ${hpFontSize}px system-ui, sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'top';
+      ctx.fillStyle = '#ffffff';
+      ctx.strokeStyle = 'rgba(0, 0, 0, 0.85)';
+      ctx.lineWidth = 3;
+      const text = `${t.hp.current} / ${t.hp.max}`;
+      const textY = barY + barH + 2;
+      ctx.strokeText(text, cx, textY);
+      ctx.fillText(text, cx, textY);
+
+      // GM-only tag so the GM knows players can't see it.
+      if (t.hp.visibility === 'gm' && mode === 'gm') {
+        ctx.font = `600 ${hpFontSize * 0.7}px system-ui, sans-serif`;
+        ctx.fillStyle = 'rgba(255, 179, 0, 0.9)';
+        ctx.fillText('(GM)', cx, textY + hpFontSize + 1);
+      }
+    }
+  }
+
+  ctx.restore();
+}
+
+/** Hex color → should we use dark text on top for contrast? */
+function preferBlackText(hex: string): boolean {
+  const m = /^#?([a-f\d]{6})$/i.exec(hex);
+  if (!m) return false;
+  const n = parseInt(m[1]!, 16);
+  const r = (n >> 16) & 0xff;
+  const g = (n >> 8) & 0xff;
+  const b = n & 0xff;
+  // Relative luminance (simplified)
+  const luma = 0.299 * r + 0.587 * g + 0.114 * b;
+  return luma > 160;
 }
 
 function roundRect(

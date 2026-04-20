@@ -23,6 +23,8 @@ describe('saveState / loadPersistedState', () => {
       imageId: null,
       size: 2,
       borderColor: '#4caf50',
+      hp: null,
+      conditions: [],
     });
     state.fog[0] = 1;
     state.fog[99] = 1;

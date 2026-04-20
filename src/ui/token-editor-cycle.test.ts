@@ -16,6 +16,8 @@ function tok(id: string, x = 0, y = 0): Token {
     imageId: null,
     size: 1,
     borderColor: null,
+    hp: null,
+    conditions: [],
   };
 }
 

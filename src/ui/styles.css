@@ -673,6 +673,142 @@ body.view {
   box-shadow: 0 0 0 2px var(--active-glow);
 }
 
+/* HP block + conditions (token editor) */
+.hp-block,
+.conditions-block {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.55rem 0.75rem 0.75rem;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.hp-block legend,
+.conditions-block legend {
+  padding: 0 0.35rem;
+  font-size: 0.78rem;
+  color: var(--fg-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 700;
+}
+
+.hp-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.6rem;
+  align-items: end;
+}
+
+.hp-row > label {
+  margin: 0;
+}
+
+.hp-row[hidden] {
+  display: none;
+}
+
+.condition-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.condition-chip {
+  --condition-color: #888;
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.22rem 0.55rem 0.22rem 0.4rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--fg);
+  font-family: inherit;
+  font-size: 0.78rem;
+  cursor: pointer;
+  transition: background 100ms ease, border-color 100ms ease, transform 90ms ease;
+  line-height: 1.1;
+}
+
+.condition-chip:hover:not(:disabled) {
+  border-color: var(--condition-color);
+}
+
+.condition-chip.active {
+  background: color-mix(in srgb, var(--condition-color) 25%, var(--bg));
+  border-color: var(--condition-color);
+}
+
+.condition-chip .chip-dot {
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: 50%;
+  background: var(--condition-color);
+  display: inline-block;
+  flex-shrink: 0;
+  border: 1px solid rgba(0, 0, 0, 0.25);
+}
+
+.condition-chip .chip-label {
+  font-weight: 500;
+}
+
+/* Damage/Heal dialog */
+.damage-heal-dialog {
+  min-width: 340px;
+  max-width: 420px;
+}
+
+.damage-heal-dialog .dmg-target-summary {
+  margin: 0 0 0.6rem;
+  color: var(--fg-muted);
+  font-size: 0.82rem;
+  text-transform: none;
+  letter-spacing: 0;
+  line-height: 1.4;
+}
+
+.damage-heal-dialog .dmg-quick {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.3rem;
+}
+
+.damage-heal-dialog .dmg-quick button {
+  flex: 1;
+}
+
+.damage-heal-dialog input[type='number'] {
+  width: 100%;
+  font-size: 1.4rem;
+  font-weight: 600;
+  text-align: center;
+  padding: 0.55rem;
+}
+
+.damage-heal-dialog .modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.damage-heal-dialog button.primary {
+  background: var(--accent);
+  color: var(--bg);
+  border-color: var(--accent);
+  font-weight: 600;
+}
+
+.damage-heal-dialog button.primary:hover:not(:disabled) {
+  filter: brightness(1.05);
+}
+
 .modal button {
   appearance: none;
   background: transparent;

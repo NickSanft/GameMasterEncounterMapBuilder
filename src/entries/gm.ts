@@ -71,6 +71,7 @@ import { mountInitiativeBar } from '../ui/initiative-bar.js';
 import { mountInitiativeModal } from '../ui/initiative-modal.js';
 import { mountDiagnosticsOverlay } from '../ui/diagnostics-overlay.js';
 import { mountHelpOverlay } from '../ui/help-overlay.js';
+import { mountDamageHealDialog } from '../ui/damage-heal-dialog.js';
 import type { ViewportRect } from '../sync/messages.js';
 import {
   zoomBy,
@@ -397,6 +398,7 @@ const tokenEditor = mountTokenEditor({
   imageLoader,
 });
 const annotationEditor = mountAnnotationEditor({ store });
+const damageHealDialog = mountDamageHealDialog({ store });
 
 const notesPanel = mountNotesPanel();
 const shortcutOverlay = mountShortcutOverlay('gm');
@@ -494,8 +496,18 @@ canvas.addEventListener('contextmenu', (e) => {
     }
     const count = selection.ids.size;
     const suffix = count > 1 ? ` (${count})` : '';
+    const hpTargets = state.tokens
+      .filter((t) => selection.ids.has(t.id) && t.hp !== null)
+      .map((t) => t.id);
     items.push(
       { label: 'Edit token…', onClick: () => tokenEditor.openFor(hit) },
+      {
+        label: `Damage / Heal${hpTargets.length > 1 ? ` (${hpTargets.length})` : ''}…`,
+        disabled: hpTargets.length === 0,
+        onClick: () => {
+          if (hpTargets.length > 0) damageHealDialog.openFor(hpTargets);
+        },
+      },
       { label: `Duplicate${suffix}`, shortcut: 'Ctrl+D', onClick: () => duplicateSelection() },
       { label: `Copy${suffix}`, shortcut: 'Ctrl+C', onClick: () => copySelection() },
       { label: `Cut${suffix}`, shortcut: 'Ctrl+X', onClick: () => cutSelection() },
@@ -790,6 +802,8 @@ function placeTokenAt(gx: number, gy: number) {
     imageId: null,
     size: 1,
     borderColor: null,
+    hp: null,
+    conditions: [],
   };
   store.applyPatch({ kind: 'token-add', token });
   lastPlacedRef.current = token;

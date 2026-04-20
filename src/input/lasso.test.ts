@@ -27,6 +27,8 @@ function token(partial: Partial<Token> & { id: string }): Token {
     imageId: partial.imageId ?? null,
     size: partial.size ?? 1,
     borderColor: partial.borderColor ?? null,
+    hp: partial.hp ?? null,
+    conditions: partial.conditions ?? [],
   };
 }
 

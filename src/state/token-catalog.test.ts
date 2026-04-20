@@ -18,6 +18,8 @@ const sample: Token = {
   imageId: 'img-1',
   size: 1,
   borderColor: '#ffaa00',
+  hp: null,
+  conditions: [],
 };
 
 beforeEach(() => {

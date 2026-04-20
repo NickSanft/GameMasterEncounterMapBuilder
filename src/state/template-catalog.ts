@@ -67,6 +67,8 @@ export function placeTemplate(
     size: tt.size,
     borderColor: tt.borderColor,
     imageId: tt.imageId,
+    hp: null,
+    conditions: [],
   }));
 }
 

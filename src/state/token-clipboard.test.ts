@@ -12,6 +12,8 @@ function token(overrides: Partial<Token>): Token {
     imageId: overrides.imageId ?? 'img-1',
     size: overrides.size ?? 2,
     borderColor: overrides.borderColor ?? '#4caf50',
+    hp: overrides.hp ?? null,
+    conditions: overrides.conditions ?? [],
   };
 }
 

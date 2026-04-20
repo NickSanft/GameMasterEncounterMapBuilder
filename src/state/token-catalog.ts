@@ -70,5 +70,7 @@ export function tokenFromCatalogEntry(
     imageId: entry.imageId,
     size: entry.size,
     borderColor: entry.borderColor,
+    hp: null,
+    conditions: [],
   };
 }

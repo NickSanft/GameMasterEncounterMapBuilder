@@ -7,6 +7,20 @@ export interface GridConfig {
   showGridLines: boolean;
 }
 
+export type HpVisibility = 'gm' | 'shared';
+
+/**
+ * Optional HP tracking on a token. `null` on `Token.hp` means the token
+ * doesn't track HP (no bar, no readout). When present, `current` is
+ * clamped to 0..max by the store helpers.
+ */
+export interface TokenHp {
+  current: number;
+  max: number;
+  /** Whether players see the token's current/max HP, or only a status hint. */
+  visibility: HpVisibility;
+}
+
 export interface Token {
   id: ID;
   x: number;
@@ -16,6 +30,8 @@ export interface Token {
   imageId: ID | null;
   size: number;
   borderColor: string | null;
+  hp: TokenHp | null;
+  conditions: string[];
 }
 
 export interface Background {

@@ -1,10 +1,12 @@
 import type { Store } from '../state/store.js';
 import type { SelectionState } from '../input/context.js';
-import type { ID, Token } from '../state/types.js';
+import type { ID, Token, TokenHp } from '../state/types.js';
 import { putImage, getImageURL } from '../images/store.js';
 import type { ImageLoader } from '../images/loader.js';
 import { TEAM_PRESETS } from '../state/team-colors.js';
 import { saveTokenToLibrary } from '../state/token-catalog.js';
+import { CONDITION_PRESETS, toggleCondition, hasCondition } from '../state/conditions.js';
+import { normalizeHp } from '../state/token-hp.js';
 import { attachFocusTrap, rememberFocus, restoreFocus } from '../util/focus.js';
 import {
   cycleTo,
@@ -91,6 +93,42 @@ export function mountTokenEditor(opts: TokenEditorOptions): TokenEditorHandle {
           <input type="color" class="border-color-input" data-field="borderColor" title="Custom color" aria-label="Custom border color" />
         </div>
       </label>
+
+      <fieldset class="hp-block">
+        <legend>Hit points</legend>
+        <label class="check">
+          <input type="checkbox" data-field="trackHp" />
+          <span>Track HP on this token</span>
+        </label>
+        <div class="hp-row" data-field="hp-fields" hidden>
+          <label>Current
+            <input type="number" data-field="hpCurrent" step="1" min="0" />
+          </label>
+          <label>Max
+            <input type="number" data-field="hpMax" step="1" min="0" />
+          </label>
+          <label>Visibility
+            <div class="radio-group">
+              <label><input type="radio" name="te-hp-visibility" value="shared" /> Shared</label>
+              <label><input type="radio" name="te-hp-visibility" value="gm" /> GM-only</label>
+            </div>
+          </label>
+        </div>
+      </fieldset>
+
+      <fieldset class="conditions-block">
+        <legend>Conditions</legend>
+        <div class="condition-chips" data-field="condition-chips" role="group" aria-label="Token conditions">
+          ${CONDITION_PRESETS.map(
+            (c) =>
+              `<button type="button" class="condition-chip" data-condition="${c.id}" title="${escapeAttr(c.desc)}" style="--condition-color:${c.color}">
+                <span class="chip-dot"></span>
+                <span class="chip-label">${c.label}</span>
+              </button>`,
+          ).join('')}
+        </div>
+      </fieldset>
+
       <hr />
       <div class="modal-footer">
         <button type="button" data-action="save-library" title="Save this token's appearance to the library for reuse">Save to Library</button>
@@ -124,6 +162,16 @@ export function mountTokenEditor(opts: TokenEditorOptions): TokenEditorHandle {
   const nextBtn = modal.querySelector<HTMLButtonElement>('[data-action="next"]')!;
   const cycleGroup = modal.querySelector<HTMLDivElement>('[data-field="cycle-group"]')!;
   const counter = modal.querySelector<HTMLSpanElement>('[data-field="counter"]')!;
+  const trackHpInput = modal.querySelector<HTMLInputElement>('[data-field="trackHp"]')!;
+  const hpFields = modal.querySelector<HTMLDivElement>('[data-field="hp-fields"]')!;
+  const hpCurrentInput = modal.querySelector<HTMLInputElement>('[data-field="hpCurrent"]')!;
+  const hpMaxInput = modal.querySelector<HTMLInputElement>('[data-field="hpMax"]')!;
+  const hpVisibilityRadios = Array.from(
+    modal.querySelectorAll<HTMLInputElement>('input[name="te-hp-visibility"]'),
+  );
+  const conditionChips = Array.from(
+    modal.querySelectorAll<HTMLButtonElement>('.condition-chip'),
+  );
 
   let currentId: ID | null = null;
   let triggerFocus: HTMLElement | null = null;
@@ -203,7 +251,28 @@ export function mountTokenEditor(opts: TokenEditorOptions): TokenEditorHandle {
     for (const r of sizeRadios) r.checked = Number(r.value) === token.size;
     updatePreview(token.imageId);
     syncBorderUI(token.borderColor);
+    syncHpUI(token.hp);
+    syncConditionUI(token.conditions);
     syncCounter();
+  }
+
+  function syncHpUI(hp: TokenHp | null) {
+    const tracking = hp !== null;
+    trackHpInput.checked = tracking;
+    hpFields.hidden = !tracking;
+    hpCurrentInput.value = hp ? String(hp.current) : '';
+    hpMaxInput.value = hp ? String(hp.max) : '';
+    const visibility = hp?.visibility ?? 'shared';
+    for (const r of hpVisibilityRadios) r.checked = r.value === visibility;
+  }
+
+  function syncConditionUI(conditions: readonly string[]) {
+    for (const chip of conditionChips) {
+      const id = chip.dataset.condition ?? '';
+      const on = hasCondition(conditions, id);
+      chip.classList.toggle('active', on);
+      chip.setAttribute('aria-pressed', on ? 'true' : 'false');
+    }
   }
 
   function openFor(token: Token) {
@@ -364,6 +433,80 @@ export function mountTokenEditor(opts: TokenEditorOptions): TokenEditorHandle {
     syncBorderUI(borderInput.value);
   });
 
+  trackHpInput.addEventListener('change', () => {
+    const tok = currentToken();
+    if (!tok) return;
+    if (trackHpInput.checked) {
+      const hp: TokenHp = tok.hp ?? { current: 10, max: 10, visibility: 'shared' };
+      update({ hp });
+      syncHpUI(hp);
+    } else {
+      update({ hp: null });
+      syncHpUI(null);
+    }
+  });
+
+  function commitHpField(which: 'current' | 'max') {
+    const tok = currentToken();
+    if (!tok || !tok.hp) return;
+    const current = parseInt(hpCurrentInput.value, 10);
+    const max = parseInt(hpMaxInput.value, 10);
+    if (!Number.isFinite(current) || !Number.isFinite(max)) {
+      syncHpUI(tok.hp);
+      return;
+    }
+    const next = normalizeHp({
+      current: which === 'current' ? current : tok.hp.current,
+      max: which === 'max' ? max : tok.hp.max,
+      visibility: tok.hp.visibility,
+    });
+    // If max is shrinking, also pull down current.
+    const merged = normalizeHp({
+      current:
+        which === 'current' ? next.current : Math.min(tok.hp.current, next.max),
+      max: next.max,
+      visibility: tok.hp.visibility,
+    });
+    update({ hp: merged });
+    syncHpUI(merged);
+  }
+
+  hpCurrentInput.addEventListener('change', () => commitHpField('current'));
+  hpMaxInput.addEventListener('change', () => commitHpField('max'));
+  hpCurrentInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      commitHpField('current');
+      e.preventDefault();
+    }
+  });
+  hpMaxInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      commitHpField('max');
+      e.preventDefault();
+    }
+  });
+
+  for (const r of hpVisibilityRadios) {
+    r.addEventListener('change', () => {
+      const tok = currentToken();
+      if (!tok || !tok.hp || !r.checked) return;
+      const visibility = r.value === 'gm' ? 'gm' : 'shared';
+      update({ hp: { ...tok.hp, visibility } });
+    });
+  }
+
+  for (const chip of conditionChips) {
+    chip.addEventListener('click', () => {
+      const tok = currentToken();
+      if (!tok) return;
+      const id = chip.dataset.condition;
+      if (!id) return;
+      const next = toggleCondition(tok.conditions, id);
+      update({ conditions: next });
+      syncConditionUI(next);
+    });
+  }
+
   deleteBtn.addEventListener('click', () => {
     if (!currentId) return;
     const id = currentId;
@@ -485,4 +628,8 @@ export function mountTokenEditor(opts: TokenEditorOptions): TokenEditorHandle {
     close,
     isOpen: () => !backdrop.hidden,
   };
+}
+
+function escapeAttr(s: string): string {
+  return s.replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
