@@ -18,9 +18,7 @@ Every release is an annotated git tag (`vX.Y.Z`) on the commit that introduced t
 
 ## [Unreleased]
 
-Post-1.0 roadmap (Phases 52–62 + voice notes):
-- **0.52.0** — Bundle-size budget *(this release)*
-- **0.53.0** — Cached background layer via OffscreenCanvas
+Post-1.0 roadmap (Phases 54–62 + voice notes):
 - **0.54.0** — Walls + dynamic line-of-sight
 - **0.55.0** — Token lighting sources + bright/dim radius
 - **0.56.0** — Follow-the-fog exploration mode
@@ -30,6 +28,38 @@ Post-1.0 roadmap (Phases 52–62 + voice notes):
 - **0.60.0** — Network sync: WebRTC transport
 - **0.61.0** — Rooms + player identity
 - **0.62.0** — Reconnection + conflict resolution
+
+---
+
+## [0.53.0] — 2026-04-21 — Cached background layer via OffscreenCanvas
+
+### Added
+- **`src/render/background-cache.ts`** — a new bitmap cache for the static background layer (fallback fill + optional image at its offset/scale). The first paint draws into an `OffscreenCanvas` sized to the world grid; subsequent frames `drawImage(cache, 0, 0)` the cached bitmap and skip the per-frame fill + image composite entirely.
+- **Cache invalidation** is keyed off the narrow slice of state that affects the bitmap: grid dimensions, theme, and the background image's `imageId` / load-state / offset / scale. Every other state change — camera pans, token mutations, fog edits, preference toggles unrelated to theme — reuses the cached bitmap.
+- **Image-load coordination**: the key includes `bgImageLoaded` so the cache invalidates automatically the first frame after an IDB-backed image finishes loading. No special wiring needed — the existing `imageLoader.get(id)` transition from `null` → `HTMLImageElement` flips the key on its own.
+- **Graceful fallback** for environments without `OffscreenCanvas` (jsdom, very old browsers, workers without the feature flag) — `getBitmap()` returns `null` and the renderer falls through to the inline `drawBackground()` path used in Phases 32–52.
+- **Oversized-grid guard** — `MAX_CACHE_EDGE_PX = 4096` (Safari's historical `OffscreenCanvas` cap). Grids whose world dimensions exceed 4096 px on either edge skip the cache and render inline, same as today.
+
+### Why background only (not grid)?
+Grid lines are cheap to paint each frame (O(cols + rows) stroke ops, GPU-accelerated) and stay crisp at any zoom because they're still vector. Caching them into the bitmap would make them bilinear-interpolated (fuzzy) at zoom > 1× for marginal wins. The actual hotspot is the `ctx.drawImage(backgroundImg, offsetX, offsetY, w, h)` composite — which is what the cache amortises.
+
+### Tests
+- **21 new unit tests** in `src/render/background-cache.test.ts`:
+  - `backgroundCacheKeyOf()` faithfully copies every field the cache depends on.
+  - `cacheKeyEquals()` returns false for each of the 10 fields individually (parametrised test).
+  - In jsdom (no `OffscreenCanvas` global) `getBitmap()` returns `null` on the live codepath.
+  - With a stubbed `OffscreenCanvas`, the cache rebuilds once on first call and reuses the bitmap on identical keys, rebuilds on theme change, refuses oversized grids, and honours `invalidate()`.
+- **Visual regression**: all 5 committed snapshots (both Windows + Linux) pass unchanged — the cached bitmap is pixel-identical to the inline path, so no baseline bump needed.
+- **Full Playwright suite**: 110/110 on Windows + 5/5 Linux visual specs under the Playwright Jammy container.
+
+### Bundle + perf notes
+- No measurable bundle impact: `gm-*.js` gzipped size held at 30.00 KB (well under the 75 KB budget).
+- The cache module is tiny (~130 LOC incl. types + JSDoc).
+- On-device profiling will tell the real perf story, but in principle the cache replaces a `fill + image-composite` per frame with a single `drawImage` — a win on tablets and any mobile with a weaker rasterizer.
+
+### Renderer integration
+- `createRenderer` instantiates a cache at startup and destroys it in `destroy()`.
+- The cache is a renderer-internal detail — neither `gm.ts` nor `spectator.ts` need to change.
 
 ---
 
@@ -841,7 +871,8 @@ Total e2e count: **20 new tests** across four new spec files. Combined with prio
 
 ---
 
-[Unreleased]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.52.0...HEAD
+[Unreleased]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.53.0...HEAD
+[0.53.0]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.52.0...v0.53.0
 [0.52.0]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.51.2...v0.52.0
 [0.51.2]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.51.1...v0.51.2
 [0.51.1]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.51.0...v0.51.1

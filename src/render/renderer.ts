@@ -14,6 +14,7 @@ import {
   type FogHoverPreview,
 } from './layer-fog.js';
 import { drawBackground, type ImageProvider } from './layer-background.js';
+import { createBackgroundCache } from './background-cache.js';
 import { drawLasso } from './layer-lasso.js';
 import { drawPings } from './layer-pings.js';
 import { drawAnnotations } from './layer-annotations.js';
@@ -132,6 +133,11 @@ export function createRenderer(opts: CreateRendererOptions): Renderer {
   let lastFrameAt = 0;
   const cameraListeners = new Set<() => void>();
   const frameListeners = new Set<(sample: FrameSample) => void>();
+  // Background layer cache — amortises the per-frame `drawBackground`
+  // work into a single `drawImage` of a pre-painted `OffscreenCanvas`.
+  // Returns `null` in environments without OffscreenCanvas (jsdom,
+  // very old browsers); renderer falls through to inline painting.
+  const bgCache = createBackgroundCache();
 
   function resize() {
     const dpr = window.devicePixelRatio || 1;
@@ -165,7 +171,12 @@ export function createRenderer(opts: CreateRendererOptions): Renderer {
     ctx.save();
     ctx.translate(-camera.x * camera.zoom, -camera.y * camera.zoom);
     ctx.scale(camera.zoom, camera.zoom);
-    drawBackground(ctx, state.background, state.grid, getImage, { theme });
+    const cachedBg = bgCache.getBitmap(state, { theme }, getImage);
+    if (cachedBg) {
+      ctx.drawImage(cachedBg, 0, 0);
+    } else {
+      drawBackground(ctx, state.background, state.grid, getImage, { theme });
+    }
     drawGrid(ctx, state.grid, { highContrast, theme });
     const dragOverlay = getDragOverlay ? getDragOverlay() : null;
     const activeEntry = state.initiative.order.find(
@@ -296,6 +307,7 @@ export function createRenderer(opts: CreateRendererOptions): Renderer {
       if (rafHandle !== 0) cancelAnimationFrame(rafHandle);
       cameraListeners.clear();
       frameListeners.clear();
+      bgCache.destroy();
     },
     onCameraChange(listener: () => void): () => void {
       cameraListeners.add(listener);
