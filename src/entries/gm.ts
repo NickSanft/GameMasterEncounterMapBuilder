@@ -123,6 +123,8 @@ import { EXPORT_FILENAME_PREFIX } from '../util/constants.js';
 import { isEditableFocus } from '../util/focus.js';
 import { createAnnouncer } from '../util/announcer.js';
 import { registerPwa } from '../util/pwa.js';
+import { createFogWorkerClient } from '../render/fog-worker-client.js';
+import FogWorker from '../render/fog-worker.js?worker';
 
 const canvasEl = document.getElementById('canvas');
 if (!(canvasEl instanceof HTMLCanvasElement)) {
@@ -134,6 +136,10 @@ const preferences = createPreferences();
 applyPrefsToBody(preferences.get());
 
 const announcer = createAnnouncer();
+
+const fogWorkerClient = createFogWorkerClient({
+  workerFactory: () => new FogWorker(),
+});
 
 // Tool id → human-readable label for live-region announcements.
 const TOOL_LABELS: Record<string, string> = {
@@ -214,7 +220,19 @@ const renderer = createRenderer({
   getSpectatorViewport,
   getRulerTargetFeet: () => rulerToolOptionsRef.current.targetFeet,
   getDrawPreview: () => drawOverlayRef.current,
+  getFogRects: () => fogWorkerClient.getLatest(),
 });
+
+// Whenever the worker has fresh rects, request a re-paint.
+fogWorkerClient.onUpdate(() => renderer.requestRender());
+
+// Re-request compaction whenever the store changes (the worker dedupes
+// identical-fog requests, so this is cheap when fog hasn't moved).
+function refreshFogRects() {
+  const state = store.getState();
+  fogWorkerClient.request(state.fog, state.grid.cols, state.grid.rows);
+}
+refreshFogRects();
 
 panZoomRef.handle = attachPanZoom(renderer);
 
@@ -1068,6 +1086,9 @@ store.subscribe((patch) => {
   persist();
   toolbarHandle.refreshActions();
   updateCanvasLabelDebounced();
+  // Recompact fog rects off-thread; a no-op when the patch didn't touch fog
+  // (the client hashes the buffer + skips the worker round trip on hit).
+  refreshFogRects();
   if (!channel) return;
   if (patch) {
     channel.send({ type: 'patch', patch: toSerializablePatch(patch) });

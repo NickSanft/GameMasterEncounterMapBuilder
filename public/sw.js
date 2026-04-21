@@ -21,7 +21,7 @@
  *    reloads.
  */
 
-const APP_VERSION = '0.48.0';
+const APP_VERSION = '0.49.0';
 const PRECACHE = `gm-maps-precache-${APP_VERSION}`;
 const RUNTIME = `gm-maps-runtime-${APP_VERSION}`;
 

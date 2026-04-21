@@ -29,9 +29,32 @@ Planned work for the remaining phases. See the plan conversation for full scope.
 - **0.42.0** — Partial import
 - **0.43.0** — Grid labels + map tint
 - **0.44.0** — Mini-map
-- **0.49.0** — WebWorker-ize fog
 - **0.50.0** — Additional e2e behavior tests
 - **0.51.0** — Visual regression tests
+
+---
+
+## [0.49.0] — 2026-04-20 — Fog WebWorker
+
+### Added
+- **Off-main-thread fog compaction.** A new `src/render/fog-worker.ts` runs in a dedicated Web Worker; it owns the fog grid and emits a list of run-length-compacted rectangles back to the main thread. The renderer paints those rects directly, skipping the per-frame scan through the fog grid that previously ran on the UI thread. On large maps (≥ 4 000 cells, ~63×63) this keeps frame budgets under control during heavy reveal-paint sessions.
+- **Pure helper** `src/render/fog-rects.ts` — `compactFogRects(fog, cols, rows)` returns `{x, y, w}[]` (one rect per row of contiguous hidden cells); `drawCompactedFogRects(ctx, rects, cellSize)` paints them; `fogEquals(a, b)` is the cheap byte-by-byte equality check the worker client uses to skip redundant requests. Same code runs both in the worker and as the synchronous fallback, so the two paths are guaranteed to produce identical output.
+- **Worker client** `src/render/fog-worker-client.ts` — `createFogWorkerClient({ workerFactory, useWorkerThreshold? })` wraps the worker behind a `request(fog, cols, rows)` / `getLatest()` / `onUpdate(listener)` API. Features:
+  - Cache hit (identical fog vs last request) returns the cached rects immediately, no worker round-trip.
+  - Worker requests carry a monotonically-increasing `requestId`; stale responses (when the user paints faster than the worker replies) are silently discarded.
+  - Fog buffer is shipped via `postMessage`'s Transferable list (zero-copy) — even a 200×200 grid (40 KB) is essentially free to dispatch.
+  - Synchronous fallback when `Worker` is unavailable (jsdom, file:// origins, blocked CSP) or when grid cell count is below the configurable threshold (default 4 000).
+- **Renderer integration.** `createRenderer` accepts an optional `getFogRects()` callback; `drawFog` honours `precomputedRects` over its inline scan. Both `gm.ts` and `spectator.ts` mount a fog worker client at boot, kick a refresh on every `store.subscribe` (the byte-equality cache makes non-fog patches free), and re-paint the canvas when the worker delivers fresh rects.
+
+### Tests
+- **12 unit tests** for `compactFogRects` + `fogEquals` covering: empty grids, mixed runs within a row, all-hidden, all-revealed, non-zero-treated-as-revealed, no-merge-across-rows, checkerboard, trailing-hidden, identical-buffer equality, byte-mismatch, length-mismatch, two-empty equality.
+- **10 unit tests** for `createFogWorkerClient` covering the inline-fallback path (forceFallback, cache reuse, cache invalidation on fog change, threshold-based fallback, getLatest semantics, safe destroy) and the worker path with a mocked `Worker` (postMessage shape + Transferable, response delivery + listener notification, stale-response filtering, terminate on destroy).
+- **3 Playwright specs** (`e2e/fog-worker.spec.ts`): GM page boots without fog-related console errors; the existing reveal-fog drag flow still functions end-to-end (canvas aria-label updates with the new revealed-cell percentage); a dedicated `fog-worker-*.js` chunk is served on page load.
+
+### Implementation notes
+- Vite's `?worker` import handles bundling: `import FogWorker from '../render/fog-worker.js?worker'` produces a constructor that creates a real Worker pointing at the dedicated chunk. Build output now includes a tiny `fog-worker-*.js` (~0.5 KB after minification + gzip) — the helper itself, no DOM dependencies.
+- `useWorkerThreshold` (default 4 000 cells) prevents the worker round-trip cost from outweighing the inline compaction win on small grids — the default 30×20 grid (600 cells) stays on the main thread, where it has always been fast.
+- The pure helper / worker / client split sets the stage for future LOS (line-of-sight) computations to ride the same pipeline without re-architecting the renderer.
 
 ---
 
@@ -689,7 +712,8 @@ Planned work for the remaining phases. See the plan conversation for full scope.
 
 ---
 
-[Unreleased]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.48.0...HEAD
+[Unreleased]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.49.0...HEAD
+[0.49.0]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.48.0...v0.49.0
 [0.48.0]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.47.0...v0.48.0
 [0.47.0]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.46.0...v0.47.0
 [0.46.0]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.45.0...v0.46.0

@@ -75,6 +75,14 @@ interface CreateRendererOptions {
   getRulerTargetFeet?(): number | null;
   /** Optional in-progress stroke (pre-commit) for the Draw tool. */
   getDrawPreview?(): DrawStroke | null;
+  /**
+   * Optional precomputed run-length-compacted fog rectangles. Set by
+   * the entry when the fog WebWorker pipeline is available — saves an
+   * inline scan through the fog grid each frame on large maps. When
+   * omitted (or returns null) the renderer falls back to inline
+   * compaction inside `drawFog`.
+   */
+  getFogRects?(): import('./fog-rects.js').FogRect[] | null;
 }
 
 const EMPTY_HIGHLIGHT: ReadonlySet<ID> = new Set();
@@ -111,6 +119,7 @@ export function createRenderer(opts: CreateRendererOptions): Renderer {
     getSpectatorViewport,
     getRulerTargetFeet,
     getDrawPreview,
+    getFogRects,
   } = opts;
   const maybeCtx = canvas.getContext('2d');
   if (!maybeCtx) throw new Error('2D canvas context unavailable');
@@ -176,7 +185,12 @@ export function createRenderer(opts: CreateRendererOptions): Renderer {
       preview: getAoePreview ? getAoePreview() : null,
       dragOverlay,
     });
-    drawFog(ctx, state, mode, { gmColor: gmFogColor, gmOpacity: gmFogOpacity });
+    const precomputedFogRects = getFogRects ? getFogRects() : null;
+    drawFog(ctx, state, mode, {
+      gmColor: gmFogColor,
+      gmOpacity: gmFogOpacity,
+      ...(precomputedFogRects ? { precomputedRects: precomputedFogRects } : {}),
+    });
     drawStrokes(ctx, state.strokes, {
       mode,
       preview: getDrawPreview ? getDrawPreview() : null,

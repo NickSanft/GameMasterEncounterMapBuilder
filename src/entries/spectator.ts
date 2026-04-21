@@ -37,6 +37,8 @@ import { isEditableFocus } from '../util/focus.js';
 import { createAnnouncer } from '../util/announcer.js';
 import { registerPwa } from '../util/pwa.js';
 import { mountStatusBanners } from '../ui/status-banners.js';
+import { createFogWorkerClient } from '../render/fog-worker-client.js';
+import FogWorker from '../render/fog-worker.js?worker';
 import type { PanZoomHandle } from '../input/pan-zoom.js';
 
 const canvasEl = document.getElementById('canvas');
@@ -49,6 +51,10 @@ const preferences = createPreferences();
 applyPrefsToBody(preferences.get());
 
 const announcer = createAnnouncer();
+
+const fogWorkerClient = createFogWorkerClient({
+  workerFactory: () => new FogWorker(),
+});
 
 // Start with default state; hydrate from IDB (with LS fallback) as
 // soon as the async load resolves. Spectator typically receives a
@@ -77,7 +83,16 @@ const renderer = createRenderer({
   getPings: () => pingManager.getActive(),
   getMeasurement: () => measurementOverlayRef.current,
   getRulerTargetFeet: () => rulerToolOptionsRef.current.targetFeet,
+  getFogRects: () => fogWorkerClient.getLatest(),
 });
+
+fogWorkerClient.onUpdate(() => renderer.requestRender());
+
+function refreshFogRects() {
+  const state = store.getState();
+  fogWorkerClient.request(state.fog, state.grid.cols, state.grid.rows);
+}
+refreshFogRects();
 
 panZoomRef.handle = attachPanZoom(renderer);
 
@@ -206,6 +221,7 @@ store.subscribe((patch) => {
   renderer.requestRender();
   persist();
   updateCanvasLabelDebounced();
+  refreshFogRects();
   if (patch?.kind === 'token-update' && patch.changes.imageId) {
     imageLoader.invalidate(patch.changes.imageId);
   } else if (patch?.kind === 'background-update' && patch.changes.imageId) {

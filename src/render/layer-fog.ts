@@ -1,4 +1,9 @@
 import type { SessionState, ViewMode } from '../state/types.js';
+import {
+  compactFogRects,
+  drawCompactedFogRects,
+  type FogRect,
+} from './fog-rects.js';
 
 export type FogMode = 'reveal' | 'hide';
 
@@ -20,6 +25,16 @@ export interface FogHoverPreview {
 export interface FogRenderOptions {
   gmColor: string;
   gmOpacity: number;
+  /**
+   * Optional precomputed run-length-compacted fog rectangles for the
+   * current state. When provided, the renderer skips its own scan
+   * through the fog grid and just iterates these. The caller is
+   * responsible for keeping them in sync with `state.fog`.
+   *
+   * Used by the fog WebWorker pipeline (see `fog-worker.ts`) so the
+   * compaction can run off the main thread on large grids.
+   */
+  precomputedRects?: readonly FogRect[];
 }
 
 export function drawFog(
@@ -35,31 +50,8 @@ export function drawFog(
     ? hexToRgba(options.gmColor, options.gmOpacity)
     : '#000000';
 
-  for (let y = 0; y < rows; y++) {
-    let runStart = -1;
-    for (let x = 0; x < cols; x++) {
-      const hidden = fog[y * cols + x] === 0;
-      if (hidden && runStart === -1) {
-        runStart = x;
-      } else if (!hidden && runStart !== -1) {
-        ctx.fillRect(
-          runStart * cellSize,
-          y * cellSize,
-          (x - runStart) * cellSize,
-          cellSize,
-        );
-        runStart = -1;
-      }
-    }
-    if (runStart !== -1) {
-      ctx.fillRect(
-        runStart * cellSize,
-        y * cellSize,
-        (cols - runStart) * cellSize,
-        cellSize,
-      );
-    }
-  }
+  const rects = options.precomputedRects ?? compactFogRects(fog, cols, rows);
+  drawCompactedFogRects(ctx, rects, cellSize);
 }
 
 export function drawFogHoverPreview(
