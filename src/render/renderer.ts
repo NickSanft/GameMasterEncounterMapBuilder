@@ -25,11 +25,12 @@ import {
 } from './layer-spectator-viewport.js';
 import { drawMovementIndicator } from './layer-movement-indicator.js';
 import { drawStrokes } from './layer-strokes.js';
+import { drawWalls } from './layer-walls.js';
 import { drawGridLabels, drawSceneTint } from './layer-grid-labels.js';
 import { gridDistance, formatDistance } from '../state/distance.js';
 import type { DrawStroke } from '../state/types.js';
 import type { Preferences } from '../state/preferences.js';
-import type { DragOverlay, LassoOverlay } from '../input/context.js';
+import type { DragOverlay, LassoOverlay, WallsOverlay } from '../input/context.js';
 import type { Ping } from '../state/ping-manager.js';
 import type { ViewportRect } from '../sync/messages.js';
 
@@ -84,6 +85,11 @@ interface CreateRendererOptions {
    * compaction inside `drawFog`.
    */
   getFogRects?(): import('./fog-rects.js').FogRect[] | null;
+  /**
+   * In-progress walls chain while the Walls tool is active. GM-only —
+   * Spectator never sees walls or chain previews.
+   */
+  getWallsOverlay?(): WallsOverlay | null;
 }
 
 const EMPTY_HIGHLIGHT: ReadonlySet<ID> = new Set();
@@ -121,6 +127,7 @@ export function createRenderer(opts: CreateRendererOptions): Renderer {
     getRulerTargetFeet,
     getDrawPreview,
     getFogRects,
+    getWallsOverlay,
   } = opts;
   const maybeCtx = canvas.getContext('2d');
   if (!maybeCtx) throw new Error('2D canvas context unavailable');
@@ -210,6 +217,14 @@ export function createRenderer(opts: CreateRendererOptions): Renderer {
       mode,
       highlightIds: highlights,
       dragOverlay,
+    });
+    // Walls render above annotations but below the live interaction
+    // overlays (fog preview, measurement, pings). GM-only — the layer
+    // no-ops on the Spectator canvas.
+    drawWalls(ctx, state.walls, {
+      mode,
+      overlay: getWallsOverlay ? getWallsOverlay() : null,
+      zoom: camera.zoom,
     });
     const preview = getFogPreview ? getFogPreview() : null;
     if (preview) {

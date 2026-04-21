@@ -10,6 +10,7 @@ import {
   createMeasurementOverlayRef,
   createAoeOverlayRef,
   createDrawOverlayRef,
+  createWallsOverlayRef,
 } from '../input/context.js';
 import { createToolManager } from '../input/tool-manager.js';
 import { createSelectTool } from '../input/tool-select.js';
@@ -31,6 +32,8 @@ import { mountRulerSettings } from '../ui/ruler-settings.js';
 import { RULER_PRESETS } from '../state/ruler.js';
 import { createAoeTool, createAoeToolOptionsRef } from '../input/tool-aoe.js';
 import { createDrawTool, createDrawToolOptionsRef } from '../input/tool-draw.js';
+import { createWallsTool } from '../input/tool-walls.js';
+import { hitTestWalls } from '../state/walls.js';
 import { DEFAULT_STROKE_COLOR, DEFAULT_STROKE_WIDTH, hitTestStrokes } from '../state/draw.js';
 import { mountDrawSettings } from '../ui/draw-settings.js';
 import { hitTestAoe } from '../input/hit-test-aoe.js';
@@ -152,6 +155,7 @@ const TOOL_LABELS: Record<string, string> = {
   measure: 'Ruler',
   aoe: 'AoE',
   draw: 'Draw',
+  walls: 'Walls',
 };
 
 // Start with the default state so first paint is instant; hydrate from
@@ -165,6 +169,7 @@ const lastPlacedRef = createLastPlacedRef();
 const measurementOverlayRef = createMeasurementOverlayRef();
 const aoeOverlayRef = createAoeOverlayRef();
 const drawOverlayRef = createDrawOverlayRef();
+const wallsOverlayRef = createWallsOverlayRef();
 const drawToolOptionsRef = createDrawToolOptionsRef({
   color: DEFAULT_STROKE_COLOR,
   width: DEFAULT_STROKE_WIDTH,
@@ -221,6 +226,7 @@ const renderer = createRenderer({
   getRulerTargetFeet: () => rulerToolOptionsRef.current.targetFeet,
   getDrawPreview: () => drawOverlayRef.current,
   getFogRects: () => fogWorkerClient.getLatest(),
+  getWallsOverlay: () => wallsOverlayRef.current,
 });
 
 // Whenever the worker has fresh rects, request a re-paint.
@@ -290,6 +296,12 @@ toolManager.register(
     drawOptions: drawToolOptionsRef,
   }),
 );
+toolManager.register(
+  createWallsTool({
+    ...inputContext,
+    wallsOverlay: wallsOverlayRef,
+  }),
+);
 
 const toolbarHandle = mountToolbar(
   document.body,
@@ -304,6 +316,7 @@ const toolbarHandle = mountToolbar(
     { id: 'measure', label: 'Ruler (L)', title: 'Drag to measure distance in grid squares.' },
     { id: 'aoe', label: 'AoE (Y)', title: 'Drag to place an area-of-effect template.' },
     { id: 'draw', label: 'Draw (K)', title: 'Freehand ink on the map. Right-click a stroke to delete or toggle visibility.' },
+    { id: 'walls', label: 'Walls (W)', title: 'Click to drop wall vertices; Escape / right-click / double-click ends the chain. Walls are GM-only and (in a future update) will block line of sight.' },
   ],
   [
     {
@@ -726,6 +739,9 @@ canvas.addEventListener('contextmenu', (e) => {
   const strokeHit = hit || annotHit || aoeHit
     ? null
     : hitTestStrokes(state.strokes, world.x, world.y);
+  const wallHit = hit || annotHit || aoeHit || strokeHit
+    ? null
+    : hitTestWalls(state.walls, world.x, world.y);
   const gx = Math.floor(world.x / state.grid.cellSize);
   const gy = Math.floor(world.y / state.grid.cellSize);
   const onGrid =
@@ -779,6 +795,25 @@ canvas.addEventListener('contextmenu', (e) => {
         label: 'Delete stroke',
         variant: 'danger',
         onClick: () => store.applyPatch({ kind: 'stroke-remove', id: s.id }),
+      },
+    );
+  } else if (wallHit) {
+    const w = wallHit;
+    items.push(
+      {
+        label: w.blocksSight ? 'Disable sight blocking' : 'Enable sight blocking',
+        onClick: () =>
+          store.applyPatch({
+            kind: 'wall-update',
+            id: w.id,
+            changes: { blocksSight: !w.blocksSight },
+          }),
+      },
+      { kind: 'separator' },
+      {
+        label: 'Delete wall',
+        variant: 'danger',
+        onClick: () => store.applyPatch({ kind: 'wall-remove', id: w.id }),
       },
     );
   } else if (annotHit) {
@@ -927,11 +962,13 @@ canvas.addEventListener('contextmenu', (e) => {
     ? 'AoE actions'
     : strokeHit
       ? 'Stroke actions'
-      : annotHit
-        ? 'Annotation actions'
-        : hit
-          ? 'Token actions'
-          : 'Map actions';
+      : wallHit
+        ? 'Wall actions'
+        : annotHit
+          ? 'Annotation actions'
+          : hit
+            ? 'Token actions'
+            : 'Map actions';
   showContextMenu({
     x: e.clientX,
     y: e.clientY,
@@ -1475,6 +1512,10 @@ window.addEventListener('keydown', (e) => {
       break;
     case 'k':
       toolManager.setActive('draw');
+      e.preventDefault();
+      break;
+    case 'w':
+      toolManager.setActive('walls');
       e.preventDefault();
       break;
     case 'e': {

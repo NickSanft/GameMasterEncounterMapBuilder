@@ -10,6 +10,7 @@ import type {
   StatePatch,
   Token,
   TokenHp,
+  Wall,
 } from '../state/types.js';
 
 function normalizeHp(hp: unknown): TokenHp | null {
@@ -32,6 +33,7 @@ export interface SerializedSessionState {
   aoeTemplates: AoeTemplate[];
   initiative: InitiativeState;
   strokes: DrawStroke[];
+  walls: Wall[];
 }
 
 export type SerializablePatch =
@@ -98,6 +100,7 @@ export function serializeState(s: SessionState): SerializedSessionState {
       ...st,
       points: st.points.map((p) => ({ ...p })),
     })),
+    walls: s.walls.map((w) => ({ ...w })),
   };
 }
 
@@ -178,6 +181,25 @@ export function deserializeState(s: SerializedSessionState): SessionState {
                 .map((p) => ({ x: p.x, y: p.y }))
             : [],
         }))
+      : [],
+    walls: Array.isArray(s.walls)
+      ? s.walls
+          .filter((w): w is Wall =>
+            !!w &&
+            typeof (w as { x1?: unknown }).x1 === 'number' &&
+            typeof (w as { y1?: unknown }).y1 === 'number' &&
+            typeof (w as { x2?: unknown }).x2 === 'number' &&
+            typeof (w as { y2?: unknown }).y2 === 'number',
+          )
+          .map((w) => ({
+            id: String(w.id ?? ''),
+            x1: w.x1,
+            y1: w.y1,
+            x2: w.x2,
+            y2: w.y2,
+            blocksSight: w.blocksSight !== false,
+            blocksMovement: w.blocksMovement !== false,
+          }))
       : [],
   };
 }

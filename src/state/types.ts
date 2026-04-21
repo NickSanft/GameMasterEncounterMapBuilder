@@ -109,6 +109,32 @@ export interface DrawStroke {
   visibility: DrawStrokeVisibility;
 }
 
+/**
+ * A line-segment wall on the map. Stored in world-pixel coordinates
+ * (not grid cells) so walls can freely cut across cells — useful for
+ * dungeon corridors, doorways, and arbitrary masonry.
+ *
+ * `blocksSight` drives the Phase 55 line-of-sight algorithm: only
+ * walls with this flag contribute to the visibility polygon.
+ * `blocksMovement` is a flag reserved for a future grid-pathing
+ * feature; Phase 54 stores it but doesn't consume it yet.
+ *
+ * Walls are GM-only — they never render on the Spectator canvas and
+ * are never included in sync messages to Spectator peers. Phase 55
+ * will let the GM transmit the DERIVED line-of-sight polygons
+ * instead, so Spectators still see the resulting fog mask without
+ * being handed a floor plan they can inspect in devtools.
+ */
+export interface Wall {
+  id: ID;
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+  blocksSight: boolean;
+  blocksMovement: boolean;
+}
+
 export interface InitiativeEntry {
   id: ID;
   tokenId: ID | null;
@@ -132,6 +158,7 @@ export interface SessionState {
   aoeTemplates: AoeTemplate[];
   initiative: InitiativeState;
   strokes: DrawStroke[];
+  walls: Wall[];
 }
 
 export interface Camera {
@@ -167,6 +194,10 @@ export type StatePatch =
   | { kind: 'stroke-update'; id: ID; changes: Partial<Omit<DrawStroke, 'id'>> }
   | { kind: 'stroke-remove'; id: ID }
   | { kind: 'strokes-clear' }
+  | { kind: 'wall-add'; wall: Wall }
+  | { kind: 'wall-update'; id: ID; changes: Partial<Omit<Wall, 'id'>> }
+  | { kind: 'wall-remove'; id: ID }
+  | { kind: 'walls-clear' }
   | { kind: 'session-reset'; state: SessionState };
 
 export const DEFAULT_GRID: GridConfig = {
@@ -202,5 +233,6 @@ export function createDefaultState(): SessionState {
     aoeTemplates: [],
     initiative: { order: [], activeId: null, round: 0 },
     strokes: [],
+    walls: [],
   };
 }

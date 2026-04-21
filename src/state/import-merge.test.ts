@@ -110,6 +110,7 @@ describe('mergeImportState', () => {
       aoeTemplates: false,
       initiative: false,
       strokes: false,
+      walls: false,
     };
     const out = mergeImportState(base, importedState(), selection);
     expect(out.tokens.map((t) => t.id)).toEqual(['base-1']);

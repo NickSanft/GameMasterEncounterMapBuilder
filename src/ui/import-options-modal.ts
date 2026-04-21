@@ -150,6 +150,12 @@ export function mountImportOptionsModal(): ImportOptionsModalHandle {
           count: `${summary.strokeCount}`,
           disabled: summary.strokeCount === 0,
         },
+        {
+          key: 'walls',
+          label: 'Walls',
+          count: `${summary.wallCount}`,
+          disabled: summary.wallCount === 0,
+        },
         { key: 'grid', label: 'Grid dimensions', count: summary.gridLabel },
       ];
 

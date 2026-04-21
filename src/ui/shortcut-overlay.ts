@@ -32,6 +32,7 @@ const GM_SECTIONS: ShortcutSection[] = [
       { keys: '0 (Ruler)', desc: 'Back to freeform ruler (no preset)' },
       { keys: 'Y', desc: 'AoE — place a spell/effect template' },
       { keys: 'K', desc: 'Draw — freehand ink on the map' },
+      { keys: 'W', desc: 'Walls — click to drop chain vertices; Escape / right-click / double-click ends the chain' },
     ],
   },
   {

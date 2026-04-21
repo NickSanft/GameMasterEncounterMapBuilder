@@ -32,6 +32,7 @@ const GM_SECTIONS: HelpSection[] = [
       { name: 'Ruler', desc: 'Drag between two points to measure distance in grid squares. Release to clear. A side panel lets you pick 5 / 30 / 60 / 90 / 120 ft presets (shortcut keys 1–5) that snap the endpoint to that reach; 0 goes back to freeform.' },
       { name: 'AoE', desc: 'Drag to place a spell or effect template — sphere, cone, line, or cube. Choose the shape and color from the panel that appears when the tool is active.' },
       { name: 'Draw', desc: 'Freehand ink tool (shortcut K). Pick a color, width, and Shared/GM-only visibility from the side panel. Right-click a stroke to delete it or toggle visibility. "Clear Drawings" in the session menu erases all strokes.' },
+      { name: 'Walls', desc: 'Click-to-drop chain tool (shortcut W) for outlining dungeon corridors, doorways, and masonry. Each click commits a segment from the previous vertex; Escape, right-click, or double-click ends the chain. Walls are GM-only — players never see them. Right-click an existing wall to delete it or toggle sight-blocking. A future update will use walls to mask what Spectator-side tokens can see.' },
       { name: 'Undo / Redo', desc: 'Step backward or forward through your last actions. Also Ctrl/Cmd+Z and Ctrl/Cmd+Shift+Z.' },
     ],
   },

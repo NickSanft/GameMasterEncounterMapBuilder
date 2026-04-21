@@ -46,6 +46,7 @@ function snapshot(s: SessionState): SessionState {
       ...st,
       points: st.points.map((p) => ({ ...p })),
     })),
+    walls: s.walls.map((w) => ({ ...w })),
   };
 }
 
@@ -271,6 +272,28 @@ export function createStore(initial?: SessionState): Store {
         break;
       case 'strokes-clear':
         state = { ...state, strokes: [] };
+        break;
+      case 'wall-add':
+        state = { ...state, walls: [...state.walls, patch.wall] };
+        break;
+      case 'wall-update': {
+        const idx = state.walls.findIndex((w) => w.id === patch.id);
+        if (idx === -1) return;
+        const existing = state.walls[idx]!;
+        const next = { ...existing, ...patch.changes };
+        const walls = state.walls.slice();
+        walls[idx] = next;
+        state = { ...state, walls };
+        break;
+      }
+      case 'wall-remove':
+        state = {
+          ...state,
+          walls: state.walls.filter((w) => w.id !== patch.id),
+        };
+        break;
+      case 'walls-clear':
+        state = { ...state, walls: [] };
         break;
       case 'session-reset':
         state = patch.state;

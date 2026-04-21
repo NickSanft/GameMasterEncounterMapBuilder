@@ -20,6 +20,7 @@ export interface ImportSelection {
   aoeTemplates: boolean;
   initiative: boolean;
   strokes: boolean;
+  walls: boolean;
 }
 
 export const DEFAULT_IMPORT_SELECTION: ImportSelection = {
@@ -31,6 +32,7 @@ export const DEFAULT_IMPORT_SELECTION: ImportSelection = {
   aoeTemplates: true,
   initiative: true,
   strokes: true,
+  walls: true,
 };
 
 /**
@@ -83,6 +85,9 @@ export function mergeImportState(
           ...s,
           points: s.points.map((p) => ({ ...p })),
         })),
+    walls: selection.walls
+      ? imported.walls.map((w) => ({ ...w }))
+      : base.walls.map((w) => ({ ...w })),
   };
 }
 
@@ -99,6 +104,7 @@ export interface ImportSummary {
   aoeCount: number;
   initiativeCount: number;
   strokeCount: number;
+  wallCount: number;
   gridLabel: string;
 }
 
@@ -114,6 +120,7 @@ export function summarizeImport(state: SessionState): ImportSummary {
     aoeCount: state.aoeTemplates.length,
     initiativeCount: state.initiative.order.length,
     strokeCount: state.strokes.length,
+    wallCount: state.walls.length,
     gridLabel: `${state.grid.cols} × ${state.grid.rows}`,
   };
 }

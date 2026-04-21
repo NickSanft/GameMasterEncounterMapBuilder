@@ -18,16 +18,46 @@ Every release is an annotated git tag (`vX.Y.Z`) on the commit that introduced t
 
 ## [Unreleased]
 
-Post-1.0 roadmap (Phases 54–62 + voice notes):
-- **0.54.0** — Walls + dynamic line-of-sight
-- **0.55.0** — Token lighting sources + bright/dim radius
-- **0.56.0** — Follow-the-fog exploration mode
-- **0.57.0** — Theme variants (parchment / console / purple dusk)
-- **0.58.0** — Voice transcription → notes
-- **0.59.0** — Onboarding tour
-- **0.60.0** — Network sync: WebRTC transport
-- **0.61.0** — Rooms + player identity
-- **0.62.0** — Reconnection + conflict resolution
+Post-1.0 roadmap (Phases 55–63 + voice notes). The originally-planned
+"Walls + dynamic line-of-sight" phase has been split — 0.54.0 (this
+release) lands the walls state + tool + GM rendering as the foundation,
+and 0.55.0 lights up the LoS consumption:
+
+- **0.55.0** — Dynamic line-of-sight (consumes 0.54's walls via the fog worker)
+- **0.56.0** — Token lighting sources + bright/dim radius
+- **0.57.0** — Follow-the-fog exploration mode
+- **0.58.0** — Theme variants (parchment / console / purple dusk)
+- **0.59.0** — Voice transcription → notes
+- **0.60.0** — Onboarding tour
+- **0.61.0** — Network sync: WebRTC transport
+- **0.62.0** — Rooms + player identity
+- **0.63.0** — Reconnection + conflict resolution
+
+---
+
+## [0.54.0] — 2026-04-21 — Walls: state model + tool + GM rendering
+
+### Added
+- **Wall state slice** — new `Wall` type in `src/state/types.ts` with `id`, endpoint coordinates `(x1, y1)`–`(x2, y2)` in world pixels, and two flags: `blocksSight` (consumed in Phase 55 for dynamic LoS) and `blocksMovement` (reserved for a future grid-pathing feature). `SessionState.walls: Wall[]` flows through the existing serialize / deserialize / persistence / sync pipelines automatically.
+- **Four new store patches**: `wall-add`, `wall-update` (partial changes), `wall-remove`, `walls-clear`. All covered by the existing undo / redo / coalescing / batch machinery.
+- **Walls tool** (`src/input/tool-walls.ts`) with shortcut **W**: click to drop chain vertices; each click commits a discrete `wall-add` patch so undo peels back one segment at a time. Double-click, Escape, or right-click ends the chain. Space-pan and two-finger pinch still work while the tool is active.
+- **GM-only render layer** (`src/render/layer-walls.ts`) — walls draw as solid teal lines with small endpoint dots; the in-progress chain shows a dashed rubber-band preview from the last vertex to the cursor. Line widths scale inversely with camera zoom so they read consistently from any viewpoint. The layer is a no-op on the Spectator canvas.
+- **Right-click a wall** (Select tool active) surfaces a new *Wall actions* context menu with *Disable / Enable sight blocking* and *Delete wall*. Hit-test tolerance is a 6-pixel band around the segment so clicks don't demand pixel-perfect aim.
+- **Partial import integration** — new *Walls* checkbox in the import-options modal, disabled when the file contains zero walls.
+- **Helpers** (`src/state/walls.ts`) — `createWall()`, `distanceSquaredToSegment()` (segment-clamped projection, `Math.sqrt`-free), `hitTestWalls()` (most-recently-drawn wins on overlap), `wallLength()`. All pure, fully unit-tested.
+
+### Why split walls from line-of-sight?
+The original plan bundled walls + LoS into a single phase. Separating them keeps each commit reviewable and each release independently useful: 0.54.0 gives GMs a way to *describe* maps, 0.55.0 teaches the fog layer to *consume* the description. Each phase also cuts its own CI-green review cycle under the new per-phase workflow.
+
+### Sync + visibility note
+Walls live in the serialized session state and flow through full-state + patch messages, so conflict-recovery and scene-switching work unchanged. Spectator receives them but the renderer ignores the data. Phase 55 will decide the Spectator-data question properly (ship walls directly, or ship derived LoS polygons) — for now Spectator sees no wall UI.
+
+### Tests
+- **16 new unit tests** in `src/state/walls.test.ts` covering `createWall` defaults + id uniqueness, `distanceSquaredToSegment` across all clamp / degenerate cases, `hitTestWalls` precedence + tolerance behavior, `wallLength`, and a `WALL_HIT_TOLERANCE_PX` sanity bound.
+- **5 new Playwright specs** in `e2e/walls-tool.spec.ts`: W shortcut activates + toolbar reflects it, two-click commit + right-click opens *Wall actions*, delete-via-context-menu removes the wall (falls back to *Map actions*), sight-blocking toggle flips the wording, Escape during a chain commits no dangling segment.
+
+### Bundle + size
+- JS: ~59.7 KB → ~60.4 KB brotli (budget 75 KB, +0.7 KB headroom consumed).
 
 ---
 
@@ -871,7 +901,8 @@ Total e2e count: **20 new tests** across four new spec files. Combined with prio
 
 ---
 
-[Unreleased]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.53.0...HEAD
+[Unreleased]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.54.0...HEAD
+[0.54.0]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.53.0...v0.54.0
 [0.53.0]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.52.0...v0.53.0
 [0.52.0]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.51.2...v0.52.0
 [0.51.2]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.51.1...v0.51.2

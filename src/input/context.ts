@@ -48,6 +48,26 @@ export function createDrawOverlayRef(): DrawOverlayRef {
   return { current: null };
 }
 
+/**
+ * In-progress wall chain while the Walls tool is active. `vertices`
+ * holds the already-committed chain points (world-space); `cursor`
+ * holds the current mouse position for the "rubber-band" preview to
+ * the next vertex. Cleared when the chain closes (Escape / double-click)
+ * or the tool deactivates.
+ */
+export interface WallsOverlay {
+  vertices: Array<{ x: number; y: number }>;
+  cursor: { x: number; y: number } | null;
+}
+
+export interface WallsOverlayRef {
+  current: WallsOverlay | null;
+}
+
+export function createWallsOverlayRef(): WallsOverlayRef {
+  return { current: null };
+}
+
 export interface LastPlacedRef {
   current: Token | null;
 }
