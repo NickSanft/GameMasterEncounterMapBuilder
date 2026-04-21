@@ -29,8 +29,51 @@ Planned work for the remaining phases. See the plan conversation for full scope.
 - **0.42.0** — Partial import
 - **0.43.0** — Grid labels + map tint
 - **0.44.0** — Mini-map
-- **0.50.0** — Additional e2e behavior tests
 - **0.51.0** — Visual regression tests
+
+---
+
+## [0.50.0] — 2026-04-21 — Additional e2e behavior tests
+
+### Added
+
+Four new Playwright specs closing gaps in the end-to-end coverage that previously lived only in unit tests. All assertions ride on observable DOM state (canvas `aria-label`, dialog contents, context-menu labels) rather than peeking into in-memory store state.
+
+- **`e2e/undo-redo.spec.ts`** (6 tests) — exercises the undo/redo state machine through the actions the GM runs every session:
+  - Ctrl+Z undoes a token placement and Ctrl+Y redoes it.
+  - Ctrl+Shift+Z also redoes (common editor mapping).
+  - Undo after token deletion restores the token.
+  - Undo after a fog-reveal drag brings the revealed percentage back to zero.
+  - Undo after arrow-key token movement puts the token back at its original grid cell.
+  - Toolbar Undo / Redo buttons drive the same flow and reflect their enabled/disabled state correctly.
+- **`e2e/aoe-tool.spec.ts`** (5 tests) — AoE tool had no e2e coverage at all before this phase:
+  - `Y` shortcut activates the tool and the settings panel exposes all four preset shapes (Sphere / Cone / Line / Cube).
+  - Clicking a shape button flips its active class (default is Sphere).
+  - Dragging on the canvas places a template; right-clicking it surfaces the context menu titled *AoE actions* with the expected menu items.
+  - Delete-via-context-menu removes the template (subsequent right-click falls back to the *Map actions* menu).
+  - Visibility toggle flips the context-menu wording between *Make AoE GM-only* and *Share AoE with Spectator*.
+- **`e2e/annotations.spec.ts`** (5 tests) — the Note tool + annotation editor lacked behavior coverage:
+  - `N` + click drops an annotation and opens the editor focused on the (empty) text area.
+  - Typed text auto-saves on input — closing and re-opening the editor preserves the text.
+  - Visibility toggle flips the context-menu wording between *Make GM-only* and *Share with Spectator*.
+  - Delete via context menu removes the annotation (subsequent right-click surfaces *Map actions*).
+  - Clicking a preset color swatch marks it as active in the editor.
+- **`e2e/lasso-multi-select.spec.ts`** (4 tests) — multi-token workflows:
+  - Rubber-banding a region containing two tokens selects both — confirmed via the editor's *cycle-controls* row showing `1 of 2`.
+  - Shift+drag over an additional token adds it to the current selection additively.
+  - Arrow-key movement shifts every selected token by the same grid delta (`1 / 1`), including the second token verified via the editor's cycle-next shortcut.
+  - Lassoing an empty region clears the selection (a subsequent `E` does not open the editor).
+
+### Implementation notes
+- Assertions avoid fragile pixel-color reads from the canvas. Instead they lean on:
+  - The GM entry's canvas `aria-label` that tracks token count + fog-revealed percentage (already in place since Phase 25).
+  - Dialog fields (`data-field="x"`, `data-field="y"`, `data-field="text"`, `data-field="counter"`).
+  - Context-menu `aria-label` values (`Map actions`, `AoE actions`, `Annotation actions`) set by gm.ts per hit-test outcome.
+- Where a test needed before/after readings of a token's coordinates it opens the editor, reads the value, and closes it — a natural pattern that exercises the editor's focus-restore path as a bonus.
+- One fix along the way: the Undo / Redo toolbar buttons carry their shortcut in the `title` attribute, so the spec matches on `button[title^="Undo"]` / `button[title^="Redo"]` rather than the glyphed visible text, which Playwright's role-name resolution normalised inconsistently.
+
+### Tally
+Total e2e count: **20 new tests** across four new spec files. Combined with prior phases, the Playwright suite is now at 102 passing tests; the previously-flaky *Scenes › switching scenes swaps token state* test remains flaky in parallel runs (passes in isolation) — same behaviour as in Phases 45–49.
 
 ---
 
@@ -712,7 +755,8 @@ Planned work for the remaining phases. See the plan conversation for full scope.
 
 ---
 
-[Unreleased]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.49.0...HEAD
+[Unreleased]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.50.0...HEAD
+[0.50.0]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.49.0...v0.50.0
 [0.49.0]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.48.0...v0.49.0
 [0.48.0]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.47.0...v0.48.0
 [0.47.0]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.46.0...v0.47.0
