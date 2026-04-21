@@ -2272,6 +2272,24 @@ body.notes-open .zoom-controls {
 
 .status-banner-dismiss[hidden] { display: none; }
 
+.status-banner-action {
+  appearance: none;
+  background: #fff;
+  color: #1b1d22;
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  border-radius: 4px;
+  padding: 0.3rem 0.7rem;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.status-banner-action:hover {
+  filter: brightness(0.95);
+}
+
+.status-banner-action[hidden] { display: none; }
+
 /* Mini-map — pinned bottom-right, sitting above the zoom controls. */
 .mini-map {
   position: fixed;

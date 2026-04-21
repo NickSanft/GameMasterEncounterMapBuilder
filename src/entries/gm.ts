@@ -122,6 +122,7 @@ import type { PanZoomHandle } from '../input/pan-zoom.js';
 import { EXPORT_FILENAME_PREFIX } from '../util/constants.js';
 import { isEditableFocus } from '../util/focus.js';
 import { createAnnouncer } from '../util/announcer.js';
+import { registerPwa } from '../util/pwa.js';
 
 const canvasEl = document.getElementById('canvas');
 if (!(canvasEl instanceof HTMLCanvasElement)) {
@@ -1465,6 +1466,24 @@ window.addEventListener('keydown', (e) => {
       break;
     }
   }
+});
+
+// Register the service worker. When a new version is installed and
+// ready to take over, surface an "Update available — Reload to update"
+// banner and route the click to SKIP_WAITING → controllerchange
+// (which reloads the page) inside `registerPwa`.
+registerPwa({
+  onUpdateReady: (reload) => {
+    statusBanners.show({
+      message: 'A new version of GM Encounter Maps is available.',
+      variant: 'info',
+      dismissible: true,
+      actionLabel: 'Reload to update',
+      onAction: () => reload(),
+      onDismiss: () => statusBanners.hide(),
+    });
+    announcer.announce('Update available — reload to apply.', 'assertive');
+  },
 });
 
 window.addEventListener('beforeunload', () => {

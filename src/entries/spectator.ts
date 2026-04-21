@@ -35,6 +35,8 @@ import {
 } from '../render/camera-controls.js';
 import { isEditableFocus } from '../util/focus.js';
 import { createAnnouncer } from '../util/announcer.js';
+import { registerPwa } from '../util/pwa.js';
+import { mountStatusBanners } from '../ui/status-banners.js';
 import type { PanZoomHandle } from '../input/pan-zoom.js';
 
 const canvasEl = document.getElementById('canvas');
@@ -327,6 +329,21 @@ window.addEventListener('keydown', (e) => {
       e.preventDefault();
     }
   }
+});
+
+const statusBanners = mountStatusBanners();
+registerPwa({
+  onUpdateReady: (reload) => {
+    statusBanners.show({
+      message: 'A new version of GM Encounter Maps is available.',
+      variant: 'info',
+      dismissible: true,
+      actionLabel: 'Reload to update',
+      onAction: () => reload(),
+      onDismiss: () => statusBanners.hide(),
+    });
+    announcer.announce('Update available — reload to apply.', 'assertive');
+  },
 });
 
 window.addEventListener('beforeunload', () => {

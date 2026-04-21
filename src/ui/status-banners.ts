@@ -15,6 +15,10 @@ export interface BannerShowOptions {
   dismissible?: boolean;
   /** Called when the user clicks Dismiss. */
   onDismiss?(): void;
+  /** Text for an optional primary action button (e.g. "Reload to update"). */
+  actionLabel?: string;
+  /** Called when the user clicks the primary action. */
+  onAction?(): void;
 }
 
 export interface StatusBannersHandle {
@@ -34,17 +38,23 @@ export function mountStatusBanners(): StatusBannersHandle {
   banner.hidden = true;
   banner.innerHTML = `
     <span class="status-banner-msg" data-field="msg"></span>
+    <button type="button" class="status-banner-action primary" data-action="primary" hidden></button>
     <button type="button" class="status-banner-dismiss" data-action="dismiss" hidden>Dismiss</button>
   `;
   document.body.appendChild(banner);
 
   const msgEl = banner.querySelector<HTMLSpanElement>('[data-field="msg"]')!;
+  const actionBtn = banner.querySelector<HTMLButtonElement>('[data-action="primary"]')!;
   const dismissBtn = banner.querySelector<HTMLButtonElement>('[data-action="dismiss"]')!;
 
   let dismissHandler: (() => void) | null = null;
+  let actionHandler: (() => void) | null = null;
 
   dismissBtn.addEventListener('click', () => {
     dismissHandler?.();
+  });
+  actionBtn.addEventListener('click', () => {
+    actionHandler?.();
   });
 
   function show(opts: BannerShowOptions): void {
@@ -53,12 +63,22 @@ export function mountStatusBanners(): StatusBannersHandle {
     banner.classList.add(`status-banner-${opts.variant ?? 'warn'}`);
     dismissBtn.hidden = !opts.dismissible;
     dismissHandler = opts.onDismiss ?? null;
+    if (opts.actionLabel && opts.onAction) {
+      actionBtn.textContent = opts.actionLabel;
+      actionBtn.hidden = false;
+      actionHandler = opts.onAction;
+    } else {
+      actionBtn.textContent = '';
+      actionBtn.hidden = true;
+      actionHandler = null;
+    }
     banner.hidden = false;
   }
 
   function hide(): void {
     banner.hidden = true;
     dismissHandler = null;
+    actionHandler = null;
   }
 
   return {

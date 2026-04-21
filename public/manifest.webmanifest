@@ -1,0 +1,36 @@
+{
+  "name": "GM Encounter Maps",
+  "short_name": "GM Maps",
+  "description": "A lightweight, browser-based virtual tabletop for Game Masters. Place tokens, paint fog of war, and run D&D encounters with a player-facing Spectator view.",
+  "start_url": "./gm.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#1b1d22",
+  "theme_color": "#1b1d22",
+  "icons": [
+    {
+      "src": "./favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Open GM View",
+      "short_name": "GM",
+      "description": "Run an encounter as the Game Master.",
+      "url": "./gm.html",
+      "icons": [{ "src": "./favicon.svg", "sizes": "any", "type": "image/svg+xml" }]
+    },
+    {
+      "name": "Open Spectator View",
+      "short_name": "Player",
+      "description": "What your players see, on a second screen.",
+      "url": "./spectator.html",
+      "icons": [{ "src": "./favicon.svg", "sizes": "any", "type": "image/svg+xml" }]
+    }
+  ],
+  "categories": ["games", "entertainment", "utilities"]
+}

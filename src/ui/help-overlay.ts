@@ -107,6 +107,16 @@ const GM_SECTIONS: HelpSection[] = [
     ],
   },
   {
+    title: 'Installable + offline (PWA)',
+    intro: 'The app is a Progressive Web App — install it to your home screen, run it offline between sessions.',
+    entries: [
+      { name: 'Install', desc: 'Your browser should surface an "Install" prompt (Chrome address bar, Edge menu, iOS Safari → Share → Add to Home Screen). Once installed, the app runs in its own window with no URL bar and a matching dark theme-color.' },
+      { name: 'Offline boot', desc: 'After the first successful visit, a service worker caches the app shell + all hashed JS/CSS bundles. Subsequent launches work with zero network — IndexedDB still holds your scenes, tokens, and drawings locally.' },
+      { name: 'Update prompt', desc: 'When a new version deploys, an "A new version is available" banner appears at the top of the page with a Reload button. Click it to adopt the new SW immediately; the page reloads once into the updated bundle.' },
+      { name: 'App shortcuts', desc: 'Installed app launchers expose two shortcuts: "Open GM View" and "Open Spectator View" — useful for opening the players\u2019 display on a second monitor without visiting the landing page.' },
+    ],
+  },
+  {
     title: 'Mobile / touch',
     intro: 'The app works on phones and tablets — every tool is reachable, gestures map naturally.',
     entries: [

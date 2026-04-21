@@ -29,10 +29,35 @@ Planned work for the remaining phases. See the plan conversation for full scope.
 - **0.42.0** — Partial import
 - **0.43.0** — Grid labels + map tint
 - **0.44.0** — Mini-map
-- **0.48.0** — PWA / service worker
 - **0.49.0** — WebWorker-ize fog
 - **0.50.0** — Additional e2e behavior tests
 - **0.51.0** — Visual regression tests
+
+---
+
+## [0.48.0] — 2026-04-20 — PWA / service worker
+
+### Added
+- **Installable Progressive Web App.** A new `public/manifest.webmanifest` declares GM Encounter Maps as a standalone-display PWA (reusing the existing SVG favicon as an `any maskable` icon), with two app-launcher shortcuts: *Open GM View* and *Open Spectator View*. Users on Chrome / Edge / mobile Safari can install the app to their home screen / dock; it launches in its own window with a matching dark `theme-color`. Categories list it under games / entertainment / utilities for app-store-style surfaces.
+- **Offline-capable service worker** (`public/sw.js`) wired up on all three entries (`gm.html`, `spectator.html`, landing). Strategy:
+  - **Install:** precache the app shell — index / GM / Spectator HTML, favicon, manifest. Failures on individual assets don't abort install.
+  - **Activate:** delete caches not matching the current `APP_VERSION` and `clients.claim()` open tabs so the new worker is in charge immediately.
+  - **HTML navigations:** network-first with a cache fallback, then a shell-fallback — so online users always see the freshest build, and fully-offline users still boot into the app.
+  - **Static assets (JS / CSS / images / fonts):** stale-while-revalidate — cache hits serve instantly, a background fetch refreshes the cache for next launch.
+  - **Message channel** listens for `{type: 'SKIP_WAITING'}` from the page so the user can choose when the update applies.
+- **Update-available banner.** Extended `status-banners.ts` with an optional primary action button and wired the PWA registration to pop an *"A new version of GM Encounter Maps is available — Reload to update"* banner when a new worker is waiting. Clicking Reload posts `SKIP_WAITING` to the waiting worker; a `controllerchange` listener (only attached when there was a prior controller so first installs don't self-reload) handles the reload into the new bundle. An assertive aria-live announcement mirrors the banner for screen-reader users.
+- **PWA registration helper** (`src/util/pwa.ts`) — `registerPwa({ onUpdateReady, onOfflineReady, swUrl? })`. Pure control-flow split out from navigator calls so the update-detection logic is unit-testable (see tests). No-ops gracefully when `navigator.serviceWorker` is missing or the context is insecure.
+- **HTML polish.** `link rel="manifest"`, `link rel="apple-touch-icon"`, and `meta name="theme-color"` on all three entries. (Viewport / `mobile-web-app-capable` metas landed in Phase 47.)
+
+### Tests
+- **5 unit tests** for `attachUpdateListeners` + `registerPwa`: waiting-worker-at-registration fires immediately (and its reload callback posts `SKIP_WAITING`); missing `onUpdateReady` is a no-op; installing → installed transitions only fire when there's a prior controller (so first-install doesn't falsely signal an update); registration in an unsupported environment returns a well-typed no-op handle.
+- **4 Playwright specs** (`e2e/pwa.spec.ts`): manifest is served + parses with expected fields; `sw.js` is served and contains the expected `APP_VERSION` constant + lifecycle handlers; the service worker registers successfully on `gm.html` (verified via `navigator.serviceWorker.ready`); apple-touch-icon + theme-color metas are present.
+
+### Implementation notes
+- The SW lives in `public/sw.js` so Vite copies it verbatim into `dist/`. Its scope is derived from its URL (`new URL('./sw.js', location)`) so it naturally matches the `/GameMasterEncounterMapBuilder/` base path on GitHub Pages and the vite-preview dev port.
+- `APP_VERSION` in the SW is bumped manually alongside `package.json` — each phase's version change triggers a new SW bytes hash, which causes the browser to detect the update and fire `onUpdateReady` in the banner.
+- The first-install reload hazard (where `clients.claim()` would fire `controllerchange` on an uncontrolled page and trigger `window.location.reload()`) is avoided by only attaching the reload listener when there was a controller at the moment of registration — proven out by the e2e suite (which wasn't seeing spurious reloads after the fix).
+- No new runtime dependencies. Workbox was considered but the precache list is small enough, and the stale-while-revalidate helper is ~15 lines.
 
 ---
 
@@ -664,7 +689,8 @@ Planned work for the remaining phases. See the plan conversation for full scope.
 
 ---
 
-[Unreleased]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.47.0...HEAD
+[Unreleased]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.48.0...HEAD
+[0.48.0]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.47.0...v0.48.0
 [0.47.0]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.46.0...v0.47.0
 [0.46.0]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.45.0...v0.46.0
 [0.45.0]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.44.0...v0.45.0
