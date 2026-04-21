@@ -18,7 +18,13 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
   workers: process.env.CI ? 1 : undefined,
-  reporter: process.env.CI ? [['github'], ['list']] : [['list']],
+  // HTML reporter on CI so the `Upload Playwright report` artifact step
+  // has something to archive (otherwise the step warns "no files found").
+  // `open: 'never'` keeps the default `playwright show-report` behavior
+  // from trying to auto-open the report in a browser on the CI runner.
+  reporter: process.env.CI
+    ? [['github'], ['list'], ['html', { outputFolder: 'playwright-report', open: 'never' }]]
+    : [['list']],
   use: {
     baseURL: BASE_URL,
     trace: 'retain-on-failure',

@@ -22,6 +22,22 @@ No unreleased work. The 20-phase plan (Phases 32–51) is complete.
 
 ---
 
+## [0.51.1] — 2026-04-21 — CI fix: Linux visual-regression baselines
+
+### Fixed
+- **Linux baselines for the visual-regression suite.** Phase 51 committed Windows baselines (`-chromium-win32.png`) only; when CI ran on `ubuntu-latest`, Playwright looked for `-chromium-linux.png`, couldn't find them, and all five visual tests failed. Linux counterparts are now committed alongside the Windows PNGs, generated via the official Playwright Docker image (`mcr.microsoft.com/playwright:v1.59.1-jammy`) so fonts + AA match the CI runner bit-for-bit.
+- **`playwright-report/` missing-artifact warning.** The CI reporter was `[['github'], ['list']]` — no HTML reporter, so the `Upload Playwright report` step always warned "no files found". Added the HTML reporter to the CI branch of `playwright.config.ts`, plus a second upload step for `test-results/` (per-test traces, screenshots) that only fires on failure.
+- **Node 20 deprecation noise.** `ci.yml` pinned `setup-node` to Node 20; bumped to Node 22 so the project's build + tests run on the new LTS. (The GitHub Actions runner's own Node is orthogonal — the runner's Node 24 migration is already handled by the `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24` env var.)
+- **Defensive `if-no-files-found: ignore`** on both artifact uploads so future path typos or empty-dir scenarios don't red-mark the build.
+
+### Docs
+- README's *Visual regression baselines* section now covers cross-platform re-baselining via Docker (with the `MSYS_NO_PATHCONV=1` + anonymous-volume trick for Git Bash on Windows), alongside the existing native `--update-snapshots` recipe.
+
+### No code changes under `src/`
+Pure CI + tooling fix. No unit or e2e behavior changed; all 436 unit tests + 110 Playwright tests (109 reliable + 1 pre-existing scenes flake) remain green.
+
+---
+
 ## [0.51.0] — 2026-04-21 — Visual regression tests
 
 ### Added
@@ -778,7 +794,8 @@ Total e2e count: **20 new tests** across four new spec files. Combined with prio
 
 ---
 
-[Unreleased]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.51.0...HEAD
+[Unreleased]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.51.1...HEAD
+[0.51.1]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.51.0...v0.51.1
 [0.51.0]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.50.0...v0.51.0
 [0.50.0]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.49.0...v0.50.0
 [0.49.0]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.48.0...v0.49.0

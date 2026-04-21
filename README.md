@@ -75,13 +75,28 @@ npm run test:e2e      # Playwright end-to-end tests (includes visual regression)
 
 ### Visual regression baselines
 
-`e2e/visual-regression.spec.ts` screenshots key surfaces (empty GM canvas, tokens + fog, Settings modal, shortcut overlay, light-theme chrome) and diffs them against baseline PNGs committed under `e2e/visual-regression.spec.ts-snapshots/`. Baselines are platform-specific (`-chromium-win32.png`, etc.) — if your machine's platform doesn't have a baseline yet, or you've intentionally changed a rendering surface, regenerate:
+`e2e/visual-regression.spec.ts` screenshots key surfaces (empty GM canvas, tokens + fog, Settings modal, shortcut overlay, light-theme chrome) and diffs them against baseline PNGs committed under `e2e/visual-regression.spec.ts-snapshots/`. Baselines are **platform-specific** — Playwright suffixes each PNG with `-chromium-<platform>.png`. The repo ships both Windows (`-win32.png`) and Linux (`-linux.png`) baselines so `npm run test:e2e` passes on Windows dev machines AND the Ubuntu GitHub Actions runner.
 
+To update the baselines intentionally (e.g. you changed a rendering surface):
+
+**On your own platform** — straightforward:
 ```bash
 npx playwright test e2e/visual-regression.spec.ts --update-snapshots
 ```
 
-Inspect the resulting PNGs manually, then commit them alongside the code change so CI catches future drift. When a diff fails unexpectedly, `test-results/` holds side-by-side comparison images.
+**Cross-platform** — e.g. regenerate the Linux baselines from a Windows dev box. Use the official Playwright Docker image so the fonts + AA match the CI runner bit-for-bit:
+```bash
+docker run --rm \
+  -v "$(pwd):/work" \
+  -v "/work/node_modules" \
+  -w /work \
+  mcr.microsoft.com/playwright:v1.59.1-jammy \
+  bash -c "npm ci --no-audit --no-fund && \
+           npx playwright test e2e/visual-regression.spec.ts --update-snapshots"
+```
+(On Windows Git Bash prefix the command with `MSYS_NO_PATHCONV=1` so the `/work` path isn't mangled.) The anonymous volume at `/work/node_modules` keeps the container's Linux deps from overwriting your host's Windows `node_modules`.
+
+Inspect the resulting PNGs manually, then commit both platforms' baselines alongside the code change. When a diff fails unexpectedly, `test-results/` holds side-by-side comparison images and Playwright traces.
 
 ## Deploy
 
