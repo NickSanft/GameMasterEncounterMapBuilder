@@ -71,7 +71,21 @@ npm run preview
 ```bash
 npm test              # vitest unit tests
 npm run test:e2e      # Playwright end-to-end tests (includes visual regression)
+npm run size          # bundle-size budget check (runs against dist/)
 ```
+
+### Bundle-size budget
+
+`npm run size` checks the production build against per-surface budgets defined in the `size-limit` block of `package.json`. All numbers are brotli-compressed (the compression modern CDNs + Cloudflare Pages / GitHub Pages Fastly serve):
+
+| Surface | Budget | Why |
+|---|---|---|
+| `dist/assets/*.js` total | 75 KB | Catches accidental import of a big library into any entry |
+| `dist/assets/*.css` total | 8 KB | Styles shouldn't snowball from adding new modals / panels |
+| `dist/*.html` entries | 2 KB | Vite injects `<script>` + `<link>` tags; anything more is a regression |
+| `dist/sw.js` + `manifest.webmanifest` | 2.5 KB | PWA shell should stay tiny for first-paint cost on slow mobile |
+
+The CI workflow (`.github/workflows/ci.yml`) runs `npm run size` as the last step of the `Typecheck, test, build` job, so any push that blows a budget red-marks the PR. To intentionally raise a limit, edit the `limit` field in `package.json` alongside the code change so the budget bump lands with the feature that needed it.
 
 ### Visual regression baselines
 

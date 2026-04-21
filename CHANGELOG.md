@@ -18,7 +18,42 @@ Every release is an annotated git tag (`vX.Y.Z`) on the commit that introduced t
 
 ## [Unreleased]
 
-No unreleased work. The 20-phase plan (Phases 32–51) is complete.
+Post-1.0 roadmap (Phases 52–62 + voice notes):
+- **0.52.0** — Bundle-size budget *(this release)*
+- **0.53.0** — Cached background layer via OffscreenCanvas
+- **0.54.0** — Walls + dynamic line-of-sight
+- **0.55.0** — Token lighting sources + bright/dim radius
+- **0.56.0** — Follow-the-fog exploration mode
+- **0.57.0** — Theme variants (parchment / console / purple dusk)
+- **0.58.0** — Voice transcription → notes
+- **0.59.0** — Onboarding tour
+- **0.60.0** — Network sync: WebRTC transport
+- **0.61.0** — Rooms + player identity
+- **0.62.0** — Reconnection + conflict resolution
+
+---
+
+## [0.52.0] — 2026-04-21 — Bundle-size budget
+
+### Added
+- **`size-limit` bundle-size guard** enforced in CI. Every push to `main` (and every PR) runs `npm run size` as the last step of the `Typecheck, test, build` job; budgets blown over by even a byte red-mark the build. Budgets are expressed in **brotli-compressed** bytes (what modern CDNs serve), configured in the `size-limit` block of `package.json`:
+  | Surface | Budget | Currently |
+  |---|---|---|
+  | `dist/assets/*.js` total | **75 KB** | 59.4 KB |
+  | `dist/assets/*.css` total | **8 KB** | 6.3 KB |
+  | `dist/*.html` entries | **2 KB** | 1.3 KB |
+  | `dist/sw.js` + `manifest.webmanifest` | **2.5 KB** | 2.1 KB |
+- **`npm run size` script** for local checks — `size-limit` + `@size-limit/file` landed as dev deps (~8 packages, no runtime cost).
+- **README *Bundle-size budget* section** under Testing: table of budgets, rationale for each, and the escalation path when a limit needs to move (edit the `limit` field alongside the code change).
+
+### Why brotli not gzip?
+`size-limit` v12's `@size-limit/file` preset defaults to brotli. Vite's build output report is gzip, so the numbers won't match — brotli runs ~12–18 % denser on our asset mix. The CDNs fronting GitHub Pages (Fastly) + most Cloudflare Pages / Vercel edges negotiate brotli when the client advertises it, so brotli is the more honest measurement of over-the-wire bytes.
+
+### Headroom rationale
+Budgets sit roughly 20–30 % above current totals — enough for Phases 53–62 to land in full without bumps, tight enough to catch accidental regressions (e.g. a stray `import * as lodash from 'lodash'`). If a phase legitimately needs more, the limit bumps in the same commit as the feature so the growth is auditable in `git log`.
+
+### No behavior changes
+Pure infra. `src/`, `e2e/`, and `tests/` untouched; 436 unit tests + 110 Playwright tests unchanged.
 
 ---
 
@@ -806,7 +841,8 @@ Total e2e count: **20 new tests** across four new spec files. Combined with prio
 
 ---
 
-[Unreleased]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.51.2...HEAD
+[Unreleased]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.52.0...HEAD
+[0.52.0]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.51.2...v0.52.0
 [0.51.2]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.51.1...v0.51.2
 [0.51.1]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.51.0...v0.51.1
 [0.51.0]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.50.0...v0.51.0
