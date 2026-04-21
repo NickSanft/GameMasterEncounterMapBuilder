@@ -22,6 +22,18 @@ No unreleased work. The 20-phase plan (Phases 32–51) is complete.
 
 ---
 
+## [0.51.2] — 2026-04-21 — CI fix: run e2e inside the Playwright container
+
+### Fixed
+- **`ubuntu-latest` runner drift broke visual baselines even with Linux PNGs committed.** Phase 0.51.1 shipped `-chromium-linux.png` baselines generated against `mcr.microsoft.com/playwright:v1.59.1-jammy` (Ubuntu 22.04), but GitHub's `ubuntu-latest` label currently resolves to Ubuntu 24.04 Noble — the two emit slightly different font metrics, making the Settings modal render 24px shorter on Noble and blowing past the 2% pixel threshold on several surfaces.
+- **Fix: pin the e2e job to run *inside* the Playwright Jammy container**, the same image the baselines were generated in. CI now matches Windows local dev (via Docker) bit-for-bit.
+- Removed the now-redundant Playwright browser cache and `playwright install` steps — the container ships with browsers and system deps pre-installed.
+
+### No code changes under `src/`
+Pure CI hardening. Local `npm test` / `npm run test:e2e` are unaffected.
+
+---
+
 ## [0.51.1] — 2026-04-21 — CI fix: Linux visual-regression baselines
 
 ### Fixed
@@ -794,7 +806,8 @@ Total e2e count: **20 new tests** across four new spec files. Combined with prio
 
 ---
 
-[Unreleased]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.51.1...HEAD
+[Unreleased]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.51.2...HEAD
+[0.51.2]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.51.1...v0.51.2
 [0.51.1]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.51.0...v0.51.1
 [0.51.0]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.50.0...v0.51.0
 [0.50.0]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.49.0...v0.50.0

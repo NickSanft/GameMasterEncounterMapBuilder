@@ -39,25 +39,17 @@ jobs:
     name: Playwright e2e
     runs-on: ubuntu-latest
     needs: test
+    # Pin the runtime to the Playwright Jammy image so visual-regression
+    # baselines stay stable across GitHub's `ubuntu-latest` label shifts
+    # (22.04 → 24.04 → future). The image ships with Node + the exact
+    # Chromium build Playwright expects, so no extra `playwright install`
+    # step is needed. Baselines are regenerated against this same image
+    # via Docker locally (see README → Visual regression baselines).
+    container:
+      image: mcr.microsoft.com/playwright:v1.59.1-jammy
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
       - run: npm ci
-      - name: Cache Playwright browsers
-        id: playwright-cache
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
-      - name: Install Playwright (browsers + system deps)
-        if: steps.playwright-cache.outputs.cache-hit != 'true'
-        run: npx playwright install --with-deps chromium
-      - name: Install Playwright system deps (cache hit)
-        if: steps.playwright-cache.outputs.cache-hit == 'true'
-        run: npx playwright install-deps chromium
       - name: Run e2e tests
         run: npm run test:e2e
         env:
