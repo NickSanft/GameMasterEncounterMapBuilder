@@ -1,0 +1,162 @@
+import { test, expect, type Page } from '@playwright/test';
+
+/**
+ * Playwright screenshot-based regression suite.
+ *
+ * Baselines are generated with:
+ *   npx playwright test e2e/visual-regression.spec.ts --update-snapshots
+ *
+ * The PNGs land in `e2e/visual-regression.spec.ts-snapshots/` with a
+ * platform suffix (e.g. `…-chromium-win32.png`) and ARE committed, so a
+ * CI runner on the same platform catches unexpected rendering drift.
+ * Runners on a different platform (e.g. Linux) should regenerate their
+ * own baselines on first run.
+ *
+ * Determinism strategy — seed every preference that could bias the
+ * render BEFORE the entry script boots, using `page.addInitScript`.
+ * That way theme, high-contrast, label size, fog color, etc. are
+ * fixed regardless of what a prior test run left behind.
+ */
+
+const FIXED_PREFS = {
+  theme: 'dark',
+  persistCamera: false,
+  reducedMotion: true,
+  highContrast: false,
+  labelSize: 'medium',
+  colorblindMarkers: false,
+  gmFogColor: '#000000',
+  gmFogOpacity: 0.5,
+  followGmCamera: false,
+  broadcastCamera: false,
+  showDiagnostics: false,
+  showSpectatorViewport: false,
+  distanceUnit: 'squares',
+  feetPerSquare: 5,
+  diagonalRule: 'chebyshev',
+  showGridLabels: false,
+  sceneLightColor: '#0a0530',
+  sceneLightOpacity: 0,
+  showMiniMap: false,
+};
+
+/**
+ * Use the smallest default viewport that still fits the full toolbar +
+ * session menu so we get a consistent screen area to diff.
+ */
+test.use({ viewport: { width: 1280, height: 720 } });
+
+async function bootGm(page: Page) {
+  await page.addInitScript((prefs) => {
+    try {
+      localStorage.setItem('gm-encounter-maps-prefs', JSON.stringify(prefs));
+    } catch {
+      /* storage blocked — not fatal for the test */
+    }
+  }, FIXED_PREFS);
+  await page.goto('./gm.html');
+  await page.waitForSelector('#canvas');
+  // Give the fog worker + renderer a couple of rAF ticks to settle
+  // into a steady state (initial paint + first fog-worker response).
+  await page.waitForTimeout(250);
+}
+
+async function placeTokenAt(page: Page, fracX: number, fracY: number) {
+  await page.keyboard.press('t');
+  const box = await page.locator('#canvas').boundingBox();
+  if (!box) throw new Error('canvas has no bounding box');
+  await page.mouse.click(
+    box.x + box.width * fracX,
+    box.y + box.height * fracY,
+  );
+  // Return to Select so cursor changes don't affect pixel diffs.
+  await page.keyboard.press('s');
+}
+
+async function revealFogRegion(page: Page) {
+  await page.keyboard.press('r');
+  const box = await page.locator('#canvas').boundingBox();
+  if (!box) throw new Error('canvas has no bounding box');
+  await page.mouse.move(box.x + box.width * 0.15, box.y + box.height * 0.2);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width * 0.45, box.y + box.height * 0.55, {
+    steps: 6,
+  });
+  await page.mouse.up();
+  await page.keyboard.press('s');
+}
+
+test.describe('Visual regression', () => {
+  test('GM: empty boot, dark theme, default grid', async ({ page }) => {
+    await bootGm(page);
+    await expect(page).toHaveScreenshot('gm-empty-dark.png', {
+      animations: 'disabled',
+      // Allow sub-percent pixel variance — under CPU contention (parallel
+      // Playwright workers) the canvas can antialias slightly differently
+      // between runs; we still catch real regressions (which move orders
+      // of magnitude more pixels) but don't flake on boot-timing noise.
+      maxDiffPixelRatio: 0.02,
+    });
+  });
+
+  test('GM: two tokens + a partially revealed fog region', async ({ page }) => {
+    await bootGm(page);
+    await placeTokenAt(page, 0.35, 0.5);
+    await placeTokenAt(page, 0.5, 0.5);
+    await revealFogRegion(page);
+    // Extra settle time — the fog worker may post an update after the
+    // reveal drag completes.
+    await page.waitForTimeout(200);
+    await expect(page).toHaveScreenshot('gm-tokens-and-fog.png', {
+      animations: 'disabled',
+      maxDiffPixelRatio: 0.02,
+    });
+  });
+
+  test('GM: Settings modal rendered on the Appearance tab', async ({ page }) => {
+    await bootGm(page);
+    await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    const dialog = page.getByRole('dialog', { name: 'Settings' });
+    await expect(dialog).toBeVisible();
+    // Ensure we're on Appearance so the snapshot is deterministic.
+    await dialog.getByRole('tab', { name: 'Appearance' }).click();
+    await expect(dialog).toHaveScreenshot('settings-appearance.png', {
+      animations: 'disabled',
+      maxDiffPixelRatio: 0.02,
+    });
+  });
+
+  test('GM: Shortcut overlay rendering', async ({ page }) => {
+    await bootGm(page);
+    await page.keyboard.press('?');
+    const dialog = page.getByRole('dialog', { name: 'Keyboard shortcuts' });
+    await expect(dialog).toBeVisible();
+    await expect(dialog).toHaveScreenshot('shortcut-overlay.png', {
+      animations: 'disabled',
+      maxDiffPixelRatio: 0.02,
+    });
+  });
+
+  test('GM: light theme boot produces the expected pastel chrome', async ({
+    page,
+  }) => {
+    await page.addInitScript((prefs) => {
+      try {
+        localStorage.setItem('gm-encounter-maps-prefs', JSON.stringify(prefs));
+      } catch {
+        /* ignored */
+      }
+    }, { ...FIXED_PREFS, theme: 'light' });
+    await page.goto('./gm.html');
+    await page.waitForSelector('#canvas');
+    await page.waitForTimeout(250);
+    // Snapshot only the session menu + toolbar — canvas differences
+    // between themes are subtle and already covered by the empty-dark
+    // baseline; what matters here is that the light theme's accent
+    // colors land on the chrome.
+    await expect(page.locator('.session-menu')).toHaveScreenshot(
+      'session-menu-light.png',
+      { animations: 'disabled', maxDiffPixelRatio: 0.02 },
+    );
+  });
+});

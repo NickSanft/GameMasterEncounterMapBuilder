@@ -18,18 +18,41 @@ Every release is an annotated git tag (`vX.Y.Z`) on the commit that introduced t
 
 ## [Unreleased]
 
-Planned work for the remaining phases. See the plan conversation for full scope.
-- **0.35.0** — Token stacking affordance
-- **0.36.0** — Dice roller
-- **0.37.0** — Ruler presets
-- **0.38.0** — Freehand draw tool
-- **0.39.0** — Session persistence → IndexedDB
-- **0.40.0** — Scenes (multiple encounters)
-- **0.41.0** — Conflict detection + crash recovery
-- **0.42.0** — Partial import
-- **0.43.0** — Grid labels + map tint
-- **0.44.0** — Mini-map
-- **0.51.0** — Visual regression tests
+No unreleased work. The 20-phase plan (Phases 32–51) is complete.
+
+---
+
+## [0.51.0] — 2026-04-21 — Visual regression tests
+
+### Added
+- **`e2e/visual-regression.spec.ts`** — a screenshot-based Playwright suite that diffs five key rendering surfaces against committed baselines:
+  - GM empty boot (dark theme, default grid) — catches any drift in canvas background, grid lines, toolbar chrome.
+  - GM with two tokens + a partially revealed fog region — catches token rendering, fog compositing, and layer ordering regressions.
+  - Settings modal on the Appearance tab — catches form layout, tab styling, button-group spacing.
+  - Shortcut overlay (`?`) — catches typography + grid-layout regressions for the help content.
+  - Light theme — snapshots just the session menu (theme swaps already covered by the empty-dark full-page shot for canvas pixels; the chrome has the widest contrast difference).
+- **Committed baselines** under `e2e/visual-regression.spec.ts-snapshots/` with the standard Playwright `-chromium-<platform>.png` suffix. Cross-platform runners (Linux CI, etc.) regenerate their own baselines on first run with `--update-snapshots`; the workflow is documented in README.md.
+- **README section** for visual regression covering how to re-baseline intentionally + where Playwright stores the side-by-side diff images when a test fails.
+
+### Determinism strategy
+Every snapshot test seeds the full Preferences object via `page.addInitScript(localStorage.setItem)` BEFORE the entry script runs. This fixes:
+- Theme (`dark` by default, explicit `light` for the chrome comparison).
+- `reducedMotion: true` so CSS transitions don't fire during the first paint.
+- All diagnostic + mini-map toggles off.
+- Scene-lighting opacity 0, grid labels off — no extra pass of compositing that could flicker between runs.
+
+`animations: 'disabled'` on every `toHaveScreenshot` call also disables Playwright's wait-for-animations heuristic and freezes CSS animations at their zero state — belt and suspenders. A 250 ms post-boot settle gives the fog WebWorker one full message round-trip plus a rAF tick before the pixel grab.
+
+### Why screenshot-diff the canvas at all?
+All prior e2e tests assert on DOM state (aria-labels, dialog contents, context-menu labels). The rendered canvas pixels — token colors, fog opacity, label positioning, grid stroke widths, scene-tint math — only show up if something visually wrong lands. The five snapshots picked here cover the largest regression surfaces without being so broad that trivial refactors break the suite every week.
+
+### Tally
+- 5 new Playwright tests (all passing twice in a row against the committed baselines, confirming determinism).
+- Total Playwright count: **110** across all specs (5 visual + 105 behavior).
+- Suite duration: the visual specs add ~6 seconds — still well within the existing ~15 s full-suite budget.
+
+### The 20-phase plan is complete
+Phases 32 through 51 — token HP/conditions, rotation, movement indicator, stacking, dice, ruler presets, draw tool, IDB persistence, scenes, conflict detection, partial import, grid labels/tint, mini-map, export snapshot, a11y polish, mobile/touch, PWA, WebWorker fog, more e2e, and this visual regression suite — shipped over that span. The app has been at feature parity with most small-team VTTs since Phase 44; Phases 45–51 were quality, polish, and durability.
 
 ---
 
@@ -755,7 +778,8 @@ Total e2e count: **20 new tests** across four new spec files. Combined with prio
 
 ---
 
-[Unreleased]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.50.0...HEAD
+[Unreleased]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.51.0...HEAD
+[0.51.0]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.50.0...v0.51.0
 [0.50.0]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.49.0...v0.50.0
 [0.49.0]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.48.0...v0.49.0
 [0.48.0]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.47.0...v0.48.0

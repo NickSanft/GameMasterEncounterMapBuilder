@@ -66,6 +66,23 @@ npm run build
 npm run preview
 ```
 
+## Testing
+
+```bash
+npm test              # vitest unit tests
+npm run test:e2e      # Playwright end-to-end tests (includes visual regression)
+```
+
+### Visual regression baselines
+
+`e2e/visual-regression.spec.ts` screenshots key surfaces (empty GM canvas, tokens + fog, Settings modal, shortcut overlay, light-theme chrome) and diffs them against baseline PNGs committed under `e2e/visual-regression.spec.ts-snapshots/`. Baselines are platform-specific (`-chromium-win32.png`, etc.) — if your machine's platform doesn't have a baseline yet, or you've intentionally changed a rendering surface, regenerate:
+
+```bash
+npx playwright test e2e/visual-regression.spec.ts --update-snapshots
+```
+
+Inspect the resulting PNGs manually, then commit them alongside the code change so CI catches future drift. When a diff fails unexpectedly, `test-results/` holds side-by-side comparison images.
+
 ## Deploy
 
 Push to `main`; `.github/workflows/deploy.yml` builds and publishes `dist/` to GitHub Pages. The `base` path in `vite.config.ts` must match the repository name.
