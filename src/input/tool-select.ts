@@ -8,8 +8,10 @@ import {
   collectLassoHits,
   collectAnnotationLassoHits,
   collectAoeLassoHits,
+  collectWallLassoHits,
 } from './lasso.js';
 import { tokensInStackAt, cycleStackSelection } from '../state/token-stack.js';
+import { hitTestWalls } from '../state/walls.js';
 import type { ID } from '../state/types.js';
 
 interface LassoInProgress {
@@ -53,6 +55,11 @@ export function createSelectTool(ctx: InputContext): Tool {
     const aoeHit = tokenHit || annotHit
       ? null
       : hitTestAoe(state.aoeTemplates, world.x, world.y);
+    // Walls hit-test last — tokens / annotations / AoE all sit visually
+    // on top, so a click that lands on both should pick the upper layer.
+    const wallHit = tokenHit || annotHit || aoeHit
+      ? null
+      : hitTestWalls(state.walls, world.x, world.y);
 
     if (tokenHit) {
       // Alt+click on a stacked cell cycles selection down through the stack
@@ -87,6 +94,12 @@ export function createSelectTool(ctx: InputContext): Tool {
 
     if (aoeHit) {
       handleHitSelect(aoeHit.id, e.shiftKey);
+      beginDrag(e, world.x, world.y);
+      return;
+    }
+
+    if (wallHit) {
+      handleHitSelect(wallHit.id, e.shiftKey);
       beginDrag(e, world.x, world.y);
       return;
     }
@@ -201,6 +214,22 @@ export function createSelectTool(ctx: InputContext): Tool {
                   y: aoe.y + overlay.deltaY,
                 },
               });
+              continue;
+            }
+            const w = state.walls.find((x) => x.id === id);
+            if (w) {
+              // Walls translate continuously (both endpoints) — like
+              // annotations / AoE, no grid snapping.
+              store.applyPatch({
+                kind: 'wall-update',
+                id,
+                changes: {
+                  x1: w.x1 + overlay.deltaX,
+                  y1: w.y1 + overlay.deltaY,
+                  x2: w.x2 + overlay.deltaX,
+                  y2: w.y2 + overlay.deltaY,
+                },
+              });
             }
           }
         });
@@ -221,7 +250,8 @@ export function createSelectTool(ctx: InputContext): Tool {
         const tokenHits = collectLassoHits(state.tokens, state.grid.cellSize, rect);
         const annotHits = collectAnnotationLassoHits(state.annotations, rect);
         const aoeHits = collectAoeLassoHits(state.aoeTemplates, rect);
-        const hits = [...tokenHits, ...annotHits, ...aoeHits];
+        const wallHits = collectWallLassoHits(state.walls, rect);
+        const hits = [...tokenHits, ...annotHits, ...aoeHits, ...wallHits];
         if (additive) {
           const merged = new Set(startSel);
           for (const id of hits) merged.add(id);

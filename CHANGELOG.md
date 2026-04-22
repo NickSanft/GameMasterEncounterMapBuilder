@@ -18,16 +18,47 @@ Every release is an annotated git tag (`vX.Y.Z`) on the commit that introduced t
 
 ## [Unreleased]
 
-Post-1.0 roadmap (Phases 56–63 + voice notes):
+Post-1.0 roadmap. Phase 56 landed as *Selectable walls* (requested
+during testing); the originally-planned lighting phase + later work
+shift up by one:
 
-- **0.56.0** — Token lighting sources + bright/dim radius
-- **0.57.0** — Follow-the-fog exploration mode
-- **0.58.0** — Theme variants (parchment / console / purple dusk)
-- **0.59.0** — Voice transcription → notes
-- **0.60.0** — Onboarding tour
-- **0.61.0** — Network sync: WebRTC transport
-- **0.62.0** — Rooms + player identity
-- **0.63.0** — Reconnection + conflict resolution
+- **0.57.0** — Token lighting sources + bright/dim radius
+- **0.58.0** — Follow-the-fog exploration mode
+- **0.59.0** — Theme variants (parchment / console / purple dusk)
+- **0.60.0** — Voice transcription → notes
+- **0.61.0** — Onboarding tour
+- **0.62.0** — Network sync: WebRTC transport
+- **0.63.0** — Rooms + player identity
+- **0.64.0** — Reconnection + conflict resolution
+
+---
+
+## [0.56.0] — 2026-04-22 — Selectable walls
+
+### Added
+- **Walls are now first-class selectable scene objects** with the Select tool (`S`). Everything tokens / annotations / AoE can do, walls can too:
+  - **Click** a wall to select it; **Shift+click** another to add to the selection.
+  - **Lasso-drag** an empty region — any wall whose segment touches the rectangle (endpoint inside OR any edge crossed) joins the selection. Mixed selections (tokens + walls + annotations + AoE) all compose in the same drag.
+  - **Highlight** — selected walls render in a brighter yellow with a soft glow; endpoint dots match. Easy to spot at any zoom.
+  - **Drag to translate** — both endpoints move together with the cursor (no grid snap — walls live in world pixels, same freedom as annotations). Preview updates live during the drag.
+  - **Arrow keys / WASD** translate selected walls by one grid cell at a time (+Shift = 5). Shares the same binding as token nudge, so mixed selections all move in sync.
+  - **Right-click** a wall (or a multi-wall selection) → new *Wall actions* group menu with **Disable / Enable sight blocking (N)** and **Delete wall (N)** — `N` reflects the selection size, sight-blocking decision uses "disable if any block, else enable all."
+- **Delete / Backspace** key now removes every selected token, annotation, *and* wall. (This binding was documented in the shortcut overlay since Phase 17 but the keydown handler had never been wired — long-standing gap fixed alongside Phase 56.)
+
+### Implementation notes
+- `collectWallLassoHits` + `segmentIntersectsRect` live in `src/input/lasso.ts`. Standard parametric segment-segment test against the lasso's four edges, plus an early endpoint-inside check for cheap common cases.
+- `tool-select.ts` gains a `wallHit` branch below `aoeHit` in the pointer-down hit chain (so tokens / annotations / AoE remain visually on top when layers overlap). The commit-drag path grew a wall case that translates both endpoints by the overlay's `(deltaX, deltaY)` without grid rounding.
+- `layer-walls.ts` now accepts `highlightIds` + `dragOverlay`. Selected walls render through three passes: soft glow, base-color unselected strokes, highlight-color selected strokes — selected on top so they never get hidden beneath crossing unselected walls. Mid-drag selected walls offset by the overlay delta for live preview.
+- Group context-menu item label suffix (`" (N)"`) only appears when N > 1, matching the existing token-context-menu style.
+- Sight-blocking group toggle target is deterministic: *disable* when any selected wall has `blocksSight: true`, *enable* when all are off — avoids the ambiguous "mixed" state.
+
+### Tests
+- **9 new unit tests** in `src/input/lasso.test.ts` covering `segmentIntersectsRect` (inside / edge-cross / fully-outside / parallel-skim) and `collectWallLassoHits` (crossing / inside / outside / normalized rect). Total unit-test count: **512** (+9 lasso, no other changes).
+- **5 new Playwright specs** in `e2e/walls-selection.spec.ts`: click + Delete, shift+click 2 walls + Delete w/ group menu label, lasso-catch, drag-translate (old midpoint becomes Map, new midpoint becomes Wall), group sight-blocking toggle wording flip.
+- Visual-regression baselines unchanged — highlight rendering only activates with a non-empty selection and no baseline includes that state.
+
+### Bundle
+- JS: 63.7 KB → **64.3 KB brotli** (+0.6 KB, budget 75 KB).
 
 ---
 
@@ -948,7 +979,8 @@ Total e2e count: **20 new tests** across four new spec files. Combined with prio
 
 ---
 
-[Unreleased]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.55.1...HEAD
+[Unreleased]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.56.0...HEAD
+[0.56.0]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.55.1...v0.56.0
 [0.55.1]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.55.0...v0.55.1
 [0.55.0]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.54.0...v0.55.0
 [0.54.0]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.53.0...v0.54.0

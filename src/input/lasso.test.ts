@@ -3,8 +3,22 @@ import {
   collectLassoHits,
   collectAnnotationLassoHits,
   collectAoeLassoHits,
+  collectWallLassoHits,
+  segmentIntersectsRect,
 } from './lasso.js';
-import type { Annotation, AoeTemplate, Token } from '../state/types.js';
+import type { Annotation, AoeTemplate, Token, Wall } from '../state/types.js';
+
+function wall(partial: Partial<Wall> & { id: string }): Wall {
+  return {
+    id: partial.id,
+    x1: partial.x1 ?? 0,
+    y1: partial.y1 ?? 0,
+    x2: partial.x2 ?? 100,
+    y2: partial.y2 ?? 0,
+    blocksSight: partial.blocksSight ?? true,
+    blocksMovement: partial.blocksMovement ?? true,
+  };
+}
 
 function annot(partial: Partial<Annotation> & { id: string }): Annotation {
   return {
@@ -167,5 +181,62 @@ describe('collectAoeLassoHits', () => {
       y2: 260,
     });
     expect(hits).toEqual(['cube']);
+  });
+});
+
+describe('segmentIntersectsRect', () => {
+  // Test rect: (10, 10)–(50, 50)
+  const r = { minX: 10, minY: 10, maxX: 50, maxY: 50 };
+
+  it('returns true when both endpoints are inside the rect', () => {
+    expect(segmentIntersectsRect(20, 20, 40, 40, r.minX, r.minY, r.maxX, r.maxY)).toBe(true);
+  });
+
+  it('returns true when one endpoint is inside the rect', () => {
+    expect(segmentIntersectsRect(20, 20, 100, 100, r.minX, r.minY, r.maxX, r.maxY)).toBe(true);
+  });
+
+  it('returns true when both endpoints are outside but the segment crosses an edge', () => {
+    // Diagonal cuts through the rect from upper-left to lower-right.
+    expect(segmentIntersectsRect(0, 30, 100, 30, r.minX, r.minY, r.maxX, r.maxY)).toBe(true);
+  });
+
+  it('returns false when the segment is entirely outside and doesn\'t cross any edge', () => {
+    expect(segmentIntersectsRect(60, 60, 80, 80, r.minX, r.minY, r.maxX, r.maxY)).toBe(false);
+  });
+
+  it('returns false for a parallel segment skimming alongside (no crossing)', () => {
+    expect(segmentIntersectsRect(0, 60, 100, 60, r.minX, r.minY, r.maxX, r.maxY)).toBe(false);
+  });
+});
+
+describe('collectWallLassoHits', () => {
+  it('catches walls whose segment crosses the lasso rect', () => {
+    const walls = [
+      wall({ id: 'crosses', x1: 0, y1: 30, x2: 100, y2: 30 }),
+      wall({ id: 'inside', x1: 20, y1: 20, x2: 40, y2: 40 }),
+      wall({ id: 'outside', x1: 100, y1: 100, x2: 200, y2: 200 }),
+    ];
+    const hits = collectWallLassoHits(walls, { x1: 10, y1: 10, x2: 50, y2: 50 });
+    expect(hits.sort()).toEqual(['crosses', 'inside']);
+  });
+
+  it('returns an empty array when no walls touch the lasso', () => {
+    const walls = [wall({ id: 'far', x1: 100, y1: 100, x2: 200, y2: 100 })];
+    const hits = collectWallLassoHits(walls, { x1: 0, y1: 0, x2: 50, y2: 50 });
+    expect(hits).toEqual([]);
+  });
+
+  it('catches walls with one endpoint inside the rect', () => {
+    const walls = [wall({ id: 'half', x1: 30, y1: 30, x2: 200, y2: 30 })];
+    const hits = collectWallLassoHits(walls, { x1: 10, y1: 10, x2: 50, y2: 50 });
+    expect(hits).toEqual(['half']);
+  });
+
+  it('handles a normalized-or-not lasso rect (x1>x2, y1>y2)', () => {
+    const walls = [wall({ id: 'inside', x1: 20, y1: 20, x2: 40, y2: 40 })];
+    // Reversed corners — lasso normalisation should still pick it up.
+    const hits = collectWallLassoHits(walls, { x1: 50, y1: 50, x2: 10, y2: 10 });
+    expect(hits).toEqual(['inside']);
   });
 });

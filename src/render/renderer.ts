@@ -233,6 +233,8 @@ export function createRenderer(opts: CreateRendererOptions): Renderer {
     drawWalls(ctx, state.walls, {
       mode,
       overlay: getWallsOverlay ? getWallsOverlay() : null,
+      highlightIds: highlights,
+      dragOverlay,
       zoom: camera.zoom,
     });
     // LoS visibility polygons — GM-only yellow outline so the GM sees

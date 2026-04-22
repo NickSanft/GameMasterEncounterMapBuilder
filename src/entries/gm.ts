@@ -854,21 +854,51 @@ canvas.addEventListener('contextmenu', (e) => {
     );
   } else if (wallHit) {
     const w = wallHit;
+    // Mirror the token-context-menu pattern: right-clicking a wall
+    // that's already in selection keeps the multi-select; clicking a
+    // wall that ISN'T selected replaces selection with just this one.
+    if (!selection.ids.has(w.id)) {
+      selection.ids = new Set([w.id]);
+      renderer.requestRender();
+    }
+    // Build the list of selected walls so group actions affect them all.
+    const selectedWalls = state.walls.filter((x) => selection.ids.has(x.id));
+    const wallCount = selectedWalls.length;
+    const suffix = wallCount > 1 ? ` (${wallCount})` : '';
+    // Sight-blocking toggle target: if any selected wall has sight
+    // blocking ON, the menu offers to "Disable" all of them; otherwise
+    // it offers to "Enable" all of them. Avoids ambiguous mid-state.
+    const anyBlocksSight = selectedWalls.some((x) => x.blocksSight);
     items.push(
       {
-        label: w.blocksSight ? 'Disable sight blocking' : 'Enable sight blocking',
-        onClick: () =>
-          store.applyPatch({
-            kind: 'wall-update',
-            id: w.id,
-            changes: { blocksSight: !w.blocksSight },
-          }),
+        label: anyBlocksSight
+          ? `Disable sight blocking${suffix}`
+          : `Enable sight blocking${suffix}`,
+        onClick: () => {
+          store.batch(() => {
+            for (const sw of selectedWalls) {
+              store.applyPatch({
+                kind: 'wall-update',
+                id: sw.id,
+                changes: { blocksSight: !anyBlocksSight },
+              });
+            }
+          });
+        },
       },
       { kind: 'separator' },
       {
-        label: 'Delete wall',
+        label: `Delete wall${suffix}`,
+        shortcut: wallCount > 0 ? 'Del' : undefined,
         variant: 'danger',
-        onClick: () => store.applyPatch({ kind: 'wall-remove', id: w.id }),
+        onClick: () => {
+          store.batch(() => {
+            for (const sw of selectedWalls) {
+              store.applyPatch({ kind: 'wall-remove', id: sw.id });
+            }
+          });
+          selection.ids = new Set();
+        },
       },
     );
   } else if (annotHit) {
@@ -1304,6 +1334,25 @@ function moveSelection(dx: number, dy: number): boolean {
           changes: { x: a.x + dx * cellSize, y: a.y + dy * cellSize },
         });
         moved = true;
+        continue;
+      }
+      const w = state.walls.find((w) => w.id === id);
+      if (w) {
+        // Walls translate by (dx, dy) WORLD pixels (multiply grid-cell
+        // delta by cellSize) — both endpoints together.
+        const wx = dx * cellSize;
+        const wy = dy * cellSize;
+        store.applyPatch({
+          kind: 'wall-update',
+          id,
+          changes: {
+            x1: w.x1 + wx,
+            y1: w.y1 + wy,
+            x2: w.x2 + wx,
+            y2: w.y2 + wy,
+          },
+        });
+        moved = true;
       }
     }
   });
@@ -1317,6 +1366,7 @@ function deleteSelection(): boolean {
   const state = store.getState();
   let tokenCount = 0;
   let annotationCount = 0;
+  let wallCount = 0;
   store.batch(() => {
     for (const id of ids) {
       if (state.tokens.some((t) => t.id === id)) {
@@ -1325,6 +1375,9 @@ function deleteSelection(): boolean {
       } else if (state.annotations.some((a) => a.id === id)) {
         store.applyPatch({ kind: 'annotation-remove', id });
         annotationCount++;
+      } else if (state.walls.some((w) => w.id === id)) {
+        store.applyPatch({ kind: 'wall-remove', id });
+        wallCount++;
       }
     }
   });
@@ -1335,6 +1388,7 @@ function deleteSelection(): boolean {
   if (annotationCount > 0) {
     parts.push(`${annotationCount} annotation${annotationCount === 1 ? '' : 's'}`);
   }
+  if (wallCount > 0) parts.push(`${wallCount} wall${wallCount === 1 ? '' : 's'}`);
   if (parts.length > 0) announcer.announce(`Deleted ${parts.join(' and ')}.`);
   return true;
 }
@@ -1445,6 +1499,16 @@ window.addEventListener('keydown', (e) => {
       return;
     }
     return;
+  }
+
+  // Delete / Backspace — remove every selected token, annotation, or
+  // wall. Documented in the shortcut overlay since Phase 17 but only
+  // wired in Phase 56 (when walls became selectable).
+  if (e.key === 'Delete' || e.key === 'Backspace') {
+    if (selection.ids.size > 0) {
+      if (deleteSelection()) e.preventDefault();
+      return;
+    }
   }
 
   // Ruler preset hotkeys (0–5) — only when the Ruler tool is active so
