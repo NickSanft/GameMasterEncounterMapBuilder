@@ -66,9 +66,18 @@ const fogWorkerClient = createFogWorkerClient({
 // soon as the async load resolves. Spectator typically receives a
 // full-state message from the GM shortly after, but this lets a
 // standalone Spectator tab preserve its last-seen state across reloads.
+//
+// 0.57.1 — guard the local hydrate behind `remoteStateReceived` so that
+// when the GM is online + pushes a fresh full-state BEFORE our async
+// IDB read resolves, we don't immediately overwrite the GM's
+// authoritative state with our older local snapshot. (Saw this happen
+// alongside the GM-side empty-broadcast bug — both contributed to
+// active-scene corruption when the user reloaded a GM tab while a
+// Spectator tab was already open.)
 const store = createStore();
+let remoteStateReceived = false;
 void loadPersistedState().then((persisted) => {
-  if (persisted) store.loadState(persisted);
+  if (persisted && !remoteStateReceived) store.loadState(persisted);
 });
 
 const imageLoader = createImageLoader(() => renderer.requestRender());
@@ -283,8 +292,10 @@ const broadcastViewportThrottled = rafThrottle(broadcastViewport);
 if (channel) {
   channel.onMessage((msg) => {
     if (msg.type === 'full-state') {
+      remoteStateReceived = true;
       store.loadState(deserializeState(msg.state));
     } else if (msg.type === 'patch') {
+      remoteStateReceived = true;
       store.applyPatch(fromSerializablePatch(msg.patch));
     } else if (msg.type === 'camera') {
       applyRemoteCamera(msg.camera);

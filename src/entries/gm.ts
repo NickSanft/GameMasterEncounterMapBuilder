@@ -761,12 +761,19 @@ const sceneIndicator = mountSceneIndicator({
 });
 
 // Kick off the initial hydrate now that store + indicator are both set up.
+// 0.57.1 — `broadcastInitial()` is deferred until AFTER load completes so
+// the GM never blasts an empty `full-state` to a Spectator tab during
+// the pre-load window (that race silently destroyed the active scene
+// when both tabs were open; see the long comment near the channel
+// handler block below for the failure mode).
 void loadPersistedState().then(async (persisted) => {
   if (persisted) {
     store.loadState(persisted);
     store.clearHistory();
   }
   await refreshSceneIndicator();
+  initialLoadComplete = true;
+  broadcastInitial();
 });
 
 const dicePanel = mountDicePanel({
@@ -1131,12 +1138,37 @@ function sendCameraIfBroadcasting() {
   }
 }
 
+/**
+ * 0.57.1 — guard outbound full-state sends behind the initial-load flag.
+ *
+ * Pre-fix bug: this block ran synchronously at module init — at which
+ * point `loadPersistedState()` (kicked off in the void-Promise above)
+ * hadn't resolved yet, so `store.getState()` returned the EMPTY default
+ * state. Any Spectator tab open in another window would receive the
+ * empty `full-state`, call `store.loadState(empty)`, and 200ms later
+ * persist that empty state to the SHARED active scene record in
+ * IndexedDB. The GM's own load would then resolve and read back the
+ * blanked scene. Result: opening + reloading a GM tab with the
+ * Spectator open in another tab silently destroyed the active scene
+ * (other saved scenes survived because saveState only writes to the
+ * active one).
+ *
+ * Fix: wait for `loadPersistedState()` to resolve before broadcasting,
+ * AND ignore Spectator hellos / request-full-state until then. Once
+ * load completes, the .then() handler below calls `broadcastInitial()`
+ * which sends both messages with the LOADED state. Spectators that
+ * connected mid-load receive the broadcast and load it correctly.
+ */
+let initialLoadComplete = false;
+
 if (channel) {
   channel.onMessage((msg) => {
     if (msg.type === 'hello' && msg.from === 'spectator') {
+      if (!initialLoadComplete) return;
       channel.send({ type: 'full-state', state: serializeState(store.getState()) });
       sendCameraIfBroadcasting();
     } else if (msg.type === 'request-full-state') {
+      if (!initialLoadComplete) return;
       channel.send({ type: 'full-state', state: serializeState(store.getState()) });
       sendCameraIfBroadcasting();
     } else if (msg.type === 'request-camera') {
@@ -1157,6 +1189,10 @@ if (channel) {
       checkConflictBanner();
     }
   });
+}
+
+function broadcastInitial(): void {
+  if (!channel) return;
   channel.send({ type: 'hello', from: 'gm' });
   channel.send({ type: 'full-state', state: serializeState(store.getState()) });
 }

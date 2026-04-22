@@ -30,6 +30,30 @@ Post-1.0 roadmap, re-numbered after Phase 57 shipped:
 
 ---
 
+## [0.57.1] — 2026-04-23 — Active-scene-blanking fix when GM reloads with Spectator open
+
+### Fixed
+- **Reloading the GM tab while the Spectator tab was open silently destroyed the active scene's contents.** Tokens, walls, annotations — everything in the currently-loaded scene was wiped. Other saved scenes in the scenes catalog were unaffected. Reported during Phase 57 testing on the local dev server.
+- **Root cause**: `src/entries/gm.ts` ran `channel.send({ type: 'full-state', state: serializeState(store.getState()) })` SYNCHRONOUSLY at module init — but `loadPersistedState()` was kicked off as a `void` Promise above, so the broadcast carried the EMPTY default state. The Spectator tab received the empty `full-state`, called `store.loadState(empty)`, and 200ms later its persist debounce wrote that empty state to the SHARED active-scene record in IndexedDB. The GM's eventual load resolved, read back the now-blanked scene, and both tabs ended up showing nothing. Other scenes survived because `saveState` only writes to the *active* scene (via `ensureActiveScene` → reads pointer from localStorage).
+- **Same race in two more handlers**: the GM's `'hello' from spectator` and `'request-full-state'` cases also responded with `full-state(emptyState)` if a Spectator connected during the pre-load window.
+- **Fix (GM-side)**: introduce `initialLoadComplete` flag (default false). Defer `channel.send({type:'hello'})` and the initial `full-state` broadcast until AFTER `loadPersistedState().then(...)` runs. Gate the spectator-hello + request-full-state replies on the same flag — Spectators that connect early are silently ignored, then receive the correct broadcast when the GM's load completes.
+- **Fix (Spectator-side, belt-and-suspenders)**: track `remoteStateReceived`. When a `full-state` or `patch` arrives via the BroadcastChannel, flip the flag. The local-IDB `loadPersistedState().then(...)` then no-ops if a remote has already populated the store — so even if a future bug ever broadcast stale state, the Spectator wouldn't clobber it with even older local data.
+
+### Why this was masked
+- Single-tab usage (GM only, no Spectator open) never hit it: `BroadcastChannel.postMessage` doesn't echo to the sending tab, so the empty broadcast had no listener.
+- Production CI didn't catch it: the `e2e/spectator-smoke.spec.ts` and `persistence.spec.ts` tests don't exercise the reload-with-other-tab-open flow.
+- The user surfaced it because Phase 57's lighting feature genuinely needs both tabs open to verify the viewer ∩ light composition — exactly the scenario the bug requires.
+
+### Regression test added
+- New Playwright spec `e2e/active-scene-clearing.spec.ts`:
+  - **`GM never broadcasts a full-state with empty tokens after a reload`**: deterministic pin via `addInitScript` that monkey-patches `BroadcastChannel.prototype.postMessage` to capture every outbound message into `window.__bcMessages`. After GM boot, asserts that no captured `full-state` had an empty tokens array. Verified to FAIL on the unpatched 0.57.0 code (catches the empty broadcast at line 85) and PASS with the 0.57.1 fix.
+  - **`GM + Spectator handshake leaves both tabs showing the active scene`**: end-to-end smoke that opens both tabs in the same BrowserContext + verifies the Spectator's canvas aria-label reflects the GM's pushed state.
+
+### No other changes
+- Zero state / rendering / lighting behavior change. Phase 57's new units / e2e all green. Bundle unchanged.
+
+---
+
 ## [0.57.0] — 2026-04-23 — Token lighting sources + bright/dim radius
 
 ### Added
