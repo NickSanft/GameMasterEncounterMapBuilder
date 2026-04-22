@@ -128,7 +128,7 @@ import { createAnnouncer } from '../util/announcer.js';
 import { registerPwa } from '../util/pwa.js';
 import { createFogWorkerClient } from '../render/fog-worker-client.js';
 import FogWorker from '../render/fog-worker.js?worker';
-import { collectSightWalls, collectViewers } from '../state/los-compose.js';
+import { collectLights, collectSightWalls, collectViewers } from '../state/los-compose.js';
 
 const canvasEl = document.getElementById('canvas');
 if (!(canvasEl instanceof HTMLCanvasElement)) {
@@ -232,6 +232,10 @@ const renderer = createRenderer({
     preferences.get().losMode === 'off'
       ? null
       : fogWorkerClient.getLatestPolygons(),
+  getLightPolygons: () =>
+    preferences.get().losMode === 'off'
+      ? null
+      : fogWorkerClient.getLatestLightPolygons(),
 });
 
 // Whenever the worker has fresh rects, request a re-paint.
@@ -250,6 +254,9 @@ function refreshLos(): void {
   fogWorkerClient.requestLos(
     collectViewers(state.tokens, state.grid, dragOverlayRef.current),
     collectSightWalls(state.walls),
+    // Phase 57 — light sources also follow the drag overlay so a
+    // torchbearer's halo doesn't get left behind mid-drag.
+    collectLights(state.tokens, state.grid, dragOverlayRef.current),
   );
 }
 
@@ -370,7 +377,7 @@ const toolbarHandle = mountToolbar(
     { id: 'measure', label: 'Ruler (L)', title: 'Drag to measure distance in grid squares.' },
     { id: 'aoe', label: 'AoE (Y)', title: 'Drag to place an area-of-effect template.' },
     { id: 'draw', label: 'Draw (K)', title: 'Freehand ink on the map. Right-click a stroke to delete or toggle visibility.' },
-    { id: 'walls', label: 'Walls (W)', title: 'Click to drop wall vertices; Escape / right-click / double-click ends the chain. Walls are GM-only and (in a future update) will block line of sight.' },
+    { id: 'walls', label: 'Walls (W)', title: 'Click to drop wall vertices; Escape / right-click / double-click ends the chain. Walls are GM-only — sight-blocking walls occlude both viewer line-of-sight and token light sources.' },
   ],
   [
     {
@@ -1430,7 +1437,7 @@ function placeTokenAt(gx: number, gy: number) {
     conditions: [],
     rotation: 0,
     losRadius: null,
-  };
+    light: null,  };
   store.applyPatch({ kind: 'token-add', token });
   lastPlacedRef.current = token;
   announcer.announce(`${token.label} placed.`);

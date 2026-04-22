@@ -40,6 +40,7 @@ import { mountStatusBanners } from '../ui/status-banners.js';
 import { createFogWorkerClient } from '../render/fog-worker-client.js';
 import FogWorker from '../render/fog-worker.js?worker';
 import {
+  collectLights,
   collectSightWalls,
   collectViewers,
   spectatorEffectiveFog,
@@ -99,6 +100,10 @@ function refreshLos(): void {
   fogWorkerClient.requestLos(
     collectViewers(state.tokens, state.grid),
     collectSightWalls(state.walls),
+    // Phase 57 — lights compose with viewer polygons in the spectator
+    // fog mask: a cell only shows if some viewer can see it AND some
+    // light reaches it (when any lights are configured on the map).
+    collectLights(state.tokens, state.grid),
   );
 }
 
@@ -106,7 +111,8 @@ function refreshFogRects(): void {
   const state = store.getState();
   const losOn = preferences.get().losMode !== 'off';
   const polygons = fogWorkerClient.getLatestPolygons();
-  const fog = spectatorEffectiveFog(state, polygons, losOn);
+  const lightPolygons = fogWorkerClient.getLatestLightPolygons();
+  const fog = spectatorEffectiveFog(state, polygons, losOn, lightPolygons);
   fogWorkerClient.request(fog, state.grid.cols, state.grid.rows);
 }
 

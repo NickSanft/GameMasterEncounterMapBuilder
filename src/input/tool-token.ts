@@ -34,7 +34,7 @@ export function createTokenTool(ctx: InputContext): Tool {
         conditions: [],
         rotation: 0,
         losRadius: null,
-      };
+        light: null,      };
     }
     store.applyPatch({ kind: 'token-add', token: newToken });
     ctx.lastPlaced.current = newToken;

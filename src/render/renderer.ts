@@ -27,6 +27,7 @@ import { drawMovementIndicator } from './layer-movement-indicator.js';
 import { drawStrokes } from './layer-strokes.js';
 import { drawWalls } from './layer-walls.js';
 import { drawLosPolygons } from './layer-los.js';
+import { drawLighting } from './layer-lighting.js';
 import { drawGridLabels, drawSceneTint } from './layer-grid-labels.js';
 import { gridDistance, formatDistance } from '../state/distance.js';
 import type { DrawStroke } from '../state/types.js';
@@ -98,6 +99,13 @@ interface CreateRendererOptions {
    * no-ops on Spectator — Spectator consumes polygons via fog masking.
    */
   getLosPolygons?(): import('../state/los.js').LosPoint[][] | null;
+  /**
+   * Phase 57 — current light polygons (one per token with `light !== null`,
+   * in `state.tokens` order after filtering). Passed by the GM entry so
+   * the lighting layer can paint translucent halos clipped to walls.
+   * Spectator passes null (lighting is consumed via fog masking only).
+   */
+  getLightPolygons?(): import('../state/los.js').LosPoint[][] | null;
 }
 
 const EMPTY_HIGHLIGHT: ReadonlySet<ID> = new Set();
@@ -137,6 +145,7 @@ export function createRenderer(opts: CreateRendererOptions): Renderer {
     getFogRects,
     getWallsOverlay,
     getLosPolygons,
+    getLightPolygons,
   } = opts;
   const maybeCtx = canvas.getContext('2d');
   if (!maybeCtx) throw new Error('2D canvas context unavailable');
@@ -244,6 +253,13 @@ export function createRenderer(opts: CreateRendererOptions): Renderer {
       mode,
       zoom: camera.zoom,
       polygons: getLosPolygons ? getLosPolygons() : null,
+    });
+    // Lighting halos (Phase 57) — GM-only translucent dim+bright
+    // halos, clipped to wall-occluded polygons. No-ops on Spectator.
+    drawLighting(ctx, state, {
+      mode,
+      zoom: camera.zoom,
+      polygons: getLightPolygons ? getLightPolygons() : null,
     });
     const preview = getFogPreview ? getFogPreview() : null;
     if (preview) {

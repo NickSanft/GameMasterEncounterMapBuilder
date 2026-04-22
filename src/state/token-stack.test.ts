@@ -21,7 +21,7 @@ function tok(id: string, x: number, y: number, label = id): Token {
     conditions: [],
     rotation: 0,
     losRadius: null,
-  };
+    light: null,  };
 }
 
 describe('stackKey', () => {

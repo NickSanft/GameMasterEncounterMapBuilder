@@ -865,10 +865,12 @@ body.view {
   box-shadow: 0 0 0 2px var(--active-glow);
 }
 
-/* HP block + conditions + rotation (token editor) */
+/* HP block + conditions + rotation + sight + light (token editor) */
 .hp-block,
 .conditions-block,
-.rotation-block {
+.rotation-block,
+.sight-block,
+.light-block {
   border: 1px solid var(--border);
   border-radius: 6px;
   padding: 0.55rem 0.75rem 0.75rem;
@@ -880,13 +882,30 @@ body.view {
 
 .hp-block legend,
 .conditions-block legend,
-.rotation-block legend {
+.rotation-block legend,
+.sight-block legend,
+.light-block legend {
   padding: 0 0.35rem;
   font-size: 0.78rem;
   color: var(--fg-muted);
   text-transform: uppercase;
   letter-spacing: 0.06em;
   font-weight: 700;
+}
+
+.light-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+.light-presets button {
+  padding: 0.3rem 0.55rem;
+  font-size: 0.8rem;
+}
+
+.light-details[hidden] {
+  display: none;
 }
 
 .rotation-row {

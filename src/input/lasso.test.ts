@@ -45,7 +45,7 @@ function token(partial: Partial<Token> & { id: string }): Token {
     conditions: partial.conditions ?? [],
     rotation: partial.rotation ?? 0,
     losRadius: partial.losRadius ?? null,
-  };
+    light: partial.light ?? null,  };
 }
 
 describe('collectLassoHits', () => {

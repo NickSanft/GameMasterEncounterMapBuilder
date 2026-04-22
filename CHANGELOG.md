@@ -18,11 +18,8 @@ Every release is an annotated git tag (`vX.Y.Z`) on the commit that introduced t
 
 ## [Unreleased]
 
-Post-1.0 roadmap. Phase 56 landed as *Selectable walls* (requested
-during testing); the originally-planned lighting phase + later work
-shift up by one:
+Post-1.0 roadmap, re-numbered after Phase 57 shipped:
 
-- **0.57.0** — Token lighting sources + bright/dim radius
 - **0.58.0** — Follow-the-fog exploration mode
 - **0.59.0** — Theme variants (parchment / console / purple dusk)
 - **0.60.0** — Voice transcription → notes
@@ -30,6 +27,45 @@ shift up by one:
 - **0.62.0** — Network sync: WebRTC transport
 - **0.63.0** — Rooms + player identity
 - **0.64.0** — Reconnection + conflict resolution
+
+---
+
+## [0.57.0] — 2026-04-23 — Token lighting sources + bright/dim radius
+
+### Added
+- **Tokens can emit light.** New `TokenLight` shape on every token: `{ bright, dim, color }` in world pixels (exposed in feet via the active `feetPerSquare`). `null` means "no light" — fully back-compat with every existing session, since the sync + persistence deserializer normalizes missing/malformed values back to `null`.
+- **Token editor — Light fieldset** alongside the Phase 55 Sight fieldset:
+  - **"This token emits light"** checkbox gates the rest of the controls.
+  - **Preset row**: *Candle* (5/5), *Torch* (20/20), *Lantern* (30/30), *Daylight* (60/60). Click to apply — the bright + dim feet inputs sync. Each preset carries a stylistic color (warm orange for torch, cool white for daylight).
+  - **Bright / Dim feet** inputs for custom light sources. Bright is clamped to ≤ dim on commit (a candle's well-lit zone can't extend past its outer glow; the on-the-wire normalizer enforces this too).
+  - **Color picker** for warm vs cool tints. Color is render-only on the GM canvas — Spectator visibility math uses radius alone.
+- **Spectator fog composition** (when `losMode !== 'off'`): a cell now shows on the Spectator map only when it's (a) GM-revealed AND (b) inside some viewer's sight polygon AND (c) inside some light source's `dim` polygon. With *no* lights configured anywhere on the map, the lighting AND short-circuits — your existing maps keep their Phase 55 viewer-only behavior. So lighting is purely additive: no migration, no sudden darkness.
+- **Walls block light** — sight-blocking walls also occlude lighting by design. A torchbearer rounding a corner casts a real shadow on cells beyond the corner. Re-uses the same `computeVisibilityPolygon` ray-cast as viewer sight, so no new geometry pipeline.
+- **GM-side lighting halos** — new `drawLighting` layer paints the dim radius (faint) and bright radius (slightly stronger) as translucent colored halos clipped to the worker-supplied light polygons. Lets the GM see at a glance "the candle vs the lantern halo." No-op on Spectator (which consumes lighting via fog masking, not by drawing halos).
+- **Help overlay** gets a new *Lighting (optional)* section after *Line of sight*: how to add a light source, bright vs dim, walls blocking light, the Spectator composition rule, and the color flavoring note.
+
+### Implementation notes
+- `collectLights(tokens, grid, dragOverlay?)` mirrors `collectViewers` — filters tokens to those with a non-null `light`, projects to the worker-facing `LosViewer` shape using the `dim` radius, and shifts dragged lights by the overlay delta so torchbearers don't leave a stationary halo behind mid-drag.
+- `spectatorEffectiveFog` grew an optional `lightPolygons` parameter. `null` (caller didn't wire lighting) → preserve Phase 55 behavior. Empty array (lighting wired but no lights placed) → also preserve Phase 55 (no sudden darkness shroud). Non-empty → AND-mask viewer ∩ light per cell.
+- Fog worker `compute-los` request now accepts an optional `lights` array; the response carries a parallel `lightPolygons` array. The worker reuses the same `computeVisibilityPolygon` for both viewers and lights — sight-blocking walls naturally affect both. Optional fields keep the message back-compat with messages crafted before Phase 57.
+- `createFogWorkerClient.requestLos` signature: `(viewers, walls, lights = [])`. The signature cache extends to include lights so changing only viewers, only walls, or only lights triggers a fresh compute. `getLatestLightPolygons()` is the new accessor; `onLosUpdate` listeners now receive `(polygons, lightPolygons)` so renderers can compose both in one tick.
+- Renderer gains `getLightPolygons()` callback alongside `getLosPolygons()`. GM entry wires `fogWorkerClient.getLatestLightPolygons()`; Spectator entry passes the polygons into `spectatorEffectiveFog` and skips the GM lighting layer (it doesn't paint halos — Spectator only sees fog).
+
+### Tests
+- **13 new unit tests**:
+  - **6 in `src/state/los-compose.test.ts`** for `collectLights` (skip non-light tokens, skip zero-dim, size-aware center, drag-overlay shift, null-overlay back-compat) — the same shape as the Phase 55 `collectViewers` coverage.
+  - **3 in `src/state/los-compose.test.ts`** for `spectatorEffectiveFog` lighting paths: empty-lightPolygons preserves viewer-only behavior, non-empty AND-masks viewer ∩ light, lights-everywhere-but-darkness collapses fog correctly.
+  - **4 in `src/sync/messages.test.ts`** for `normalizeLight` deserialization: missing field defaults to `null`, dim < bright clamps dim up, NaN bright rejects to `null`, missing color defaults to `#ffe1a4`.
+- **3 new Playwright specs** (`e2e/token-lighting.spec.ts`): editor exposes Light fieldset with all 4 presets, light values round-trip through close + reopen, enabling LoS + placing a torch token + a wall doesn't throw console errors.
+- All 50 unit-test files green: 526 unit tests total (+14 from 0.56.1's 512).
+- All 24 test fixtures (Token literals across `src/`) gained `light: null` via a typecheck-driven Perl one-liner — same pattern used for Phase 55's `losRadius: null` migration.
+
+### Bundle
+- Adds ~1.5 KB to the JS chunk (new `layer-lighting.ts` + the editor wiring + the worker plumbing). Well under the 75 KB brotli budget.
+
+### No behavior change for legacy maps
+- Sessions saved before 0.57.0 deserialize with `light: null` on every token. With no lights anywhere on the map, `spectatorEffectiveFog` falls back to the Phase 55 viewer-only mask. Open one in 0.57.0 → identical pixels.
+- The toolbar's *Walls* tooltip got a passing tightening: the Phase 54 stub language ("in a future update will block line of sight") is now accurate ("sight-blocking walls occlude both viewer line-of-sight and token light sources").
 
 ---
 

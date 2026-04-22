@@ -10,6 +10,7 @@ import type {
   StatePatch,
   Token,
   TokenHp,
+  TokenLight,
   Wall,
 } from '../state/types.js';
 
@@ -21,6 +22,31 @@ function normalizeHp(hp: unknown): TokenHp | null {
   const current = Math.max(0, Math.min(max, Math.floor(h.current)));
   const visibility: TokenHp['visibility'] = h.visibility === 'gm' ? 'gm' : 'shared';
   return { current, max, visibility };
+}
+
+/**
+ * Normalize a (possibly-untrusted) `Token.light` value. Phase 57 added
+ * the field — older serialized sessions don't have it, so we default
+ * to `null`. We also clamp the radii: `dim` must be >= `bright`, both
+ * must be positive finite numbers, otherwise the whole light goes
+ * back to `null` (safer than silently rendering garbage).
+ */
+function normalizeLight(light: unknown): TokenLight | null {
+  if (!light || typeof light !== 'object') return null;
+  const l = light as Partial<TokenLight>;
+  if (
+    typeof l.bright !== 'number' ||
+    typeof l.dim !== 'number' ||
+    !Number.isFinite(l.bright) ||
+    !Number.isFinite(l.dim)
+  ) {
+    return null;
+  }
+  const bright = Math.max(0, l.bright);
+  const dim = Math.max(bright, l.dim);
+  if (dim <= 0) return null;
+  const color = typeof l.color === 'string' && l.color ? l.color : '#ffe1a4';
+  return { bright, dim, color };
 }
 
 export interface SerializedSessionState {
@@ -132,6 +158,7 @@ export function deserializeState(s: SerializedSessionState): SessionState {
         typeof t.losRadius === 'number' && Number.isFinite(t.losRadius) && t.losRadius > 0
           ? t.losRadius
           : null,
+      light: normalizeLight(t.light),
     })),
     fog: Uint8Array.from(s.fog),
     annotations: (s.annotations ?? []).map((a) => ({

@@ -139,6 +139,17 @@ const GM_SECTIONS: HelpSection[] = [
     ],
   },
   {
+    title: 'Lighting (optional)',
+    intro: 'Tokens can emit light — torches, lanterns, daylight spells. Lighting composes with line of sight to determine what Spectators see.',
+    entries: [
+      { name: 'Add a light source', desc: 'Open the token editor → Light fieldset → tick "This token emits light." Pick a preset (Candle 5/5, Torch 20/20, Lantern 30/30, Daylight 60/60) or type custom Bright + Dim feet values.' },
+      { name: 'Bright vs dim', desc: 'Both radii contribute to visibility — the dim radius is the outer extent of the light, the bright radius is the inner "definitely well-lit" zone. The GM canvas shows them as nested translucent halos so you can tell candle from lantern at a glance.' },
+      { name: 'Walls block light', desc: 'Sight-blocking walls also block light by design — a torchbearer rounding a corner casts a real shadow on the cells behind the corner. Non-sight-blocking walls don\u2019t affect lighting either.' },
+      { name: 'Spectator composition', desc: 'When ANY token has a light, Spectators only see cells that are (a) GM-revealed, (b) inside some viewer\u2019s sight polygon, AND (c) inside some light source\u2019s dim polygon. With no lights configured, viewer polygons alone determine visibility — your existing maps keep working.' },
+      { name: 'Color', desc: 'Pick a warm or cool tint to flavor torches vs Daylight spells vs continual flame. Color is render-only on the GM canvas — it doesn\u2019t affect what Spectators see.' },
+    ],
+  },
+  {
     title: 'HP & conditions',
     intro: 'Optional per-token tracking, visible to the Spectator when set to "Shared" visibility.',
     entries: [

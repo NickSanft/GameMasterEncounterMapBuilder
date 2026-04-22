@@ -21,7 +21,7 @@ function tok(id: string, label = id): Token {
     conditions: [],
     rotation: 0,
     losRadius: null,
-  };
+    light: null,  };
 }
 
 function baseState(): SessionState {

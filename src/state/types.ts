@@ -10,6 +10,28 @@ export interface GridConfig {
 export type HpVisibility = 'gm' | 'shared';
 
 /**
+ * Optional light emission on a token (Phase 57).
+ *
+ * `bright` and `dim` are world pixels (same units as `losRadius`); the
+ * editor exposes them in feet using the active `feetPerSquare`.
+ *
+ * Visibility math (when `losMode !== 'off'`): a cell is shown on the
+ * Spectator canvas only if it's GM-revealed AND inside SOME viewer's
+ * sight polygon AND inside SOME light source's `dim` polygon. Lights
+ * are occluded by the same sight-blocking walls that block vision.
+ *
+ * `bright` is render-only — visually the bright radius gets a slightly
+ * stronger overlay on the GM canvas so the GM can tell at a glance
+ * "where is the candle vs the lantern halo."
+ */
+export interface TokenLight {
+  bright: number;
+  dim: number;
+  /** Optional warm/cool color tint (unused for visibility math). */
+  color: string;
+}
+
+/**
  * Optional HP tracking on a token. `null` on `Token.hp` means the token
  * doesn't track HP (no bar, no readout). When present, `current` is
  * clamped to 0..max by the store helpers.
@@ -49,6 +71,13 @@ export interface Token {
    * fog is driven entirely by the GM's manual reveal tool.
    */
   losRadius: number | null;
+  /**
+   * Optional light emission (Phase 57). `null` means "this token does
+   * not emit light." Lights compose with viewer polygons + walls to
+   * form Spectator fog: a cell is visible only if it's reached by some
+   * viewer AND lit by some light source.
+   */
+  light: TokenLight | null;
 }
 
 export interface Background {

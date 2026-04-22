@@ -1,15 +1,21 @@
 /**
- * Composition helpers for line-of-sight.
+ * Composition helpers for line-of-sight + lighting (Phase 57).
  *
  * The GM view always sees the GM-painted fog as-is (so they can paint
  * freely). The Spectator view, when LoS is on, only shows cells that
- * are BOTH manually revealed AND covered by at least one viewer's
- * visibility polygon — `spectatorEffectiveFog` builds that combined
- * mask. With LoS off, the function short-circuits and returns the
- * input fog unchanged so there's zero allocation overhead.
+ * are:
+ *   - manually revealed (GM fog), AND
+ *   - covered by at least one viewer's sight polygon, AND
+ *   - lit by at least one light source's dim polygon — IF any lights
+ *     exist on the map. With no lights present we skip the lighting
+ *     mask so legacy maps keep their Phase 55 behavior (viewer polygon
+ *     is enough on its own).
  *
- * `collectViewers` filters a token list down to just the ones with a
- * non-null `losRadius`, returning the shape the fog worker expects.
+ * `collectViewers` filters a token list down to viewers (`losRadius
+ * !== null`); `collectLights` filters down to lights (`light !== null`).
+ * Both produce the same `LosViewer` shape the fog worker consumes —
+ * lights use the `dim` radius for visibility math (the `bright` radius
+ * is render-only on the GM canvas).
  */
 
 import type { ID, SessionState, Token, Wall } from './types.js';
@@ -75,25 +81,79 @@ export function collectSightWalls(walls: readonly Wall[]): LosSegment[] {
 }
 
 /**
- * Produce the Uint8Array the Spectator fog renderer should paint. When
- * `losOn` is false OR polygons are absent we return the input buffer
- * reference unchanged. When on with polygons, we AND each revealed
- * cell with the rasterized visibility mask so "revealed but can't
- * currently see it" cells go back to fog.
+ * Filter a token list down to the lights (`light !== null`) and project
+ * each into the worker-facing `LosViewer` shape using the `dim` radius
+ * — which is the outer extent of the light source. `bright` is purely
+ * a render hint on the GM canvas, never a visibility input.
+ *
+ * Drag overlay handling mirrors `collectViewers`: a token being dragged
+ * carries its light along with it, so torchbearers don't leave a
+ * stationary halo behind while you reposition them.
+ */
+export function collectLights(
+  tokens: readonly Token[],
+  grid: { cellSize: number },
+  dragOverlay?: ViewerDragOverlay | null,
+): LosViewer[] {
+  const dragSet = dragOverlay && dragOverlay.ids.length > 0
+    ? new Set(dragOverlay.ids)
+    : null;
+  const dx = dragOverlay?.deltaX ?? 0;
+  const dy = dragOverlay?.deltaY ?? 0;
+
+  const lights: LosViewer[] = [];
+  for (const t of tokens) {
+    if (!t.light) continue;
+    if (!(t.light.dim > 0)) continue;
+    const baseX = (t.x + t.size / 2) * grid.cellSize;
+    const baseY = (t.y + t.size / 2) * grid.cellSize;
+    const isDragging = !!dragSet && dragSet.has(t.id);
+    lights.push({
+      x: isDragging ? baseX + dx : baseX,
+      y: isDragging ? baseY + dy : baseY,
+      radius: t.light.dim,
+    });
+  }
+  return lights;
+}
+
+/**
+ * Produce the Uint8Array the Spectator fog renderer should paint.
+ *
+ * Composition rules (when `losOn` is true):
+ *   - viewerPolygons absent / empty → return state.fog unchanged
+ *     (legacy Phase 54 behavior — fog driven by GM reveal alone).
+ *   - viewerPolygons present, lightPolygons null (caller didn't provide,
+ *     i.e. lighting feature disabled) → AND fog with viewer mask only
+ *     (Phase 55 behavior).
+ *   - viewerPolygons present, lightPolygons empty array (lighting
+ *     enabled but no lights placed) → same as above; we don't want a
+ *     completely dark map for users who haven't set up lights yet.
+ *   - viewerPolygons present AND lightPolygons non-empty → AND fog with
+ *     (viewer mask AND light mask), so a cell only shows if it's
+ *     reached by SOME viewer AND lit by SOME light.
+ *
+ * When `losOn` is false we return state.fog unchanged regardless.
  */
 export function spectatorEffectiveFog(
   state: SessionState,
   polygons: readonly (readonly LosPoint[])[] | null,
   losOn: boolean,
+  lightPolygons: readonly (readonly LosPoint[])[] | null = null,
 ): Uint8Array {
   if (!losOn || !polygons || polygons.length === 0) return state.fog;
   const { cols, rows, cellSize } = state.grid;
   const visMask = rasterizeVisibility(polygons, cols, rows, cellSize);
+  const lightMask =
+    lightPolygons && lightPolygons.length > 0
+      ? rasterizeVisibility(lightPolygons, cols, rows, cellSize)
+      : null;
   const out = new Uint8Array(state.fog.length);
   for (let i = 0; i < state.fog.length; i++) {
-    // Bitwise AND: cell is displayed-revealed iff both the manual GM
-    // fog AND the viewer mask say "yes".
-    out[i] = state.fog[i]! & visMask[i]!;
+    // Bitwise AND: cell is displayed-revealed iff manual GM fog AND
+    // viewer mask AND (light mask, when present) all say "yes".
+    const lit = lightMask ? lightMask[i]! : 1;
+    out[i] = state.fog[i]! & visMask[i]! & lit;
   }
   return out;
 }

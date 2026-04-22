@@ -16,7 +16,7 @@ function token(overrides: Partial<Token>): Token {
     conditions: overrides.conditions ?? [],
     rotation: overrides.rotation ?? 0,
     losRadius: overrides.losRadius ?? null,
-  };
+    light: overrides.light ?? null,  };
 }
 
 describe('computeContentBounds', () => {

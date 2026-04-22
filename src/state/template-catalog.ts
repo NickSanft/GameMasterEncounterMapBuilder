@@ -71,7 +71,7 @@ export function placeTemplate(
     conditions: [],
     rotation: 0,
     losRadius: null,
-  }));
+    light: null,  }));
 }
 
 export async function saveTemplateToLibrary(

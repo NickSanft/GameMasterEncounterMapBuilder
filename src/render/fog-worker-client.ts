@@ -46,17 +46,34 @@ export interface FogWorkerClient {
   /** Subscribe to fresh-rects-available events. Returns an unsubscribe fn. */
   onUpdate(listener: (rects: FogRect[]) => void): () => void;
   /**
-   * Hand the latest viewers + walls to the worker for line-of-sight
-   * polygon computation. Returns the cached polygons if viewers+walls
-   * are unchanged since the last call, otherwise kicks off a new
-   * request and returns the previous cache (may be null on first call).
-   * Fires the onLosUpdate listener when fresh polygons arrive.
+   * Hand the latest viewers + lights + walls to the worker for
+   * line-of-sight + lighting polygon computation. Returns the cached
+   * viewer polygons if all three lists are unchanged since the last
+   * call, otherwise kicks off a new request and returns the previous
+   * cache (may be null on first call). Light polygons are retrieved
+   * separately via `getLatestLightPolygons()` — the listener fires
+   * once per fresh response and callers should re-read both arrays.
+   *
+   * `lights` defaults to `[]` so callers that don't yet wire lighting
+   * keep their Phase 55 behavior.
    */
-  requestLos(viewers: readonly LosViewer[], walls: readonly LosSegment[]): LosPoint[][] | null;
+  requestLos(
+    viewers: readonly LosViewer[],
+    walls: readonly LosSegment[],
+    lights?: readonly LosViewer[],
+  ): LosPoint[][] | null;
   /** Latest LoS polygons (one per viewer, same order as the last request). */
   getLatestPolygons(): LosPoint[][] | null;
-  /** Subscribe to fresh-polygons-available events. Returns an unsubscribe fn. */
-  onLosUpdate(listener: (polygons: LosPoint[][]) => void): () => void;
+  /** Latest light polygons (Phase 57; one per light, same order as request). */
+  getLatestLightPolygons(): LosPoint[][] | null;
+  /**
+   * Subscribe to fresh-polygons-available events. Receives BOTH viewer
+   * polygons and light polygons so the listener can compose them in
+   * one tick (e.g. recompute spectator fog mask).
+   */
+  onLosUpdate(
+    listener: (polygons: LosPoint[][], lightPolygons: LosPoint[][]) => void,
+  ): () => void;
   /** True when the underlying real Worker is in use. */
   isUsingWorker(): boolean;
   destroy(): void;
@@ -108,8 +125,11 @@ export function createFogWorkerClient(
 
   let pendingLos: PendingLosRequest | null = null;
   let latestPolygons: LosPoint[][] | null = null;
+  let latestLightPolygons: LosPoint[][] | null = null;
   let latestLosSignature: string | null = null;
-  const losListeners = new Set<(polys: LosPoint[][]) => void>();
+  const losListeners = new Set<
+    (polys: LosPoint[][], lightPolys: LosPoint[][]) => void
+  >();
 
   function tryEnsureWorker(): Worker | null {
     if (worker) return worker;
@@ -146,6 +166,7 @@ export function createFogWorkerClient(
       requestId?: number;
       rects?: FogRect[];
       polygons?: LosPoint[][];
+      lightPolygons?: LosPoint[][];
     };
     if (!data) return;
     if (data.type === 'compacted') {
@@ -163,6 +184,7 @@ export function createFogWorkerClient(
       if (!pendingLos || data.requestId !== pendingLos.requestId) return;
       if (!data.polygons) return;
       latestPolygons = data.polygons;
+      latestLightPolygons = data.lightPolygons ?? [];
       latestLosSignature = pendingLos.signature;
       pendingLos = null;
       notifyLos();
@@ -177,17 +199,22 @@ export function createFogWorkerClient(
 
   function notifyLos(): void {
     if (!latestPolygons) return;
-    for (const l of losListeners) l(latestPolygons);
+    const lights = latestLightPolygons ?? [];
+    for (const l of losListeners) l(latestPolygons, lights);
   }
 
   function losSignatureOf(
     viewers: readonly LosViewer[],
     walls: readonly LosSegment[],
+    lights: readonly LosViewer[],
   ): string {
     // A cheap stable hash — sort-independent by construction since the
     // renderer calls requestLos with stable ordering. Kept short so
     // equality checks don't dominate frame budget on big maps.
     const vs = viewers
+      .map((v) => `${v.x.toFixed(2)},${v.y.toFixed(2)},${v.radius.toFixed(2)}`)
+      .join('|');
+    const ls = lights
       .map((v) => `${v.x.toFixed(2)},${v.y.toFixed(2)},${v.radius.toFixed(2)}`)
       .join('|');
     const ws = walls
@@ -196,18 +223,23 @@ export function createFogWorkerClient(
           `${w.x1.toFixed(2)},${w.y1.toFixed(2)},${w.x2.toFixed(2)},${w.y2.toFixed(2)}`,
       )
       .join('|');
-    return `${vs}#${ws}`;
+    return `${vs}#${ls}#${ws}`;
   }
 
   function losInline(
     viewers: readonly LosViewer[],
     walls: readonly LosSegment[],
+    lights: readonly LosViewer[],
   ): LosPoint[][] {
     const polys = viewers.map((v) =>
       computeVisibilityPolygon({ x: v.x, y: v.y }, v.radius, walls),
     );
+    const lightPolys = lights.map((v) =>
+      computeVisibilityPolygon({ x: v.x, y: v.y }, v.radius, walls),
+    );
     latestPolygons = polys;
-    latestLosSignature = losSignatureOf(viewers, walls);
+    latestLightPolygons = lightPolys;
+    latestLosSignature = losSignatureOf(viewers, walls, lights);
     return polys;
   }
 
@@ -259,21 +291,23 @@ export function createFogWorkerClient(
   function requestLos(
     viewers: readonly LosViewer[],
     walls: readonly LosSegment[],
+    lights: readonly LosViewer[] = [],
   ): LosPoint[][] | null {
     // Fast path: no viewers → nothing to compute.
     if (viewers.length === 0) {
       latestPolygons = [];
-      latestLosSignature = losSignatureOf(viewers, walls);
+      latestLightPolygons = [];
+      latestLosSignature = losSignatureOf(viewers, walls, lights);
       return latestPolygons;
     }
-    const sig = losSignatureOf(viewers, walls);
+    const sig = losSignatureOf(viewers, walls, lights);
     if (latestPolygons && latestLosSignature === sig) return latestPolygons;
     // Use the worker when it's already warm from fog compaction;
     // otherwise run inline. Unlike fog compaction there's no
     // useWorkerThreshold cutoff because tiny LoS is also tiny inline.
     const useWorker = !forceFallback && worker !== null;
     if (!useWorker) {
-      return losInline(viewers, walls);
+      return losInline(viewers, walls, lights);
     }
     const w = worker!;
     const requestId = nextRequestId++;
@@ -282,6 +316,7 @@ export function createFogWorkerClient(
       type: 'compute-los',
       requestId,
       viewers: viewers.map((v) => ({ x: v.x, y: v.y, radius: v.radius })),
+      lights: lights.map((v) => ({ x: v.x, y: v.y, radius: v.radius })),
       walls: walls.map((seg) => ({ x1: seg.x1, y1: seg.y1, x2: seg.x2, y2: seg.y2 })),
     });
     // Return the previous cache so the renderer has SOMETHING to clip
@@ -298,6 +333,7 @@ export function createFogWorkerClient(
     },
     requestLos,
     getLatestPolygons: () => latestPolygons,
+    getLatestLightPolygons: () => latestLightPolygons,
     onLosUpdate(listener) {
       losListeners.add(listener);
       return () => losListeners.delete(listener);

@@ -24,7 +24,7 @@ describe('serializeState / deserializeState', () => {
       conditions: [],
       rotation: 0,
       losRadius: null,
-    });
+      light: null,    });
     const serialized = serializeState(state);
     const restored = deserializeState(serialized);
     expect(restored.version).toBe(1);
@@ -67,6 +67,91 @@ describe('serializeState / deserializeState', () => {
     const restored = deserializeState(legacy);
     expect(restored.background.scaleX).toBe(1.5);
     expect(restored.background.scaleY).toBe(1.5);
+  });
+
+  it('defaults light to null for legacy tokens (Phase 56 and earlier)', () => {
+    const legacy = {
+      ...serializeState(createDefaultState()),
+      tokens: [
+        {
+          id: 't1',
+          x: 0,
+          y: 0,
+          label: 'A',
+          color: '#ff0000',
+          imageId: null,
+          size: 1,
+          // light field missing entirely — pre-Phase 57 sessions
+        },
+      ],
+    } as unknown as SerializedSessionState;
+    const restored = deserializeState(legacy);
+    expect(restored.tokens[0]!.light).toBeNull();
+  });
+
+  it('clamps a serialized light: dim raised to bright when smaller', () => {
+    const legacy = {
+      ...serializeState(createDefaultState()),
+      tokens: [
+        {
+          id: 't1',
+          x: 0,
+          y: 0,
+          label: 'A',
+          color: '#ff0000',
+          imageId: null,
+          size: 1,
+          light: { bright: 50, dim: 20, color: '#fff' },
+        },
+      ],
+    } as unknown as SerializedSessionState;
+    const restored = deserializeState(legacy);
+    // Dim < bright is normalized: dim becomes max(bright, dim).
+    expect(restored.tokens[0]!.light).toEqual({
+      bright: 50,
+      dim: 50,
+      color: '#fff',
+    });
+  });
+
+  it('rejects a malformed light (NaN) by setting light to null', () => {
+    const legacy = {
+      ...serializeState(createDefaultState()),
+      tokens: [
+        {
+          id: 't1',
+          x: 0,
+          y: 0,
+          label: 'A',
+          color: '#ff0000',
+          imageId: null,
+          size: 1,
+          light: { bright: NaN, dim: 30, color: '#fff' },
+        },
+      ],
+    } as unknown as SerializedSessionState;
+    const restored = deserializeState(legacy);
+    expect(restored.tokens[0]!.light).toBeNull();
+  });
+
+  it('defaults light.color when missing', () => {
+    const legacy = {
+      ...serializeState(createDefaultState()),
+      tokens: [
+        {
+          id: 't1',
+          x: 0,
+          y: 0,
+          label: 'A',
+          color: '#ff0000',
+          imageId: null,
+          size: 1,
+          light: { bright: 50, dim: 100 },
+        },
+      ],
+    } as unknown as SerializedSessionState;
+    const restored = deserializeState(legacy);
+    expect(restored.tokens[0]!.light?.color).toBe('#ffe1a4');
   });
 
   it('defaults borderColor to null for legacy tokens', () => {

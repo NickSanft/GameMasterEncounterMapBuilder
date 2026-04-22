@@ -20,7 +20,7 @@ function tok(id: string, x = 0, y = 0): Token {
     conditions: [],
     rotation: 0,
     losRadius: null,
-  };
+    light: null,  };
 }
 
 describe('tokensInSelectionOrder', () => {

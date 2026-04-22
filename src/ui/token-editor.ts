@@ -1,6 +1,6 @@
 import type { Store } from '../state/store.js';
 import type { SelectionState } from '../input/context.js';
-import type { ID, Token, TokenHp } from '../state/types.js';
+import type { ID, Token, TokenHp, TokenLight } from '../state/types.js';
 import { putImage, getImageURL } from '../images/store.js';
 import type { ImageLoader } from '../images/loader.js';
 import { TEAM_PRESETS } from '../state/team-colors.js';
@@ -141,6 +141,38 @@ export function mountTokenEditor(opts: TokenEditorOptions): TokenEditorHandle {
         </div>
       </fieldset>
 
+      <fieldset class="light-block">
+        <legend>Light</legend>
+        <label class="check">
+          <input type="checkbox" data-field="hasLight" />
+          <span>This token emits light</span>
+        </label>
+        <div class="light-details" data-field="light-details" hidden>
+          <div class="light-presets" role="group" aria-label="Light source presets">
+            <button type="button" data-light-preset="candle" title="Candle: 5 ft bright, 5 ft dim">Candle</button>
+            <button type="button" data-light-preset="torch" title="Torch: 20 ft bright, 20 ft dim">Torch</button>
+            <button type="button" data-light-preset="lantern" title="Hooded lantern: 30 ft bright, 30 ft dim">Lantern</button>
+            <button type="button" data-light-preset="daylight" title="Daylight spell: 60 ft bright, 60 ft dim">Daylight</button>
+          </div>
+          <div class="grid-row">
+            <label>Bright (ft)
+              <input type="number" data-field="lightBrightFeet" step="5" min="0" max="240" />
+            </label>
+            <label>Dim (ft)
+              <input type="number" data-field="lightDimFeet" step="5" min="5" max="240" />
+            </label>
+            <label>Color
+              <input type="color" data-field="lightColor" />
+            </label>
+          </div>
+          <p class="settings-hint">
+            With "Dynamic line of sight" on, sight-blocking walls also
+            cast shadow on this light. Spectators only see cells reached
+            by some viewer AND lit by some light.
+          </p>
+        </div>
+      </fieldset>
+
       <fieldset class="hp-block">
         <legend>Hit points</legend>
         <label class="check">
@@ -212,6 +244,14 @@ export function mountTokenEditor(opts: TokenEditorOptions): TokenEditorHandle {
   const hasSightInput = modal.querySelector<HTMLInputElement>('[data-field="hasSight"]')!;
   const sightDetails = modal.querySelector<HTMLDivElement>('[data-field="sight-details"]')!;
   const losRadiusFeetInput = modal.querySelector<HTMLInputElement>('[data-field="losRadiusFeet"]')!;
+  const hasLightInput = modal.querySelector<HTMLInputElement>('[data-field="hasLight"]')!;
+  const lightDetails = modal.querySelector<HTMLDivElement>('[data-field="light-details"]')!;
+  const lightBrightFeetInput = modal.querySelector<HTMLInputElement>('[data-field="lightBrightFeet"]')!;
+  const lightDimFeetInput = modal.querySelector<HTMLInputElement>('[data-field="lightDimFeet"]')!;
+  const lightColorInput = modal.querySelector<HTMLInputElement>('[data-field="lightColor"]')!;
+  const lightPresetBtns = Array.from(
+    modal.querySelectorAll<HTMLButtonElement>('[data-light-preset]'),
+  );
   const trackHpInput = modal.querySelector<HTMLInputElement>('[data-field="trackHp"]')!;
   const hpFields = modal.querySelector<HTMLDivElement>('[data-field="hp-fields"]')!;
   const hpCurrentInput = modal.querySelector<HTMLInputElement>('[data-field="hpCurrent"]')!;
@@ -311,6 +351,7 @@ export function mountTokenEditor(opts: TokenEditorOptions): TokenEditorHandle {
     syncBorderUI(token.borderColor);
     syncHpUI(token.hp);
     syncSightUI(token.losRadius);
+    syncLightUI(token.light);
     syncConditionUI(token.conditions);
     syncRotationUI(token.rotation);
     syncCounter();
@@ -346,6 +387,22 @@ export function mountTokenEditor(opts: TokenEditorOptions): TokenEditorHandle {
       losRadiusFeetInput.value = String(feet > 0 ? feet : 30);
     } else {
       losRadiusFeetInput.value = '30';
+    }
+  }
+
+  function syncLightUI(light: TokenLight | null) {
+    const hasLight = light !== null;
+    hasLightInput.checked = hasLight;
+    lightDetails.hidden = !hasLight;
+    if (hasLight) {
+      lightBrightFeetInput.value = String(radiusPxToFeet(light.bright));
+      lightDimFeetInput.value = String(radiusPxToFeet(light.dim));
+      lightColorInput.value = light.color || '#ffe1a4';
+    } else {
+      // Default torch values when first enabling.
+      lightBrightFeetInput.value = '20';
+      lightDimFeetInput.value = '20';
+      lightColorInput.value = '#ffe1a4';
     }
   }
 
@@ -576,6 +633,103 @@ export function mountTokenEditor(opts: TokenEditorOptions): TokenEditorHandle {
     const losRadius = radiusFeetToPx(feet);
     update({ losRadius });
     syncSightUI(losRadius);
+  });
+
+  // Light source presets (Phase 57). Values are 5e SRD norms — players
+  // recognize "20/20 torch" / "30/30 lantern" without having to look it
+  // up. The bright + dim feet fields below the preset row stay in sync
+  // when a preset is clicked.
+  const LIGHT_PRESETS: Record<string, { bright: number; dim: number; color: string }> = {
+    candle:   { bright: 5,  dim: 5,  color: '#ffd28a' },
+    torch:    { bright: 20, dim: 20, color: '#ffb060' },
+    lantern:  { bright: 30, dim: 30, color: '#ffe1a4' },
+    daylight: { bright: 60, dim: 60, color: '#fff8d6' },
+  };
+
+  hasLightInput.addEventListener('change', () => {
+    const tok = currentToken();
+    if (!tok) return;
+    if (hasLightInput.checked) {
+      // Default to the Torch preset when first enabled — the most
+      // common D&D 5e light source for early-game adventurers.
+      const preset = LIGHT_PRESETS.torch!;
+      const light: TokenLight = {
+        bright: radiusFeetToPx(preset.bright),
+        dim: radiusFeetToPx(preset.dim),
+        color: preset.color,
+      };
+      update({ light });
+      syncLightUI(light);
+    } else {
+      update({ light: null });
+      syncLightUI(null);
+    }
+  });
+
+  for (const btn of lightPresetBtns) {
+    btn.addEventListener('click', () => {
+      const tok = currentToken();
+      if (!tok) return;
+      const id = btn.dataset.lightPreset ?? '';
+      const preset = LIGHT_PRESETS[id];
+      if (!preset) return;
+      const light: TokenLight = {
+        bright: radiusFeetToPx(preset.bright),
+        dim: radiusFeetToPx(preset.dim),
+        color: preset.color,
+      };
+      update({ light });
+      syncLightUI(light);
+    });
+  }
+
+  function commitLightField() {
+    const tok = currentToken();
+    if (!tok || !tok.light) return;
+    const brightFeet = parseInt(lightBrightFeetInput.value, 10);
+    const dimFeet = parseInt(lightDimFeetInput.value, 10);
+    if (!Number.isFinite(brightFeet) || !Number.isFinite(dimFeet)) {
+      syncLightUI(tok.light);
+      return;
+    }
+    if (dimFeet <= 0) {
+      syncLightUI(tok.light);
+      return;
+    }
+    // Clamp bright to [0, dim] — bright > dim makes no physical sense
+    // (a candle's "definitely-lit" zone can't extend past its outer
+    // glow). The Token type's normalizer enforces this on the wire too.
+    const safeBright = Math.max(0, Math.min(brightFeet, dimFeet));
+    const light: TokenLight = {
+      bright: radiusFeetToPx(safeBright),
+      dim: radiusFeetToPx(dimFeet),
+      color: tok.light.color,
+    };
+    update({ light });
+    syncLightUI(light);
+  }
+
+  lightBrightFeetInput.addEventListener('change', commitLightField);
+  lightDimFeetInput.addEventListener('change', commitLightField);
+  lightBrightFeetInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      commitLightField();
+      e.preventDefault();
+    }
+  });
+  lightDimFeetInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      commitLightField();
+      e.preventDefault();
+    }
+  });
+
+  lightColorInput.addEventListener('change', () => {
+    const tok = currentToken();
+    if (!tok || !tok.light) return;
+    const light: TokenLight = { ...tok.light, color: lightColorInput.value };
+    update({ light });
+    syncLightUI(light);
   });
 
   function commitHpField(which: 'current' | 'max') {

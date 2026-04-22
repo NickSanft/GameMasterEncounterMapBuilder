@@ -74,5 +74,5 @@ export function tokenFromCatalogEntry(
     conditions: [],
     rotation: 0,
     losRadius: null,
-  };
+    light: null,  };
 }

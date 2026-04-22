@@ -1,10 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import {
+  collectLights,
   collectSightWalls,
   collectViewers,
   spectatorEffectiveFog,
 } from './los-compose.js';
-import type { Token, Wall, SessionState } from './types.js';
+import type { Token, TokenLight, Wall, SessionState } from './types.js';
 import { createDefaultState } from './types.js';
 
 function token(overrides: Partial<Token> & { id: string }): Token {
@@ -21,7 +22,7 @@ function token(overrides: Partial<Token> & { id: string }): Token {
     conditions: overrides.conditions ?? [],
     rotation: overrides.rotation ?? 0,
     losRadius: overrides.losRadius ?? null,
-  };
+    light: overrides.light ?? null,  };
 }
 
 function wall(overrides: Partial<Wall> & { id: string }): Wall {
@@ -129,6 +130,65 @@ describe('collectSightWalls', () => {
   });
 });
 
+describe('collectLights', () => {
+  const torch: TokenLight = { bright: 100, dim: 200, color: '#ffe1a4' };
+
+  it('skips tokens without a light', () => {
+    const tokens = [
+      token({ id: 'a', light: null }),
+      token({ id: 'b', light: torch }),
+      token({ id: 'c', light: null }),
+    ];
+    const lights = collectLights(tokens, GRID);
+    expect(lights).toHaveLength(1);
+    // Lights use the DIM radius for visibility math (bright is render-only).
+    expect(lights[0]?.radius).toBe(200);
+  });
+
+  it('skips lights with non-positive dim radius', () => {
+    // Defensive — normalizeLight should keep this out of state, but if
+    // a malformed light makes it through we shouldn't ship a 0-radius
+    // light source to the worker (would be a wasted ray-cast).
+    const tokens = [
+      token({ id: 'a', light: { bright: 0, dim: 0, color: '#fff' } }),
+    ];
+    expect(collectLights(tokens, GRID)).toHaveLength(0);
+  });
+
+  it('places the light at the token cell center (size 1)', () => {
+    const tokens = [token({ id: 'a', x: 3, y: 4, light: torch })];
+    const lights = collectLights(tokens, GRID);
+    // Same projection as collectViewers — (3.5 * 50, 4.5 * 50).
+    expect(lights[0]).toEqual({ x: 175, y: 225, radius: 200 });
+  });
+
+  it('honours token.size for off-center large tokens', () => {
+    const tokens = [token({ id: 'a', x: 2, y: 2, size: 2, light: torch })];
+    const lights = collectLights(tokens, GRID);
+    expect(lights[0]).toEqual({ x: 150, y: 150, radius: 200 });
+  });
+
+  it('shifts lights in the drag overlay by deltaX/deltaY', () => {
+    const tokens = [
+      token({ id: 'torchbearer', x: 3, y: 4, light: torch }),
+      token({ id: 'still', x: 0, y: 0, light: torch }),
+    ];
+    const lights = collectLights(tokens, GRID, {
+      ids: ['torchbearer'],
+      deltaX: 75,
+      deltaY: -25,
+    });
+    expect(lights[0]).toEqual({ x: 250, y: 200, radius: 200 });
+    expect(lights[1]).toEqual({ x: 25, y: 25, radius: 200 });
+  });
+
+  it('matches the no-overlay behavior when dragOverlay is null', () => {
+    const tokens = [token({ id: 'a', x: 3, y: 4, light: torch })];
+    const lights = collectLights(tokens, GRID, null);
+    expect(lights[0]).toEqual({ x: 175, y: 225, radius: 200 });
+  });
+});
+
 describe('spectatorEffectiveFog', () => {
   function stateWithFog(fog: number[]): SessionState {
     const s = createDefaultState();
@@ -161,5 +221,78 @@ describe('spectatorEffectiveFog', () => {
     const out = spectatorEffectiveFog(s, [polygon], true);
     // Only cell 0 (center 5,5) lies inside the polygon — the rest go back to fog.
     expect(Array.from(out)).toEqual([1, 0, 0, 0]);
+  });
+
+  it('treats an empty light-polygons array as "lighting disabled"', () => {
+    // No lights configured on the map → behavior should match Phase 55:
+    // viewer mask alone determines visibility, no darkness shroud.
+    const s = stateWithFog([1, 1, 1, 1]);
+    const viewerPoly = [
+      { x: -1, y: -1 },
+      { x: 25, y: -1 },
+      { x: 25, y: 9 },
+      { x: -1, y: 9 },
+    ];
+    const out = spectatorEffectiveFog(s, [viewerPoly], true, []);
+    // Cells 0 and 1 inside viewer polygon → visible. Lights array is
+    // empty so it should NOT contribute to the AND.
+    expect(Array.from(out)).toEqual([1, 1, 0, 0]);
+  });
+
+  it('AND-masks viewer ∩ light when light polygons are present', () => {
+    // 4-cell row, all revealed. Viewer covers cells 0,1,2 (centers at
+    // x = 5, 15, 25); light covers cells 1,2,3 (centers at 15, 25, 35).
+    // Intersection: cells 1 and 2.
+    const s = stateWithFog([1, 1, 1, 1]);
+    const viewerPoly = [
+      { x: -1, y: -1 },
+      { x: 29, y: -1 },
+      { x: 29, y: 9 },
+      { x: -1, y: 9 },
+    ];
+    const lightPoly = [
+      { x: 11, y: -1 },
+      { x: 45, y: -1 },
+      { x: 45, y: 9 },
+      { x: 11, y: 9 },
+    ];
+    const out = spectatorEffectiveFog(s, [viewerPoly], true, [lightPoly]);
+    // Cell 0 (center 5):  viewer yes (5 < 29), light no  (5 < 11)  → 0.
+    // Cell 1 (center 15): viewer yes, light yes → 1.
+    // Cell 2 (center 25): viewer yes, light yes → 1.
+    // Cell 3 (center 35): viewer no  (35 > 29) → 0.
+    expect(Array.from(out)).toEqual([0, 1, 1, 0]);
+  });
+
+  it('darkens cells outside any light when lighting is enabled', () => {
+    // Viewer polygon covers everything, light covers nothing.
+    // With non-empty lightPolygons, only the lit cells should show.
+    const s = stateWithFog([1, 1, 1, 1]);
+    const viewerPoly = [
+      { x: -1, y: -1 },
+      { x: 100, y: -1 },
+      { x: 100, y: 9 },
+      { x: -1, y: 9 },
+    ];
+    const lightPoly = [
+      { x: 12, y: -1 },
+      { x: 18, y: -1 },
+      { x: 18, y: 9 },
+      { x: 12, y: 9 },
+    ];
+    const out = spectatorEffectiveFog(s, [viewerPoly], true, [lightPoly]);
+    // Only cell 1 (center 15,5) is inside the tiny light polygon.
+    expect(Array.from(out)).toEqual([0, 1, 0, 0]);
+  });
+
+  it('returns the input fog unchanged when LoS is off, even with lights', () => {
+    const s = stateWithFog([1, 1, 0, 1]);
+    const out = spectatorEffectiveFog(
+      s,
+      [[{ x: 0, y: 0 }]],
+      false,
+      [[{ x: 0, y: 0 }]],
+    );
+    expect(out).toBe(s.fog);
   });
 });
