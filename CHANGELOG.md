@@ -18,12 +18,8 @@ Every release is an annotated git tag (`vX.Y.Z`) on the commit that introduced t
 
 ## [Unreleased]
 
-Post-1.0 roadmap (Phases 55–63 + voice notes). The originally-planned
-"Walls + dynamic line-of-sight" phase has been split — 0.54.0 (this
-release) lands the walls state + tool + GM rendering as the foundation,
-and 0.55.0 lights up the LoS consumption:
+Post-1.0 roadmap (Phases 56–63 + voice notes):
 
-- **0.55.0** — Dynamic line-of-sight (consumes 0.54's walls via the fog worker)
 - **0.56.0** — Token lighting sources + bright/dim radius
 - **0.57.0** — Follow-the-fog exploration mode
 - **0.58.0** — Theme variants (parchment / console / purple dusk)
@@ -32,6 +28,36 @@ and 0.55.0 lights up the LoS consumption:
 - **0.61.0** — Network sync: WebRTC transport
 - **0.62.0** — Rooms + player identity
 - **0.63.0** — Reconnection + conflict resolution
+
+---
+
+## [0.55.0] — 2026-04-21 — Dynamic line of sight
+
+### Added
+- **Ray-cast visibility polygons** (`src/state/los.ts`) — pure module with `computeVisibilityPolygon(viewer, radius, walls)`, `rayHitSegment`, `filterWallsInRange`, `pointInPolygon`, and `rasterizeVisibility`. Implements the standard angular-sweep algorithm: cast 3 rays per wall endpoint (plus ε offsets on either side for corner diffraction) plus 48 uniform samples so a viewer in an open area still sees a smooth circular horizon. Runs entirely off the main thread inside the fog worker.
+- **`Token.losRadius: number | null`** — new nullable field; `null` = not a viewer, a number (world pixels) = max sight distance. Backwards-compatible: the sync + persistence deserializer defaults missing values to `null`. Phase 54's walls are consumed via the `blocksSight` flag, so the GM gets full control over which segments matter.
+- **Token editor — Sight fieldset** with a "This token is a viewer" checkbox and a radius input in feet. The editor reads `feetPerSquare` from preferences so the field stays grid-agnostic; default radius on enable is 30 ft (torch-light distance).
+- **Preference `losMode: 'off' | 'revealed-and-visible'`** (default `'off'`, so Phase 54 users see zero behavioral change until they opt in). Exposed in Settings → Grid as "Dynamic line of sight".
+- **Fog worker gets a second message**: `compute-los` posts viewers + walls and returns one polygon per viewer. `createFogWorkerClient` exposes `requestLos` / `getLatestPolygons` / `onLosUpdate` alongside the existing fog-compaction API. Input-signature caching dedupes identical requests without a worker round-trip.
+- **Spectator fog clipping** — new `spectatorEffectiveFog` helper bitwise-ANDs the GM-revealed fog with a rasterized polygon mask; the Spectator fog worker gets that combined buffer, so the existing fog renderer needs zero changes. When `losMode === 'off'`, the helper returns the input buffer unchanged for zero overhead.
+- **GM-side polygon outline** — new `drawLosPolygons` layer paints each visibility polygon as a translucent yellow outline on the GM canvas so the GM sees at a glance what every viewer can currently see. No-op on Spectator.
+- **Help overlay** gets a new *Line of sight (optional)* section documenting the enable path, viewer setup, Spectator vs GM visual behavior, and the sight-blocking-wall interaction.
+
+### Tests
+- **18 new unit tests** for `src/state/los.ts` covering ray-segment intersection (forward/backward/miss/parallel), wall-in-range filtering, open-space polygon approximation, single-wall occlusion, behind-the-viewer no-op, point-in-polygon (inside/outside/degenerate), and polygon rasterization (covered / uncovered / union of multiple / empty).
+- **3 new Playwright specs** (`e2e/line-of-sight.spec.ts`): preference lives on the Grid tab + persists across reload, token editor exposes working Sight fieldset with radius gating, enabling LoS + placing a viewer + a sight-blocking wall doesn't throw console errors on either the fog worker or the main thread.
+
+### Visual regression
+Baselines unchanged: `losMode: 'off'` is the default, so the empty-boot / tokens-and-fog / chrome / modal snapshots all produce pixel-identical output.
+
+### Scope flagged for review
+- **Walls still flow to Spectator** — decision deferred from Phase 54. Given LoS now runs on the Spectator too (for symmetric client-side masking), both the walls and the viewer tokens with `losRadius` need to be known there. The alternative (GM computes polygons + ships those) is cleaner privacy-wise but adds a new sync message type and a second copy of the polygons on the wire. If the "don't leak floor plans to players who devtool-inspect the state" concern matters more than the plumbing simplicity, we'd swap this in a follow-up phase.
+- **GM canvas paints raw fog** — the GM is the painter, so their view intentionally ignores LoS clipping. The yellow polygon outlines let them eyeball what viewers see without losing their own map awareness.
+
+### Bundle + perf
+- JS bundle: ~60.9 KB → ~62.5 KB brotli (budget 75 KB).
+- `fog-worker-*.js` chunk ~+1 KB gzipped for the LoS algorithm.
+- `rasterizeVisibility` runs on the main thread per frame when polygons change — O(cols × rows × #polygons). On a 30×20 grid with 4 viewers it's 2 400 point-in-polygon tests per frame, each ~6 segments = ~15 000 float compares. Comfortably under 1 ms.
 
 ---
 
@@ -901,7 +927,8 @@ Total e2e count: **20 new tests** across four new spec files. Combined with prio
 
 ---
 
-[Unreleased]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.54.0...HEAD
+[Unreleased]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.55.0...HEAD
+[0.55.0]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.54.0...v0.55.0
 [0.54.0]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.53.0...v0.54.0
 [0.53.0]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.52.0...v0.53.0
 [0.52.0]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.51.2...v0.52.0

@@ -44,6 +44,7 @@ describe('saveState / loadPersistedState', () => {
       hp: null,
       conditions: [],
       rotation: 0,
+      losRadius: null,
     });
     state.fog[0] = 1;
     state.fog[99] = 1;
@@ -87,6 +88,7 @@ describe('saveState / loadPersistedState', () => {
       hp: null,
       conditions: [],
       rotation: 0,
+      losRadius: null,
     });
     await saveState(state);
     expect(localStorage.getItem(STORAGE_KEY)).not.toBeNull();
@@ -118,6 +120,7 @@ describe('saveState / loadPersistedState', () => {
       hp: null,
       conditions: [],
       rotation: 0,
+      losRadius: null,
     });
     // Seed LS with an old value so we can detect that the oversized
     // save removed it rather than overwriting.

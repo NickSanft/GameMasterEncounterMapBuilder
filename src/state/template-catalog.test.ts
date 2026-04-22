@@ -23,6 +23,7 @@ function tok(overrides: Partial<Token> = {}): Token {
     hp: overrides.hp ?? null,
     conditions: overrides.conditions ?? [],
     rotation: overrides.rotation ?? 0,
+    losRadius: overrides.losRadius ?? null,
   };
 }
 

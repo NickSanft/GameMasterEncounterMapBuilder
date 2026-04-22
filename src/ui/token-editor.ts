@@ -32,6 +32,12 @@ export interface TokenEditorOptions {
   selection: SelectionState;
   imageLoader: ImageLoader;
   onAfterChange?(): void;
+  /**
+   * Active feet-per-square preference. Used to display / parse the
+   * sight-radius field in feet regardless of the underlying grid
+   * cellSize. Defaults to D&D 5e's 5 ft per square when not supplied.
+   */
+  feetPerSquare?(): number;
 }
 
 export function mountTokenEditor(opts: TokenEditorOptions): TokenEditorHandle {
@@ -118,6 +124,23 @@ export function mountTokenEditor(opts: TokenEditorOptions): TokenEditorHandle {
         </div>
       </fieldset>
 
+      <fieldset class="sight-block">
+        <legend>Sight</legend>
+        <label class="check">
+          <input type="checkbox" data-field="hasSight" />
+          <span>This token is a viewer (casts line of sight)</span>
+        </label>
+        <div class="sight-details" data-field="sight-details" hidden>
+          <label>Radius (ft)
+            <input type="number" data-field="losRadiusFeet" step="5" min="5" max="240" />
+          </label>
+          <p class="settings-hint">
+            When "Dynamic line of sight" is on in Settings → Grid, walls
+            marked as sight-blocking will occlude this viewer's vision.
+          </p>
+        </div>
+      </fieldset>
+
       <fieldset class="hp-block">
         <legend>Hit points</legend>
         <label class="check">
@@ -186,6 +209,9 @@ export function mountTokenEditor(opts: TokenEditorOptions): TokenEditorHandle {
   const nextBtn = modal.querySelector<HTMLButtonElement>('[data-action="next"]')!;
   const cycleGroup = modal.querySelector<HTMLDivElement>('[data-field="cycle-group"]')!;
   const counter = modal.querySelector<HTMLSpanElement>('[data-field="counter"]')!;
+  const hasSightInput = modal.querySelector<HTMLInputElement>('[data-field="hasSight"]')!;
+  const sightDetails = modal.querySelector<HTMLDivElement>('[data-field="sight-details"]')!;
+  const losRadiusFeetInput = modal.querySelector<HTMLInputElement>('[data-field="losRadiusFeet"]')!;
   const trackHpInput = modal.querySelector<HTMLInputElement>('[data-field="trackHp"]')!;
   const hpFields = modal.querySelector<HTMLDivElement>('[data-field="hp-fields"]')!;
   const hpCurrentInput = modal.querySelector<HTMLInputElement>('[data-field="hpCurrent"]')!;
@@ -284,9 +310,43 @@ export function mountTokenEditor(opts: TokenEditorOptions): TokenEditorHandle {
     updatePreview(token.imageId);
     syncBorderUI(token.borderColor);
     syncHpUI(token.hp);
+    syncSightUI(token.losRadius);
     syncConditionUI(token.conditions);
     syncRotationUI(token.rotation);
     syncCounter();
+  }
+
+  function currentFeetPerSquare(): number {
+    const f = opts.feetPerSquare?.();
+    return typeof f === 'number' && Number.isFinite(f) && f > 0 ? f : 5;
+  }
+
+  function currentCellSize(): number {
+    const sz = opts.store.getState().grid.cellSize;
+    return sz > 0 ? sz : 50;
+  }
+
+  function radiusPxToFeet(losRadius: number): number {
+    return Math.round((losRadius / currentCellSize()) * currentFeetPerSquare());
+  }
+
+  function radiusFeetToPx(feet: number): number {
+    return (feet / currentFeetPerSquare()) * currentCellSize();
+  }
+
+  function syncSightUI(losRadius: number | null) {
+    const hasSight = losRadius !== null;
+    hasSightInput.checked = hasSight;
+    sightDetails.hidden = !hasSight;
+    // We store `losRadius` in WORLD PIXELS (same unit as token
+    // coordinates) and expose it to the user in feet so the editor
+    // field stays grid-agnostic.
+    if (hasSight) {
+      const feet = radiusPxToFeet(losRadius);
+      losRadiusFeetInput.value = String(feet > 0 ? feet : 30);
+    } else {
+      losRadiusFeetInput.value = '30';
+    }
   }
 
   function syncRotationUI(rotation: number) {
@@ -488,6 +548,34 @@ export function mountTokenEditor(opts: TokenEditorOptions): TokenEditorHandle {
       update({ hp: null });
       syncHpUI(null);
     }
+  });
+
+  hasSightInput.addEventListener('change', () => {
+    const tok = currentToken();
+    if (!tok) return;
+    if (hasSightInput.checked) {
+      // Default to 30 ft (torch light) when first enabled.
+      const feet = 30;
+      const losRadius = radiusFeetToPx(feet);
+      update({ losRadius });
+      syncSightUI(losRadius);
+    } else {
+      update({ losRadius: null });
+      syncSightUI(null);
+    }
+  });
+
+  losRadiusFeetInput.addEventListener('change', () => {
+    const tok = currentToken();
+    if (!tok || tok.losRadius === null) return;
+    const feet = parseInt(losRadiusFeetInput.value, 10);
+    if (!Number.isFinite(feet) || feet <= 0) {
+      syncSightUI(tok.losRadius);
+      return;
+    }
+    const losRadius = radiusFeetToPx(feet);
+    update({ losRadius });
+    syncSightUI(losRadius);
   });
 
   function commitHpField(which: 'current' | 'max') {

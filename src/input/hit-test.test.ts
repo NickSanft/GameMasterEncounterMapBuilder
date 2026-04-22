@@ -17,6 +17,7 @@ function token(partial: Partial<Token> & { id: string }): Token {
     hp: partial.hp ?? null,
     conditions: partial.conditions ?? [],
     rotation: partial.rotation ?? 0,
+    losRadius: partial.losRadius ?? null,
   };
 }
 

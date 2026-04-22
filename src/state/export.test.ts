@@ -20,6 +20,7 @@ function token(id: string, imageId: string | null = null, borderColor: string | 
     hp: null,
     conditions: [],
     rotation: 0,
+    losRadius: null,
   };
 }
 

@@ -32,7 +32,7 @@ const GM_SECTIONS: HelpSection[] = [
       { name: 'Ruler', desc: 'Drag between two points to measure distance in grid squares. Release to clear. A side panel lets you pick 5 / 30 / 60 / 90 / 120 ft presets (shortcut keys 1–5) that snap the endpoint to that reach; 0 goes back to freeform.' },
       { name: 'AoE', desc: 'Drag to place a spell or effect template — sphere, cone, line, or cube. Choose the shape and color from the panel that appears when the tool is active.' },
       { name: 'Draw', desc: 'Freehand ink tool (shortcut K). Pick a color, width, and Shared/GM-only visibility from the side panel. Right-click a stroke to delete it or toggle visibility. "Clear Drawings" in the session menu erases all strokes.' },
-      { name: 'Walls', desc: 'Click-to-drop chain tool (shortcut W) for outlining dungeon corridors, doorways, and masonry. Each click commits a segment from the previous vertex; Escape, right-click, or double-click ends the chain. Walls are GM-only — players never see them. Right-click an existing wall to delete it or toggle sight-blocking. A future update will use walls to mask what Spectator-side tokens can see.' },
+      { name: 'Walls', desc: 'Click-to-drop chain tool (shortcut W) for outlining dungeon corridors, doorways, and masonry. Each click commits a segment from the previous vertex; Escape, right-click, or double-click ends the chain. Walls are GM-only — players never see them. Right-click an existing wall to delete it or toggle sight-blocking. When "Dynamic line of sight" is on (Settings → Grid), sight-blocking walls occlude viewer tokens\u2019 vision in real time.' },
       { name: 'Undo / Redo', desc: 'Step backward or forward through your last actions. Also Ctrl/Cmd+Z and Ctrl/Cmd+Shift+Z.' },
     ],
   },
@@ -125,6 +125,17 @@ const GM_SECTIONS: HelpSection[] = [
       { name: 'Two fingers (pinch)', desc: 'Zoom in/out around the midpoint between your fingers. Moving both fingers together pans the camera without changing zoom. While you\u2019re pinching, the active tool\u2019s single-finger state machine pauses so you don\u2019t accidentally drop tokens or draw strokes.' },
       { name: 'Toolbar scrolls', desc: 'On narrow viewports the tool strip lays out horizontally and scrolls — every tool is always reachable, even on a phone.' },
       { name: 'Bigger hit targets', desc: 'On touch-only devices (coarse pointer, no hover) every button bumps up to at least 44px tall so finger taps land reliably.' },
+    ],
+  },
+  {
+    title: 'Line of sight (optional)',
+    intro: 'Dynamic vision: walls can occlude what viewer tokens see, and Spectator fog clips to the visible-and-revealed union.',
+    entries: [
+      { name: 'Enable', desc: 'Settings → Grid → "Dynamic line of sight". Off by default — enabling it flips Spectator fog to also require a viewer token\u2019s polygon covering each cell.' },
+      { name: 'Viewer tokens', desc: 'In the token editor\u2019s Sight fieldset, tick "This token is a viewer" and pick a radius in feet. A 30 ft torch-light default covers most D&D encounters.' },
+      { name: 'What Spectator sees', desc: 'With LoS on, a cell shows on the Spectator map only when the GM has revealed it AND at least one viewer token\u2019s polygon reaches it. Back-of-the-room fog returns if every viewer walks away.' },
+      { name: 'What GM sees', desc: 'The GM canvas still shows all revealed fog as-is, plus a translucent yellow outline of every viewer\u2019s current visibility polygon so you can tell at a glance what\u2019s visible to the party.' },
+      { name: 'Walls + sight blocking', desc: 'Only walls with sight-blocking enabled (default on; right-click a wall to toggle) occlude vision. Non-blocking walls still render as the map outline but don\u2019t interrupt rays.' },
     ],
   },
   {

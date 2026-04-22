@@ -1,25 +1,27 @@
 /// <reference lib="webworker" />
 /**
- * Off-main-thread fog compaction.
+ * Off-main-thread fog + line-of-sight compute.
  *
- * The main thread posts the current fog buffer + dimensions; the worker
- * runs `compactFogRects` and posts the result back. The fog buffer is
- * passed by reference through the Transferable interface (zero-copy),
- * so even very large grids cost ~constant time to ship across.
+ * The main thread posts two kinds of request:
  *
- * Protocol (kept tiny on purpose):
- *   in  : { type: 'compact', requestId, fog, cols, rows }
- *   out : { type: 'compacted', requestId, rects }
+ *   • `compact` — given the current fog Uint8Array + dimensions, return
+ *     run-length-compacted rectangles for cheap per-frame fog painting.
+ *     Phase 49 work; unchanged since.
+ *   • `compute-los` (Phase 55) — given viewer positions / radii + the
+ *     list of sight-blocking wall segments, cast rays and return one
+ *     visibility polygon per viewer. The renderer then uses the
+ *     polygons as canvas clip paths to mask Spectator fog.
  *
- * The `requestId` lets the client correlate responses with the request
- * that produced them — newer requests can supersede older ones safely.
- *
- * Imports from `./fog-rects.js` because the helper is dependency-free
- * (no DOM, no state). Vite bundles the worker as its own module so the
- * helper is duplicated into the worker bundle without dragging the rest
- * of the renderer along.
+ * Responses carry a `requestId` so newer requests can safely supersede
+ * older ones that are still in-flight. Transferable-typed-array args
+ * keep the round-trip zero-copy even for big grids.
  */
 import { compactFogRects, type FogRect } from './fog-rects.js';
+import {
+  computeVisibilityPolygon,
+  type LosPoint,
+  type LosSegment,
+} from '../state/los.js';
 
 export interface CompactRequest {
   type: 'compact';
@@ -35,17 +37,48 @@ export interface CompactResponse {
   rects: FogRect[];
 }
 
+export interface LosRequest {
+  type: 'compute-los';
+  requestId: number;
+  viewers: Array<{ x: number; y: number; radius: number }>;
+  walls: LosSegment[];
+}
+
+export interface LosResponse {
+  type: 'los-ready';
+  requestId: number;
+  polygons: LosPoint[][];
+}
+
+export type FogWorkerRequest = CompactRequest | LosRequest;
+export type FogWorkerResponse = CompactResponse | LosResponse;
+
 // `self` inside a worker is a DedicatedWorkerGlobalScope.
 const ctx: DedicatedWorkerGlobalScope = self as unknown as DedicatedWorkerGlobalScope;
 
-ctx.addEventListener('message', (event: MessageEvent<CompactRequest>) => {
+ctx.addEventListener('message', (event: MessageEvent<FogWorkerRequest>) => {
   const data = event.data;
-  if (!data || data.type !== 'compact') return;
-  const rects = compactFogRects(data.fog, data.cols, data.rows);
-  const response: CompactResponse = {
-    type: 'compacted',
-    requestId: data.requestId,
-    rects,
-  };
-  ctx.postMessage(response);
+  if (!data) return;
+  if (data.type === 'compact') {
+    const rects = compactFogRects(data.fog, data.cols, data.rows);
+    const response: CompactResponse = {
+      type: 'compacted',
+      requestId: data.requestId,
+      rects,
+    };
+    ctx.postMessage(response);
+    return;
+  }
+  if (data.type === 'compute-los') {
+    const polygons: LosPoint[][] = data.viewers.map((v) =>
+      computeVisibilityPolygon({ x: v.x, y: v.y }, v.radius, data.walls),
+    );
+    const response: LosResponse = {
+      type: 'los-ready',
+      requestId: data.requestId,
+      polygons,
+    };
+    ctx.postMessage(response);
+    return;
+  }
 });

@@ -20,6 +20,7 @@ function tok(id: string, x: number, y: number, label = id): Token {
     hp: null,
     conditions: [],
     rotation: 0,
+    losRadius: null,
   };
 }
 

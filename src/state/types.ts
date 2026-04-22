@@ -40,6 +40,15 @@ export interface Token {
    * buttons.
    */
   rotation: number;
+  /**
+   * Line-of-sight radius in world pixels, or `null` if this token is
+   * not a viewer. When set, the Phase 55 LoS pipeline casts rays from
+   * this token's center out to `losRadius` and produces a visibility
+   * polygon that Spectator fog gets clipped to (when `losMode !== 'off'`).
+   * `null` on existing tokens means "keep the Phase 54 behavior" —
+   * fog is driven entirely by the GM's manual reveal tool.
+   */
+  losRadius: number | null;
 }
 
 export interface Background {

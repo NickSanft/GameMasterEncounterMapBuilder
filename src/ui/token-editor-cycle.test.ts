@@ -19,6 +19,7 @@ function tok(id: string, x = 0, y = 0): Token {
     hp: null,
     conditions: [],
     rotation: 0,
+    losRadius: null,
   };
 }
 

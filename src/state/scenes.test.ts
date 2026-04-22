@@ -101,6 +101,7 @@ describe('duplicateScene', () => {
       hp: null,
       conditions: [],
       rotation: 0,
+      losRadius: null,
     });
     await saveScene(original.id, state);
 
@@ -179,6 +180,7 @@ describe('ensureActiveScene', () => {
       hp: null,
       conditions: [],
       rotation: 0,
+      losRadius: null,
     });
     await runTx(SESSIONS_STORE, 'readwrite', (s) =>
       s.put({

@@ -61,6 +61,7 @@ export function mountSettingsModal(
   const showGridLinesInput = modal.querySelector<HTMLInputElement>('[data-field="showGridLines"]')!;
   const showGridLabelsInput = modal.querySelector<HTMLInputElement>('[data-field="showGridLabels"]')!;
   const showMiniMapInput = modal.querySelector<HTMLInputElement>('[data-field="showMiniMap"]')!;
+  const losModeInput = modal.querySelector<HTMLInputElement>('[data-field="losMode"]')!;
   const sceneLightColorInput = modal.querySelector<HTMLInputElement>('[data-field="sceneLightColor"]')!;
   const sceneLightOpacityInput = modal.querySelector<HTMLInputElement>('[data-field="sceneLightOpacity"]')!;
   const sceneLightOpacityLabel = modal.querySelector<HTMLSpanElement>('[data-field="sceneLightOpacityValue"]')!;
@@ -136,6 +137,7 @@ export function mountSettingsModal(
     showGridLinesInput.checked = state.grid.showGridLines;
     showGridLabelsInput.checked = prefs.showGridLabels;
     showMiniMapInput.checked = prefs.showMiniMap;
+    losModeInput.checked = prefs.losMode !== 'off';
     sceneLightColorInput.value = prefs.sceneLightColor;
     sceneLightOpacityInput.value = String(Math.round(prefs.sceneLightOpacity * 100));
     sceneLightOpacityLabel.textContent = `${Math.round(prefs.sceneLightOpacity * 100)}%`;
@@ -219,6 +221,11 @@ export function mountSettingsModal(
     preferences.update({ showGridLabels: showGridLabelsInput.checked });
   });
 
+  losModeInput.addEventListener('change', () => {
+    preferences.update({
+      losMode: losModeInput.checked ? 'revealed-and-visible' : 'off',
+    });
+  });
   showMiniMapInput.addEventListener('change', () => {
     preferences.update({ showMiniMap: showMiniMapInput.checked });
   });
@@ -453,6 +460,11 @@ function renderGridPane(): string {
         <span>Show mini-map</span>
       </label>
       <p class="settings-hint">Floating bottom-right thumbnail of the whole map — background, fog, tokens, plus a ring showing your current viewport. Click anywhere in the mini-map to recenter the main camera there.</p>
+      <label class="check">
+        <input type="checkbox" data-field="losMode" />
+        <span>Dynamic line of sight</span>
+      </label>
+      <p class="settings-hint">When on, Spectator fog is clipped to the visibility polygons of tokens with a sight radius (configured in the token editor). Walls marked as sight-blocking (Walls tool, right-click) occlude vision. Turning this off reverts to the classic GM-painted fog behavior.</p>
       <p class="settings-hint">Changing grid dimensions preserves fog state for cells that still exist after the resize.</p>
     </section>
   `;

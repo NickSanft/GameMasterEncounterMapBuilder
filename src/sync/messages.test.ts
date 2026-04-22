@@ -23,6 +23,7 @@ describe('serializeState / deserializeState', () => {
       hp: null,
       conditions: [],
       rotation: 0,
+      losRadius: null,
     });
     const serialized = serializeState(state);
     const restored = deserializeState(serialized);

@@ -15,6 +15,7 @@ function newToken(id: string, overrides: Partial<Token> = {}): Token {
     hp: null,
     conditions: [],
     rotation: 0,
+    losRadius: null,
     ...overrides,
   };
 }

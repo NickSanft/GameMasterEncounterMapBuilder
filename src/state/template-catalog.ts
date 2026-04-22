@@ -70,6 +70,7 @@ export function placeTemplate(
     hp: null,
     conditions: [],
     rotation: 0,
+    losRadius: null,
   }));
 }
 

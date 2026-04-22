@@ -128,6 +128,7 @@ import { createAnnouncer } from '../util/announcer.js';
 import { registerPwa } from '../util/pwa.js';
 import { createFogWorkerClient } from '../render/fog-worker-client.js';
 import FogWorker from '../render/fog-worker.js?worker';
+import { collectSightWalls, collectViewers } from '../state/los-compose.js';
 
 const canvasEl = document.getElementById('canvas');
 if (!(canvasEl instanceof HTMLCanvasElement)) {
@@ -227,6 +228,10 @@ const renderer = createRenderer({
   getDrawPreview: () => drawOverlayRef.current,
   getFogRects: () => fogWorkerClient.getLatest(),
   getWallsOverlay: () => wallsOverlayRef.current,
+  getLosPolygons: () =>
+    preferences.get().losMode === 'off'
+      ? null
+      : fogWorkerClient.getLatestPolygons(),
 });
 
 // Whenever the worker has fresh rects, request a re-paint.
@@ -234,10 +239,26 @@ fogWorkerClient.onUpdate(() => renderer.requestRender());
 
 // Re-request compaction whenever the store changes (the worker dedupes
 // identical-fog requests, so this is cheap when fog hasn't moved).
-function refreshFogRects() {
+function refreshLos(): void {
+  if (preferences.get().losMode === 'off') return;
   const state = store.getState();
+  fogWorkerClient.requestLos(
+    collectViewers(state.tokens, state.grid),
+    collectSightWalls(state.walls),
+  );
+}
+
+function refreshFogRects(): void {
+  const state = store.getState();
+  // GM view always paints the raw, GM-authored fog — they need to see
+  // what they've revealed so they can keep painting. LoS visualization
+  // on the GM canvas is a subtle polygon outline, not a fog mask.
   fogWorkerClient.request(state.fog, state.grid.cols, state.grid.rows);
 }
+
+fogWorkerClient.onLosUpdate(() => renderer.requestRender());
+
+refreshLos();
 refreshFogRects();
 
 panZoomRef.handle = attachPanZoom(renderer);
@@ -254,6 +275,10 @@ preferences.subscribe((prefs) => {
   else persistCameraDebounced();
   diagnosticsOverlay?.setEnabled(prefs.showDiagnostics);
   miniMap?.setEnabled(prefs.showMiniMap);
+  // losMode toggle: kick a fresh LoS compute so the GM's outline
+  // overlay + Spectator's effective fog reflect the preference
+  // immediately (no reload needed).
+  refreshLos();
 });
 
 const inputContext = {
@@ -597,6 +622,7 @@ const tokenEditor = mountTokenEditor({
   store,
   selection,
   imageLoader,
+  feetPerSquare: () => preferences.get().feetPerSquare,
 });
 const annotationEditor = mountAnnotationEditor({ store });
 const damageHealDialog = mountDamageHealDialog({
@@ -1126,6 +1152,9 @@ store.subscribe((patch) => {
   // Recompact fog rects off-thread; a no-op when the patch didn't touch fog
   // (the client hashes the buffer + skips the worker round trip on hit).
   refreshFogRects();
+  // Re-run LoS whenever state changes — the worker client signatures
+  // its inputs + skips the round-trip on unchanged walls+viewers.
+  refreshLos();
   if (!channel) return;
   if (patch) {
     channel.send({ type: 'patch', patch: toSerializablePatch(patch) });
@@ -1310,6 +1339,7 @@ function placeTokenAt(gx: number, gy: number) {
     hp: null,
     conditions: [],
     rotation: 0,
+    losRadius: null,
   };
   store.applyPatch({ kind: 'token-add', token });
   lastPlacedRef.current = token;

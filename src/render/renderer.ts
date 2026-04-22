@@ -26,6 +26,7 @@ import {
 import { drawMovementIndicator } from './layer-movement-indicator.js';
 import { drawStrokes } from './layer-strokes.js';
 import { drawWalls } from './layer-walls.js';
+import { drawLosPolygons } from './layer-los.js';
 import { drawGridLabels, drawSceneTint } from './layer-grid-labels.js';
 import { gridDistance, formatDistance } from '../state/distance.js';
 import type { DrawStroke } from '../state/types.js';
@@ -90,6 +91,13 @@ interface CreateRendererOptions {
    * Spectator never sees walls or chain previews.
    */
   getWallsOverlay?(): WallsOverlay | null;
+  /**
+   * Current LoS visibility polygons (one per viewer token). GM entry
+   * passes the latest from `fogWorkerClient.getLatestPolygons()` when
+   * `losMode !== 'off'`, `null` otherwise. The layer itself further
+   * no-ops on Spectator — Spectator consumes polygons via fog masking.
+   */
+  getLosPolygons?(): import('../state/los.js').LosPoint[][] | null;
 }
 
 const EMPTY_HIGHLIGHT: ReadonlySet<ID> = new Set();
@@ -128,6 +136,7 @@ export function createRenderer(opts: CreateRendererOptions): Renderer {
     getDrawPreview,
     getFogRects,
     getWallsOverlay,
+    getLosPolygons,
   } = opts;
   const maybeCtx = canvas.getContext('2d');
   if (!maybeCtx) throw new Error('2D canvas context unavailable');
@@ -225,6 +234,14 @@ export function createRenderer(opts: CreateRendererOptions): Renderer {
       mode,
       overlay: getWallsOverlay ? getWallsOverlay() : null,
       zoom: camera.zoom,
+    });
+    // LoS visibility polygons — GM-only yellow outline so the GM sees
+    // what each viewer can see. Spectator consumes these via fog
+    // masking upstream, not by drawing outlines.
+    drawLosPolygons(ctx, {
+      mode,
+      zoom: camera.zoom,
+      polygons: getLosPolygons ? getLosPolygons() : null,
     });
     const preview = getFogPreview ? getFogPreview() : null;
     if (preview) {

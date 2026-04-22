@@ -39,6 +39,11 @@ import { registerPwa } from '../util/pwa.js';
 import { mountStatusBanners } from '../ui/status-banners.js';
 import { createFogWorkerClient } from '../render/fog-worker-client.js';
 import FogWorker from '../render/fog-worker.js?worker';
+import {
+  collectSightWalls,
+  collectViewers,
+  spectatorEffectiveFog,
+} from '../state/los-compose.js';
 import type { PanZoomHandle } from '../input/pan-zoom.js';
 
 const canvasEl = document.getElementById('canvas');
@@ -88,10 +93,30 @@ const renderer = createRenderer({
 
 fogWorkerClient.onUpdate(() => renderer.requestRender());
 
-function refreshFogRects() {
+function refreshLos(): void {
   const state = store.getState();
-  fogWorkerClient.request(state.fog, state.grid.cols, state.grid.rows);
+  if (preferences.get().losMode === 'off') return;
+  fogWorkerClient.requestLos(
+    collectViewers(state.tokens, state.grid),
+    collectSightWalls(state.walls),
+  );
 }
+
+function refreshFogRects(): void {
+  const state = store.getState();
+  const losOn = preferences.get().losMode !== 'off';
+  const polygons = fogWorkerClient.getLatestPolygons();
+  const fog = spectatorEffectiveFog(state, polygons, losOn);
+  fogWorkerClient.request(fog, state.grid.cols, state.grid.rows);
+}
+
+// When LoS polygons change, the effective fog changes too — rebuild.
+fogWorkerClient.onLosUpdate(() => {
+  refreshFogRects();
+  renderer.requestRender();
+});
+
+refreshLos();
 refreshFogRects();
 
 panZoomRef.handle = attachPanZoom(renderer);
@@ -131,6 +156,10 @@ preferences.subscribe((prefs) => {
   else persistCameraDebounced();
   diagnosticsOverlay?.setEnabled(prefs.showDiagnostics);
   miniMap?.setEnabled(prefs.showMiniMap);
+  // losMode change: re-run LoS + rebuild effective fog so the
+  // Spectator canvas reacts to the toggle without needing a reload.
+  refreshLos();
+  refreshFogRects();
 });
 
 function applyRemoteCamera(camera: { x: number; y: number; zoom: number }) {
@@ -221,6 +250,7 @@ store.subscribe((patch) => {
   renderer.requestRender();
   persist();
   updateCanvasLabelDebounced();
+  refreshLos();
   refreshFogRects();
   if (patch?.kind === 'token-update' && patch.changes.imageId) {
     imageLoader.invalidate(patch.changes.imageId);

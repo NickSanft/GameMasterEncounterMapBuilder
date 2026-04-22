@@ -3,6 +3,17 @@ import type { DiagonalRule, DistanceUnit } from './distance.js';
 
 export type LabelSize = 'small' | 'medium' | 'large';
 export type Theme = 'dark' | 'light';
+/**
+ * Dynamic line-of-sight mode.
+ *   - `'off'` — fog is driven entirely by the GM's manual Reveal / Hide
+ *     tool. Viewer tokens' `losRadius` is ignored. Backward-compatible
+ *     behavior for Phases 32–54.
+ *   - `'revealed-and-visible'` — Spectator fog shows a cell iff (a) the
+ *     GM has revealed it manually AND (b) at least one viewer token's
+ *     visibility polygon covers it. Turns walls + `losRadius` into a
+ *     dynamic "who can see what right now" layer.
+ */
+export type LosMode = 'off' | 'revealed-and-visible';
 
 export type { DiagonalRule, DistanceUnit };
 
@@ -33,6 +44,8 @@ export interface Preferences {
   sceneLightOpacity: number;
   /** Show the floating bottom-right mini-map. */
   showMiniMap: boolean;
+  /** Dynamic line-of-sight mode (see LosMode for semantics). */
+  losMode: LosMode;
 }
 
 export const DEFAULT_PREFERENCES: Preferences = {
@@ -55,6 +68,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   sceneLightColor: '#0a0530',
   sceneLightOpacity: 0,
   showMiniMap: false,
+  losMode: 'off',
 };
 
 export interface PreferencesStore {

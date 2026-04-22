@@ -33,6 +33,7 @@ export function createTokenTool(ctx: InputContext): Tool {
         hp: null,
         conditions: [],
         rotation: 0,
+        losRadius: null,
       };
     }
     store.applyPatch({ kind: 'token-add', token: newToken });

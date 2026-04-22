@@ -678,6 +678,12 @@ body.view {
   display: flex;
   flex-direction: column;
   gap: 0.85rem;
+  /* When a modal grows taller than the viewport (e.g. token editor
+     once it has Sight + HP + conditions all expanded), scroll the
+     body internally so the modal-footer + the controls below the
+     fold stay reachable. */
+  max-height: calc(90vh - 4rem);
+  overflow-y: auto;
 }
 
 .modal label {
