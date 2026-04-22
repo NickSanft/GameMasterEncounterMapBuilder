@@ -242,11 +242,40 @@ fogWorkerClient.onUpdate(() => renderer.requestRender());
 function refreshLos(): void {
   if (preferences.get().losMode === 'off') return;
   const state = store.getState();
+  // Pass the live drag overlay so a viewer being dragged updates its
+  // LoS polygon every frame (instead of staying frozen at the
+  // pre-drag position until pointerup commits the move). The overlay
+  // is null whenever no drag is in progress, in which case
+  // collectViewers walks `state.tokens` exactly as before.
   fogWorkerClient.requestLos(
-    collectViewers(state.tokens, state.grid),
+    collectViewers(state.tokens, state.grid, dragOverlayRef.current),
     collectSightWalls(state.walls),
   );
 }
+
+// While a drag is active the store doesn't change between pointer-down
+// and pointer-up, so `store.subscribe` never fires — and our
+// LoS-during-drag wouldn't update without a separate trigger. Hook
+// renderer.onFrame to recompute LoS when the drag overlay's position
+// has shifted since the last frame. Signature-cached in the worker
+// client, so once-per-frame calls are essentially free when nothing
+// has changed.
+let lastDragLosKey: string | null = null;
+renderer.onFrame(() => {
+  if (preferences.get().losMode === 'off') {
+    lastDragLosKey = null;
+    return;
+  }
+  const drag = dragOverlayRef.current;
+  if (!drag || drag.ids.length === 0) {
+    lastDragLosKey = null;
+    return;
+  }
+  const key = `${drag.ids.join(',')}#${drag.deltaX.toFixed(2)},${drag.deltaY.toFixed(2)}`;
+  if (key === lastDragLosKey) return;
+  lastDragLosKey = key;
+  refreshLos();
+});
 
 function refreshFogRects(): void {
   const state = store.getState();

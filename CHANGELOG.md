@@ -31,6 +31,27 @@ Post-1.0 roadmap (Phases 56–63 + voice notes):
 
 ---
 
+## [0.55.1] — 2026-04-22 — LoS recomputes during a viewer drag
+
+### Fixed
+- **Visibility polygon now updates while a viewer token is being dragged**, instead of staying frozen at the pre-drag position until pointerup. Phase 55 read viewer positions straight from `state.tokens`, but the Select-tool drag works through a *drag overlay* (a delta applied at render time) — the store doesn't change until the drag completes. So between pointer-down and pointer-up the LoS recompute saw stale positions and the yellow outline / Spectator fog didn't move with the token.
+- `collectViewers` now accepts an optional `dragOverlay` parameter; viewers in the overlay's id set get their world-space center shifted by the overlay's `(deltaX, deltaY)` before being shipped to the worker.
+- The GM entry hooks `renderer.onFrame` and re-fires `refreshLos()` whenever the drag overlay's signature changes — i.e. every move tick during an active drag, never otherwise. The fog-worker client's input-signature cache means non-drag frames cost nothing.
+- Spectator follows the patch firehose like before; it sees the corrected position when GM commits the move on pointerup. (Mid-drag streaming to Spectator would need a new sync-message type — out of scope for this patch.)
+
+### Tests
+- **9 new unit tests** in `src/state/los-compose.test.ts` for `collectViewers` (size-aware center, drag-overlay shifts, drag of non-viewer, empty-ids back-compat, null-overlay back-compat) + `collectSightWalls` + `spectatorEffectiveFog`. Total unit-test count: 503.
+- All 117 Playwright tests green (1 pre-existing scenes flake — passes in isolation).
+- Visual regression baselines unchanged on Windows + Linux.
+
+### No behavior change for non-drag flows
+- Click-to-place + arrow-key + token-editor → patch path unchanged.
+- LoS-off path unchanged.
+- Spectator sync flow unchanged (still patch-driven).
+- Bundle: 63.6 KB → 63.7 KB brotli (well under 75 KB budget).
+
+---
+
 ## [0.55.0] — 2026-04-21 — Dynamic line of sight
 
 ### Added
@@ -927,7 +948,8 @@ Total e2e count: **20 new tests** across four new spec files. Combined with prio
 
 ---
 
-[Unreleased]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.55.0...HEAD
+[Unreleased]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.55.1...HEAD
+[0.55.1]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.55.0...v0.55.1
 [0.55.0]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.54.0...v0.55.0
 [0.54.0]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.53.0...v0.54.0
 [0.53.0]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.52.0...v0.53.0

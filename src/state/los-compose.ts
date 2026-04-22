@@ -12,20 +12,58 @@
  * non-null `losRadius`, returning the shape the fog worker expects.
  */
 
-import type { SessionState, Token, Wall } from './types.js';
+import type { ID, SessionState, Token, Wall } from './types.js';
 import type { LosViewer } from '../render/fog-worker-client.js';
 import type { LosPoint, LosSegment } from './los.js';
 import { rasterizeVisibility } from './los.js';
 
-export function collectViewers(tokens: readonly Token[], grid: { cellSize: number }): LosViewer[] {
+/**
+ * Drag-overlay shape that `collectViewers` understands. We mirror the
+ * shape of `DragOverlay` from `input/context.ts` rather than importing
+ * it so this module stays free of the input-layer dependency. The
+ * deltas are in WORLD pixels (matches `DragOverlay`'s contract).
+ */
+export interface ViewerDragOverlay {
+  ids: readonly ID[];
+  deltaX: number;
+  deltaY: number;
+}
+
+/**
+ * Filter a token list down to the viewers (`losRadius !== null`) and
+ * project each into the worker-facing `LosViewer` shape.
+ *
+ * When a `dragOverlay` is supplied AND a viewer's id is in
+ * `dragOverlay.ids`, that viewer's center is offset by the world-space
+ * delta so the LoS recompute follows the dragged token live, instead
+ * of staying frozen at the pre-drag position until the user releases.
+ * (Drag overlays mutate every pointer-move; the store doesn't change
+ * until the drag finishes.)
+ */
+export function collectViewers(
+  tokens: readonly Token[],
+  grid: { cellSize: number },
+  dragOverlay?: ViewerDragOverlay | null,
+): LosViewer[] {
+  const dragSet = dragOverlay && dragOverlay.ids.length > 0
+    ? new Set(dragOverlay.ids)
+    : null;
+  const dx = dragOverlay?.deltaX ?? 0;
+  const dy = dragOverlay?.deltaY ?? 0;
+
   const viewers: LosViewer[] = [];
   for (const t of tokens) {
     if (t.losRadius === null) continue;
     // Tokens are 1-indexed grid cells; viewer origin is the token's
     // center (grid-cell center in world pixels).
-    const cx = (t.x + t.size / 2) * grid.cellSize;
-    const cy = (t.y + t.size / 2) * grid.cellSize;
-    viewers.push({ x: cx, y: cy, radius: t.losRadius });
+    const baseX = (t.x + t.size / 2) * grid.cellSize;
+    const baseY = (t.y + t.size / 2) * grid.cellSize;
+    const isDragging = !!dragSet && dragSet.has(t.id);
+    viewers.push({
+      x: isDragging ? baseX + dx : baseX,
+      y: isDragging ? baseY + dy : baseY,
+      radius: t.losRadius,
+    });
   }
   return viewers;
 }
