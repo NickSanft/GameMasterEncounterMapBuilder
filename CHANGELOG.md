@@ -33,6 +33,21 @@ shift up by one:
 
 ---
 
+## [0.56.1] — 2026-04-22 — Delete-on-wall handler-ordering fix
+
+### Fixed
+- **Delete key on a selected wall unselected the wall instead of removing it.** The Select tool had its own window-level `Delete`/`Backspace` keydown handler (pre-existing, pre-Phase-56) that *only* knew about tokens / annotations / AoE. When the Phase 56 work added a second handler in `gm.ts` (which does know about walls), both listeners were on the window — and the Select tool's listener fires first under the Select-active-at-boot ordering. It cleared `selection.ids` (wall matched nothing it recognized → no patch), then gm.ts's handler ran, saw an empty selection, and no-op'd. Net effect: wall unselected, wall remained.
+- **Fix**: remove the duplicate handler in `tool-select.ts`. gm.ts is now the single source of truth for `Delete`/`Backspace` (already covered tokens + annotations + walls + the live-region announcer since Phase 56; grown an AoE case here to preserve the old behaviour).
+- **Why the bug passed CI**: the existing walls-selection e2e used a helper that pressed `w` then `s` during setup. Activating the Walls tool deactivates Select → removes its keydown listener; reactivating Select re-adds the listener *after* gm.ts's. Handler order inverted → gm.ts fired first → wall deleted. Masked the bug in tests but not in real use where no tool-switch happens.
+
+### Regression test added
+- New Playwright spec *`Regression (0.56.1): Delete removes a wall WITHOUT switching tools after boot`* inlines the wall-drawing steps (without the `w` → `s` dance) to pin the failure mode. Covers handler-ordering bugs of this shape going forward.
+
+### No other changes
+- Zero state / rendering / visual-baseline movement. `e2e/walls-selection.spec.ts` count: 5 → 6. Total Playwright: 123 → 124. Unit tests unchanged at 512.
+
+---
+
 ## [0.56.0] — 2026-04-22 — Selectable walls
 
 ### Added
@@ -979,7 +994,8 @@ Total e2e count: **20 new tests** across four new spec files. Combined with prio
 
 ---
 
-[Unreleased]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.56.0...HEAD
+[Unreleased]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.56.1...HEAD
+[0.56.1]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.56.0...v0.56.1
 [0.56.0]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.55.1...v0.56.0
 [0.55.1]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.55.0...v0.55.1
 [0.55.0]: https://github.com/nicholassanft/GameMasterEncounterMapBuilder/compare/v0.54.0...v0.55.0

@@ -1366,6 +1366,7 @@ function deleteSelection(): boolean {
   const state = store.getState();
   let tokenCount = 0;
   let annotationCount = 0;
+  let aoeCount = 0;
   let wallCount = 0;
   store.batch(() => {
     for (const id of ids) {
@@ -1375,6 +1376,9 @@ function deleteSelection(): boolean {
       } else if (state.annotations.some((a) => a.id === id)) {
         store.applyPatch({ kind: 'annotation-remove', id });
         annotationCount++;
+      } else if (state.aoeTemplates.some((a) => a.id === id)) {
+        store.applyPatch({ kind: 'aoe-remove', id });
+        aoeCount++;
       } else if (state.walls.some((w) => w.id === id)) {
         store.applyPatch({ kind: 'wall-remove', id });
         wallCount++;
@@ -1387,6 +1391,9 @@ function deleteSelection(): boolean {
   if (tokenCount > 0) parts.push(`${tokenCount} token${tokenCount === 1 ? '' : 's'}`);
   if (annotationCount > 0) {
     parts.push(`${annotationCount} annotation${annotationCount === 1 ? '' : 's'}`);
+  }
+  if (aoeCount > 0) {
+    parts.push(`${aoeCount} AoE template${aoeCount === 1 ? '' : 's'}`);
   }
   if (wallCount > 0) parts.push(`${wallCount} wall${wallCount === 1 ? '' : 's'}`);
   if (parts.length > 0) announcer.announce(`Deleted ${parts.join(' and ')}.`);

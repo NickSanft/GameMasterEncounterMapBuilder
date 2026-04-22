@@ -64,6 +64,54 @@ test.describe('Selectable walls', () => {
     await page.keyboard.press('Escape');
   });
 
+  test(
+    'Regression (0.56.1): Delete removes a wall WITHOUT switching tools after boot',
+    async ({ page }) => {
+      // The 0.56.1 bug: Select tool had its own window keydown Delete
+      // handler registered at boot BEFORE the gm.ts handler. It only
+      // handled tokens/annotations/AoE and cleared selection on walls,
+      // so walls unselected silently instead of deleting. The prior
+      // `Click a wall + press Delete` test hid this because its helper
+      // pressed `w` then `s` during setup, reordering the handlers. This
+      // test skips the tool dance to pin the failure mode.
+      await page.goto('./gm.html');
+      await page.waitForSelector('#canvas');
+
+      // Walls tool + draw a segment — but DO NOT press `s` to return.
+      // (Select tool is already active at boot; activating Walls tool
+      // deactivates it, which under the old bug was what accidentally
+      // "fixed" the handler order. We inline a minimal drawWall to
+      // avoid drawWallSegment's tool-switching.)
+      await page.keyboard.press('w');
+      const box = await page.locator('#canvas').boundingBox();
+      if (!box) throw new Error('canvas has no bounding box');
+      const x1 = box.x + box.width * 0.35;
+      const y1 = box.y + box.height * 0.5;
+      const x2 = box.x + box.width * 0.55;
+      const y2 = box.y + box.height * 0.5;
+      await page.mouse.click(x1, y1);
+      await page.mouse.click(x2, y2);
+      await page.keyboard.press('Escape');
+      // Switch to Select. Activating Select at boot in gm.ts uses
+      // toolManager.setActive('select') *before* gm.ts's window keydown
+      // handler is registered; doing the switch here ensures we
+      // exercise the same registration order the real app sees.
+      await page.keyboard.press('s');
+
+      const midX = (x1 + x2) / 2;
+      const midY = (y1 + y2) / 2;
+
+      // Click the wall + Delete. The 0.56.1 bug surfaced here.
+      await page.mouse.click(midX, midY);
+      await page.keyboard.press('Delete');
+
+      // Right-click at the old midpoint — wall should be gone.
+      await page.mouse.click(midX, midY, { button: 'right' });
+      await expect(page.getByRole('menu', { name: 'Map actions' })).toBeVisible();
+      await page.keyboard.press('Escape');
+    },
+  );
+
   test('Shift+click two walls then Delete removes both', async ({ page }) => {
     await page.goto('./gm.html');
     await page.waitForSelector('#canvas');

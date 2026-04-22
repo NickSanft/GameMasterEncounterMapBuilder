@@ -266,35 +266,12 @@ export function createSelectTool(ctx: InputContext): Tool {
     }
   }
 
-  function onKeyDown(e: KeyboardEvent) {
-    if (e.key !== 'Delete' && e.key !== 'Backspace') return;
-    if (selection.ids.size === 0) return;
-    if (isEditableTarget(e.target)) return;
-    const ids = Array.from(selection.ids);
-    const state = store.getState();
-    store.batch(() => {
-      for (const id of ids) {
-        if (state.tokens.some((t) => t.id === id)) {
-          store.applyPatch({ kind: 'token-remove', id });
-        } else if (state.annotations.some((a) => a.id === id)) {
-          store.applyPatch({ kind: 'annotation-remove', id });
-        } else if (state.aoeTemplates.some((aoe) => aoe.id === id)) {
-          store.applyPatch({ kind: 'aoe-remove', id });
-        }
-      }
-    });
-    selection.ids = new Set();
-    renderer.requestRender();
-    e.preventDefault();
-  }
-
-  function isEditableTarget(target: EventTarget | null): boolean {
-    if (!(target instanceof HTMLElement)) return false;
-    const tag = target.tagName;
-    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true;
-    if (target.isContentEditable) return true;
-    return false;
-  }
+  // Delete / Backspace handling lives in the GM entry's global keydown
+  // handler (see src/entries/gm.ts). Phase 56 unified it there so walls
+  // and AoE + the live-region announcement all flow through one path.
+  // The Select tool used to have its own window-level handler; that
+  // duplicate caused a handler-ordering bug where Delete-on-wall
+  // unselected without removing — removed in 0.56.1.
 
   return {
     name: 'select',
@@ -304,14 +281,12 @@ export function createSelectTool(ctx: InputContext): Tool {
       canvas.addEventListener('pointermove', onPointerMove);
       canvas.addEventListener('pointerup', endPointer);
       canvas.addEventListener('pointercancel', endPointer);
-      window.addEventListener('keydown', onKeyDown);
     },
     deactivate() {
       canvas.removeEventListener('pointerdown', onPointerDown);
       canvas.removeEventListener('pointermove', onPointerMove);
       canvas.removeEventListener('pointerup', endPointer);
       canvas.removeEventListener('pointercancel', endPointer);
-      window.removeEventListener('keydown', onKeyDown);
       if (selection.ids.size > 0) {
         selection.ids = new Set();
         renderer.requestRender();
