@@ -133,11 +133,14 @@ test.describe('Lasso + multi-select', () => {
     expect(movedX).toBe(firstX + 1);
     expect(movedY).toBe(firstY);
 
-    // Advance to the second token via the cycle button ("Next ›") and
-    // confirm it moved by the same delta.
+    // Advance to the second token via the cycle button ("Next ›").
+    // We click it directly rather than rely on `Ctrl+ArrowRight`,
+    // which races with the editor's focus-on-open setTimeout(0) and
+    // intermittently fails on the slower CI runner — see
+    // https://github.com/NickSanft/GameMasterEncounterMapBuilder PR
+    // for 0.56.1 for the diagnostic.
     await page.keyboard.press('e');
-    // Use the keyboard shortcut we already exposed in the editor.
-    await page.keyboard.press('Control+ArrowRight');
+    await dialog.locator('[data-action="next"]').click();
     const secondMovedX = Number(await xField.inputValue());
     await page.keyboard.press('Escape');
     // The second token started at a different column so we can't assert

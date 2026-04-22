@@ -43,6 +43,9 @@ shift up by one:
 ### Regression test added
 - New Playwright spec *`Regression (0.56.1): Delete removes a wall WITHOUT switching tools after boot`* inlines the wall-drawing steps (without the `w` → `s` dance) to pin the failure mode. Covers handler-ordering bugs of this shape going forward.
 
+### Flake fix (bonus)
+- The `lasso-multi-select.spec.ts › arrow key moves all selected tokens` test relied on `Ctrl+ArrowRight` to advance the editor cursor. Editor focus moves into the modal via a `setTimeout(0)` after `openFor`, so the keystroke could fire before focus landed → the modal-scoped keydown handler missed it → cycle never advanced → the test compared first-token X to itself and failed. Swapped the keystroke for a click on the editor's *Next ›* button — equivalent semantics, no race. Surfaced under 0.56.1's slightly tighter boot timing on the Ubuntu runner.
+
 ### No other changes
 - Zero state / rendering / visual-baseline movement. `e2e/walls-selection.spec.ts` count: 5 → 6. Total Playwright: 123 → 124. Unit tests unchanged at 512.
 
