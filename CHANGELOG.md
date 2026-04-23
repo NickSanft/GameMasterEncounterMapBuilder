@@ -25,6 +25,24 @@ Post-1.0 roadmap, re-numbered after Phase 62 shipped:
 
 ---
 
+## [0.62.2] — 2026-04-23 — Remote Play: role-scoped modal (GM hosts, Spectator joins)
+
+### Changed
+- **Spectators can no longer host a Remote Play session.** Design point caught during post-0.62.1 review: GM is the authoritative source of truth for the session state — fog, scenes, tokens, etc. — and Spectators only mirror what the GM broadcasts. A Spectator "hosting" would offer an empty or stale session to anyone who joined, which is confusing and wrong. Conversely, a GM shouldn't be joining someone else's session (their local data would get overwritten).
+- **Each view now has exactly one flow:**
+  - **GM view** — Host only. Creates an invitation, waits for an answer, accepts it.
+  - **Spectator view** — Join only. Pastes an invitation, generates an answer, sends it back.
+- **Tab strip hidden** when only one role is available (both views currently). The modal opens directly on the right pane with no tab-switching affordance. If future releases add mixed-role scenarios (e.g. a spectator handoff), the tab strip logic is still in place — just data-driven off the `availableRoles` list so new view labels can opt in.
+- **Intro copy tailored per role**: the GM view explains the Host flow ("Invite a remote Spectator…"); the Spectator view explains the Join flow ("Join a remote GM's session…"). Both mention the role asymmetry briefly so the design is discoverable.
+
+### Tests
+- Updated `e2e/remote-play.spec.ts` to 6 specs: existing menu-opens-modal + Create-invitation passes, plus two new role-scoped UI specs (GM shows Host only + hides tab strip; Spectator shows Join only + hides tab strip + no `data-action="host-create"` in DOM), plus a **cross-context real-WebRTC** flow that generates an offer in a GM context and pastes it into a separate Spectator context's Join pane — verifies both Chromium contexts produce real SDP strings end-to-end.
+
+### No other changes
+- Tour / notes / transcription / theme / onboarding / sync-channel wiring unchanged. Bundle effectively unchanged.
+
+---
+
 ## [0.62.1] — 2026-04-23 — Remote Play: cap ICE gathering at 5 seconds
 
 ### Fixed

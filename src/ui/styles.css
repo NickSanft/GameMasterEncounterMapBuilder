@@ -3176,6 +3176,13 @@ body.reduced-motion .tour-popover {
   border-bottom: 1px solid var(--border);
 }
 
+/* 0.62.2 — the tab strip is hidden when only one role is available
+   (GM-only Host / Spectator-only Join). `display: flex` above
+   would otherwise override the native `hidden` attribute. */
+.remote-play-tabs[hidden] {
+  display: none;
+}
+
 .remote-play-tabs [role='tab'] {
   appearance: none;
   background: none;

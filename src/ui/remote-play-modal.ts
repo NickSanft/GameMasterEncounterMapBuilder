@@ -43,9 +43,23 @@ export interface RemotePlayModalOptions {
   viewLabel: 'GM' | 'Spectator';
 }
 
+/**
+ * 0.62.2: GM is the authoritative source of truth for the session;
+ * a Spectator's local state is just a mirror of what the GM has
+ * broadcast. So only the GM should be able to HOST (create an
+ * invitation) — a Spectator "hosting" would offer an empty / stale
+ * session to anyone who joined. Conversely, a GM shouldn't be
+ * joining someone else's session (their local data would get
+ * overwritten by the host's). Each role has exactly one flow.
+ */
+function rolesFor(viewLabel: 'GM' | 'Spectator'): readonly Role[] {
+  return viewLabel === 'GM' ? ['host'] : ['guest'];
+}
+
 export function mountRemotePlayModal(
   opts: RemotePlayModalOptions,
 ): RemotePlayModalHandle {
+  const availableRoles = rolesFor(opts.viewLabel);
   const backdrop = document.createElement('div');
   backdrop.className = 'modal-backdrop';
   backdrop.hidden = true;
@@ -55,25 +69,33 @@ export function mountRemotePlayModal(
   modal.setAttribute('role', 'dialog');
   modal.setAttribute('aria-modal', 'true');
   modal.setAttribute('aria-label', 'Remote play');
+  // 0.62.2: the tab strip is only rendered when both roles are
+  // available (not the default anymore). For GM + Spectator views
+  // each has exactly one role, so the strip is hidden + the single
+  // available pane is visible with no role-switching affordance.
+  const showTabs = availableRoles.length > 1;
+  // Which flow does the user's current view-label need? Drives the
+  // intro copy + the initial open tab.
+  const primaryRole: Role = availableRoles[0]!;
+  // Dynamic intro copy that explains what THIS view will do, rather
+  // than the old generic "connect two browsers" message.
+  const introCopy =
+    opts.viewLabel === 'GM'
+      ? 'Invite a remote Spectator to join this GM session via WebRTC. No signaling server required — share a short connection string once, then the session syncs the same way as a same-browser Spectator tab. (Hosting is GM-only — the GM owns the authoritative session state.)'
+      : 'Join a remote GM\u2019s session via WebRTC. Paste the invitation they sent you, copy the answer back, and your Spectator view will mirror the GM\u2019s map, tokens, fog, dice, and everything else. (Spectators can join but not host — only the GM can invite others.)';
+
   modal.innerHTML = `
     <div class="modal-header">
       <h2>Remote Play <span class="remote-play-beta">beta</span></h2>
       <button type="button" class="modal-close" aria-label="Close">×</button>
     </div>
     <div class="modal-body">
-      <p class="settings-hint remote-play-intro">
-        Connect two browsers across the internet via WebRTC. No server
-        required — exchange a short connection string once, then the
-        session syncs the same way as a same-browser Spectator tab.
-        Experimental: works best on LAN or with both peers behind
-        well-behaved NATs; if the connection fails, falling back to
-        exporting + importing a session file is usually quicker.
-      </p>
-      <div class="remote-play-tabs" role="tablist">
-        <button type="button" role="tab" data-role="host" aria-selected="true">Host a session</button>
-        <button type="button" role="tab" data-role="guest" aria-selected="false">Join a session</button>
+      <p class="settings-hint remote-play-intro">${introCopy}</p>
+      <div class="remote-play-tabs" role="tablist"${showTabs ? '' : ' hidden'}>
+        <button type="button" role="tab" data-role="host" aria-selected="${primaryRole === 'host' ? 'true' : 'false'}"${availableRoles.includes('host') ? '' : ' hidden'}>Host a session</button>
+        <button type="button" role="tab" data-role="guest" aria-selected="${primaryRole === 'guest' ? 'true' : 'false'}"${availableRoles.includes('guest') ? '' : ' hidden'}>Join a session</button>
       </div>
-      <section class="remote-play-pane" data-pane="host">
+      <section class="remote-play-pane" data-pane="host"${primaryRole === 'host' ? '' : ' hidden'}>
         <ol class="remote-play-steps">
           <li>Click <strong>Create invitation</strong> to generate a short connection code.</li>
           <li>Copy the invitation and share it with the other player (Discord, email, etc.).</li>
@@ -94,7 +116,7 @@ export function mountRemotePlayModal(
           <button type="button" class="primary" data-action="host-accept" disabled>Accept answer</button>
         </label>
       </section>
-      <section class="remote-play-pane" data-pane="guest" hidden>
+      <section class="remote-play-pane" data-pane="guest"${primaryRole === 'guest' ? '' : ' hidden'}>
         <ol class="remote-play-steps">
           <li>Paste the host's <strong>invitation</strong> below.</li>
           <li>Click <strong>Generate answer</strong> to produce your reply.</li>
@@ -161,6 +183,12 @@ export function mountRemotePlayModal(
   }
 
   function setTab(role: Role) {
+    // Defensive: if the requested role isn't allowed for this view-
+    // label (e.g. a Spectator tried to switch to Host), keep the
+    // current pane. Shouldn't happen since we don't render the
+    // disallowed tab, but the ignore makes the surface safer to
+    // extend in the future.
+    if (!availableRoles.includes(role)) return;
     for (const b of tabButtons) {
       const active = b.dataset['role'] === role;
       b.setAttribute('aria-selected', active ? 'true' : 'false');
@@ -280,9 +308,15 @@ export function mountRemotePlayModal(
 
   // ───────── Modal show/hide ─────────
   function open(): void {
-    setTab('host');
+    // Reset to the view's primary role every time the modal opens
+    // (in case the tab strip is ever shown + the user clicked around).
+    setTab(primaryRole);
     backdrop.hidden = false;
-    window.setTimeout(() => hostCreateBtn.focus(), 0);
+    // Focus the primary call-to-action button for the active role.
+    window.setTimeout(() => {
+      if (primaryRole === 'host') hostCreateBtn.focus();
+      else guestOfferTa.focus();
+    }, 0);
   }
   function close(): void {
     backdrop.hidden = true;
