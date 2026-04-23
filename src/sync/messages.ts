@@ -13,6 +13,7 @@ import type {
   TokenLight,
   Wall,
 } from '../state/types.js';
+import type { PlayerIdentity } from '../state/player-identity.js';
 
 function normalizeHp(hp: unknown): TokenHp | null {
   if (!hp || typeof hp !== 'object') return null;
@@ -89,6 +90,13 @@ export interface DiceRollBroadcast {
   /** Monotonically-increasing id (timestamp) so duplicate messages can
    * be de-duped by receivers. */
   id: number;
+  /**
+   * Phase 63 — display name of the player who rolled. Optional /
+   * back-compat: pre-Phase-63 receivers ignore it; new receivers
+   * use it to render "Alice rolled 1d20" instead of the bland
+   * "Spectator rolled 1d20".
+   */
+  senderName?: string;
 }
 
 export type SyncMessage =
@@ -98,7 +106,14 @@ export type SyncMessage =
   | { type: 'request-full-state' }
   | { type: 'camera'; camera: Camera }
   | { type: 'request-camera' }
-  | { type: 'ping'; x: number; y: number; color?: string }
+  | {
+      type: 'ping';
+      x: number;
+      y: number;
+      color?: string;
+      /** Phase 63 — display name of the player who emitted the ping. */
+      senderName?: string;
+    }
   | { type: 'spectator-viewport'; viewport: ViewportRect }
   | { type: 'dice-roll'; roll: DiceRollBroadcast }
   /**
@@ -106,7 +121,25 @@ export type SyncMessage =
    * GM tabs can detect that they're double-booked. Each tab has a
    * session-random id; two tabs see conflicting ids and can warn.
    */
-  | { type: 'gm-heartbeat'; tabId: string };
+  | { type: 'gm-heartbeat'; tabId: string }
+  /**
+   * Phase 63 — broadcast a tab's player identity so the GM can
+   * render a "Connected players" panel + so dice / pings can be
+   * attributed by name. Sent on connect + whenever the user edits
+   * their name or color in Settings. Receivers upsert by `id`.
+   *
+   * Optional + back-compat: peers that don't send `identity` show
+   * up as "Anonymous" / role-default in the GM panel.
+   */
+  | { type: 'identity'; identity: PlayerIdentity }
+  /**
+   * Phase 63 — explicit "I'm leaving" signal so the GM panel can
+   * remove the entry without waiting for the BroadcastChannel /
+   * WebRTC layer to detect the disconnect (which has higher
+   * latency, especially on a clean tab close where no ICE timeout
+   * fires).
+   */
+  | { type: 'identity-leave'; id: string };
 
 export function serializeState(s: SessionState): SerializedSessionState {
   return {

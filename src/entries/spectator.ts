@@ -4,6 +4,13 @@ import { createStore } from '../state/store.js';
 import { DEFAULT_CAMERA } from '../state/types.js';
 import { createSyncChannel } from '../sync/channel.js';
 import { mountRemotePlayModal } from '../ui/remote-play-modal.js';
+import {
+  colorForName,
+  createIdentityRegistry,
+  resolveName,
+  type PlayerIdentity,
+} from '../state/player-identity.js';
+import { nid } from '../util/id.js';
 import { deserializeState, fromSerializablePatch } from '../sync/messages.js';
 import {
   loadPersistedState,
@@ -199,7 +206,13 @@ mountHelpOverlay('spectator');
 const dicePanel = mountDicePanel({
   viewMode: 'spectator',
   onLocalRoll: (roll) => {
-    channel?.send({ type: 'dice-roll', roll });
+    // Phase 63 — stamp the roll with our display name so the GM's
+    // panel + announcer say "Alice rolled 1d20" instead of just
+    // "Spectator rolled 1d20". `ownIdentity` is declared later in
+    // the module but only called when the user rolls (runtime lookup
+    // is fine; TypeScript is happy with the lexical reference).
+    const stamped = { ...roll, senderName: ownIdentity().name };
+    channel?.send({ type: 'dice-roll', roll: stamped });
     announcer.announce(`You rolled ${roll.source}: ${roll.total}.`);
   },
 });
@@ -306,6 +319,37 @@ function broadcastViewport() {
 
 const broadcastViewportThrottled = rafThrottle(broadcastViewport);
 
+// ─── Phase 63 — Player identity (Spectator) ─────────────────────
+const playerId = nid();
+const identityRegistry = createIdentityRegistry();
+
+function ownIdentity(): PlayerIdentity {
+  const prefs = preferences.get();
+  const displayName = resolveName(prefs.playerName, 'spectator');
+  const color = prefs.playerColor || colorForName(displayName);
+  return { id: playerId, name: displayName, color, role: 'spectator' };
+}
+
+function broadcastIdentity(): void {
+  if (!channel) return;
+  const id = ownIdentity();
+  identityRegistry.update(id);
+  channel.send({ type: 'identity', identity: id });
+}
+
+let lastBroadcastIdentity = '';
+preferences.subscribe(() => {
+  const id = ownIdentity();
+  const sig = `${id.name}|${id.color}`;
+  if (sig === lastBroadcastIdentity) return;
+  lastBroadcastIdentity = sig;
+  broadcastIdentity();
+});
+
+window.addEventListener('beforeunload', () => {
+  channel?.send({ type: 'identity-leave', id: playerId });
+});
+
 if (channel) {
   channel.onMessage((msg) => {
     if (msg.type === 'full-state') {
@@ -318,18 +362,30 @@ if (channel) {
       applyRemoteCamera(msg.camera);
     } else if (msg.type === 'ping') {
       pingManager.add(msg.x, msg.y, msg.color);
+      if (msg.senderName) announcer.announce(`${msg.senderName} pinged the map.`);
     } else if (msg.type === 'hello' && msg.from === 'gm') {
       // GM just loaded — (re)announce our viewport so the indicator appears.
       broadcastViewportThrottled();
+      // Phase 63 — also re-broadcast our identity so the GM's
+      // Connected Players panel updates for reload scenarios.
+      broadcastIdentity();
     } else if (msg.type === 'dice-roll') {
       dicePanel.pushRemoteRoll(msg.roll);
       if (msg.roll.from !== 'spectator') {
-        announcer.announce(`GM rolled ${msg.roll.source}: ${msg.roll.total}.`);
+        const who = msg.roll.senderName ?? 'GM';
+        announcer.announce(`${who} rolled ${msg.roll.source}: ${msg.roll.total}.`);
       }
+    } else if (msg.type === 'identity') {
+      identityRegistry.update(msg.identity);
+    } else if (msg.type === 'identity-leave') {
+      identityRegistry.forget(msg.id);
     }
   });
   channel.send({ type: 'hello', from: 'spectator' });
   broadcastViewportThrottled();
+  // Phase 63 — broadcast our identity on boot so the GM knows
+  // who just connected without waiting for a ping / dice roll.
+  broadcastIdentity();
 } else {
   showSyncWarning();
 }

@@ -126,6 +126,20 @@ export interface Preferences {
    * loadFromStorage path treats missing keys as the default value.
    */
   onboardingComplete: boolean;
+  /**
+   * Phase 63 — display name shown to peers. Empty string means
+   * "anonymous" → the player-identity helpers fall back to "GM" /
+   * "Spectator" for display + a hashed-from-name color. Persisted
+   * across reloads.
+   */
+  playerName: string;
+  /**
+   * Phase 63 — display color for the player's chip / dot. Empty
+   * string means "use the hashed-from-name default" (so two players
+   * with the same name look the same; two with different names
+   * usually look different). Hex `#rgb` or `#rrggbb`.
+   */
+  playerColor: string;
 }
 
 export const DEFAULT_PREFERENCES: Preferences = {
@@ -152,6 +166,8 @@ export const DEFAULT_PREFERENCES: Preferences = {
   autoRevealFromViewers: false,
   voiceTranscription: true,
   onboardingComplete: false,
+  playerName: '',
+  playerColor: '',
 };
 
 export interface PreferencesStore {

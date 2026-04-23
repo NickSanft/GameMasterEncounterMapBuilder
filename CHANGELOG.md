@@ -18,10 +18,37 @@ Every release is an annotated git tag (`vX.Y.Z`) on the commit that introduced t
 
 ## [Unreleased]
 
-Post-1.0 roadmap, re-numbered after Phase 62 shipped:
+Post-1.0 roadmap, re-numbered after Phase 63 shipped:
 
-- **0.63.0** — Rooms + player identity
 - **0.64.0** — Reconnection + conflict resolution
+
+---
+
+## [0.63.0] — 2026-04-23 — Player identity + Connected Players panel
+
+### Added
+- **Display name + color per tab.** Settings → Accessibility → "Your identity" exposes a text field (defaults: empty → "GM" / "Spectator" based on the view) and a color picker (defaults: empty → stable hash-of-name color so the same name always renders consistently). Both round-trip through `localStorage` like every other preference.
+- **Stable per-tab `playerId`** generated at boot. Pairs with the user's `(name, color, role)` to make a `PlayerIdentity` that gets broadcast over the existing sync transport (BroadcastChannel for same-browser + WebRTC for remote peers from Phase 62).
+- **`identity` + `identity-leave` sync messages**. Optional + back-compat — receivers that don't know about them just ignore. Broadcast on tab boot, on every name/color edit, and on `beforeunload` (so the GM panel updates fast on a clean tab close).
+- **GM-side Connected Players panel** anchored to the top-center of the viewport. Renders one chip per player with their color dot + name + role-aware border (GM chips get the accent color). Local tab's chip is marked "(you)" so the GM can tell at a glance which one represents them. Hidden when only the local tab is in the registry (no noise when nobody else is connected).
+- **Attribution on dice + pings** — the GM and Spectator entries stamp outbound `ping` + `dice-roll` messages with `senderName: ownIdentity().name`. Receivers' announcer says `"Alice rolled 1d20: 17"` instead of the bland `"Spectator rolled 1d20: 17"`.
+- **Help overlay** gets a new *Player identity* section walking through name + color setup, the Connected Players panel, attribution, and the privacy story (everything stays in `localStorage` on your machine; only sent to peers you've explicitly connected with).
+
+### Implementation notes
+- New pure module `src/state/player-identity.ts` exports the `PlayerIdentity` type, `colorForName(name)` (FNV-ish hash → 10-color palette), `resolveName(raw, role)` (empty → role-default), `validateColor(raw)` (`#rgb` / `#rrggbb` only), and `createIdentityRegistry()` (Map-backed peer collector with subscribe/forget/list/clear).
+- The `IdentityRegistry` lives in BOTH the GM and the Spectator entries. The GM uses it to render the Connected Players panel; the Spectator uses it for ping attribution. Same data, different consumers.
+- `preferences.ts` cross-tab `storage` event sync means same-browser tabs share the user's name + color — desirable for the typical "one human, one machine, two tabs" case (your name should be the same whether you're looking at your GM tab or your own peeking-Spectator tab). Tests that try to verify *distinct* names across tabs need to use separate BrowserContexts; the e2e instead verifies role-based chip presence, which works under shared prefs.
+
+### Tests
+- **+19 unit tests** in `src/state/player-identity.test.ts` covering: `colorForName` stability + collision check + fallback for empty input + valid-hex sanity, `resolveName` trim + role-default, `validateColor` accept/reject/whitespace, `IdentityRegistry` insert/overwrite/no-op-on-identical-update/forget/forget-unknown/list-order/subscribe-unsubscribe/clear/clear-empty.
+- **+4 Playwright specs** in `e2e/player-identity.spec.ts`: Settings exposes name+color and they round-trip, panel hides when alone, panel shows two role-distinct chips when GM + Spectator are open, name change re-renders the chip without duplicating.
+- All 57 unit-test files green: 619 unit tests total (+19 from 0.62.2's 600). 164 Playwright specs (+4 from 0.62.2's 160).
+
+### Bundle
+- Adds ~2 KB JS (player-identity module + connected-players panel + the wiring + the Settings UI). Bundle now at **75.41 KB brotli**, which crossed the original Phase-52 budget of 75 KB by 413 bytes. **Bumped the budget to 80 KB** to give room for incremental phase-by-phase growth (~600 bytes per phase since Phase 52). Easy enough to revisit if a future phase wants to be more aggressive about tree-shaking.
+
+### No behavior change for legacy maps
+- Identity messages are optional. Tabs talking to a < 0.63 peer just don't see that peer in their registry — everything else (patches, fog, dice rolls) keeps working. Sessions / scenes / persistence unchanged.
 
 ---
 

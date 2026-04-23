@@ -72,6 +72,8 @@ export function mountSettingsModal(
   const highContrastInput = modal.querySelector<HTMLInputElement>('[data-field="highContrast"]')!;
   const colorblindInput = modal.querySelector<HTMLInputElement>('[data-field="colorblindMarkers"]')!;
   const voiceTranscriptionInput = modal.querySelector<HTMLInputElement>('[data-field="voiceTranscription"]')!;
+  const playerNameInput = modal.querySelector<HTMLInputElement>('[data-field="playerName"]')!;
+  const playerColorInput = modal.querySelector<HTMLInputElement>('[data-field="playerColor"]')!;
   const labelSizeRadios = Array.from(
     modal.querySelectorAll<HTMLInputElement>('input[name="settings-label-size"]'),
   );
@@ -154,6 +156,10 @@ export function mountSettingsModal(
     highContrastInput.checked = prefs.highContrast;
     colorblindInput.checked = prefs.colorblindMarkers;
     voiceTranscriptionInput.checked = prefs.voiceTranscription;
+    playerNameInput.value = prefs.playerName;
+    // Color input needs a concrete hex; fall back to a placeholder
+    // gray when the user hasn't picked a custom color.
+    playerColorInput.value = prefs.playerColor || '#9e9e9e';
     for (const r of labelSizeRadios) r.checked = r.value === prefs.labelSize;
     for (const r of themeRadios) r.checked = r.value === prefs.theme;
     if (gmFogColorInput) gmFogColorInput.value = prefs.gmFogColor;
@@ -270,6 +276,13 @@ export function mountSettingsModal(
 
   voiceTranscriptionInput.addEventListener('change', () => {
     preferences.update({ voiceTranscription: voiceTranscriptionInput.checked });
+  });
+
+  playerNameInput.addEventListener('change', () => {
+    preferences.update({ playerName: playerNameInput.value.trim() });
+  });
+  playerColorInput.addEventListener('change', () => {
+    preferences.update({ playerColor: playerColorInput.value });
   });
 
   for (const r of labelSizeRadios) {
@@ -607,6 +620,16 @@ function renderAccessibilityPane(): string {
         <span>Voice transcription (microphone in Notes panel)</span>
       </label>
       <p class="settings-hint">Adds a 🎤 button to the Session Notes panel that uses your browser's speech recognition to transcribe what you say into the notes textarea. The mic only activates when you click the button. Hidden automatically on browsers that don't support speech recognition (e.g. Firefox today).</p>
+      <fieldset class="settings-subgroup">
+        <legend>Your identity</legend>
+        <label>Display name
+          <input type="text" data-field="playerName" maxlength="32" placeholder="(empty = GM / Spectator)" />
+        </label>
+        <label>Color
+          <input type="color" data-field="playerColor" />
+        </label>
+        <p class="settings-hint">Phase 63 — shown to other players in the Connected Players panel + on dice rolls and pings. The color falls back to a stable hash of your name if you don't pick one explicitly, so the same name looks the same across sessions.</p>
+      </fieldset>
     </section>
   `;
 }

@@ -161,6 +161,16 @@ const GM_SECTIONS: HelpSection[] = [
     ],
   },
   {
+    title: 'Player identity',
+    intro: 'Set a display name + color so other players in the session know who you are. Visible on the GM\u2019s Connected Players panel + on dice rolls and pings.',
+    entries: [
+      { name: 'Set your name', desc: 'Settings \u2192 Accessibility \u2192 "Your identity" \u2192 type a name. Also pick a color (or leave it blank for a stable hash-of-name default — same name always picks the same color, so you stay recognizable across sessions).' },
+      { name: 'Connected Players panel', desc: 'When at least one other tab is connected (same-browser or via Remote Play), a small chip strip appears at the top of the GM\u2019s view showing every player\u2019s name + color + role. The local tab\u2019s chip is marked "(you)".' },
+      { name: 'Attribution on dice + pings', desc: 'Dice rolls and pings carry your display name in their broadcast envelope. The announcer says "Alice rolled 1d20: 17" instead of the bland "Spectator rolled 1d20" so the GM knows whose action just landed.' },
+      { name: 'Privacy', desc: 'Your name + color live in localStorage on YOUR machine and only get sent to peers you\u2019ve explicitly connected with (same-browser BroadcastChannel or accepted WebRTC peer). They\u2019re not stored anywhere on the server side — there isn\u2019t one.' },
+    ],
+  },
+  {
     title: 'Remote play (beta)',
     intro: 'Connect two browsers across the internet via WebRTC. No server required — just share a short connection string once, then the session syncs the same way as a same-browser Spectator tab.',
     entries: [

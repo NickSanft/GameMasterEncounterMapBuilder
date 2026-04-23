@@ -98,6 +98,13 @@ import { mountNotesPanel } from '../ui/notes-panel.js';
 import { mountOnboardingTour } from '../ui/onboarding-tour.js';
 import { createTourController, GM_TOUR_STEPS } from '../state/onboarding-tour.js';
 import { mountRemotePlayModal } from '../ui/remote-play-modal.js';
+import {
+  colorForName,
+  createIdentityRegistry,
+  resolveName,
+  type PlayerIdentity,
+} from '../state/player-identity.js';
+import { mountConnectedPlayersPanel } from '../ui/connected-players-panel.js';
 import { mountShortcutOverlay } from '../ui/shortcut-overlay.js';
 import { mountInitiativeBar } from '../ui/initiative-bar.js';
 import { mountInitiativeModal } from '../ui/initiative-modal.js';
@@ -840,14 +847,23 @@ void loadPersistedState().then(async (persisted) => {
 const dicePanel = mountDicePanel({
   viewMode: 'gm',
   onLocalRoll: (roll) => {
-    channel?.send({ type: 'dice-roll', roll });
+    // Phase 63 — stamp the roll with our display name so remote
+    // panels can render "Alice rolled 1d20" instead of generic
+    // "GM rolled 1d20".
+    const stamped = { ...roll, senderName: ownIdentity().name };
+    channel?.send({ type: 'dice-roll', roll: stamped });
     announcer.announce(`You rolled ${roll.source}: ${roll.total}.`);
   },
 });
 
 function ping(worldX: number, worldY: number) {
   pingManager.add(worldX, worldY);
-  channel?.send({ type: 'ping', x: worldX, y: worldY });
+  channel?.send({
+    type: 'ping',
+    x: worldX,
+    y: worldY,
+    senderName: ownIdentity().name,
+  });
 }
 
 canvas.addEventListener('contextmenu', (e) => {
@@ -1146,6 +1162,53 @@ const remotePlayModal = channel
   ? mountRemotePlayModal({ channel, viewLabel: 'GM' })
   : null;
 
+// ─── Phase 63 — Player identity ────────────────────────────────────
+// Stable per-tab id (regenerated each boot — reload = new session).
+const playerId = nid();
+const identityRegistry = createIdentityRegistry();
+
+function ownIdentity(): PlayerIdentity {
+  const prefs = preferences.get();
+  const displayName = resolveName(prefs.playerName, 'gm');
+  const color = prefs.playerColor || colorForName(displayName);
+  return { id: playerId, name: displayName, color, role: 'gm' };
+}
+
+function broadcastIdentity(): void {
+  if (!channel) return;
+  const id = ownIdentity();
+  // Track our own identity in the local registry too so the
+  // Connected Players panel includes us in the list.
+  identityRegistry.update(id);
+  channel.send({ type: 'identity', identity: id });
+}
+
+// Mount the Connected Players panel — the GM's at-a-glance view of
+// every Spectator currently in the room. Hidden when nobody else is
+// connected (one entry = just the GM = no panel). The returned
+// handle goes unused (we never explicitly destroy it — the lifetime
+// is tied to the page) but we still call the factory for its side
+// effect of mounting the DOM element.
+void mountConnectedPlayersPanel({
+  registry: identityRegistry,
+  selfId: playerId,
+});
+
+// Re-broadcast identity when the user edits name / color in Settings.
+let lastBroadcastIdentity = '';
+preferences.subscribe(() => {
+  const id = ownIdentity();
+  const sig = `${id.name}|${id.color}`;
+  if (sig === lastBroadcastIdentity) return;
+  lastBroadcastIdentity = sig;
+  broadcastIdentity();
+});
+
+// Polite "I'm leaving" on tab close so the remote panel updates fast.
+window.addEventListener('beforeunload', () => {
+  channel?.send({ type: 'identity-leave', id: playerId });
+});
+
 // ---- Conflict detection + crash recovery ---------------------------------
 // Every GM tab gets a random id + broadcasts it every ~2 s. Two open GMs
 // see each other and surface a banner. The dirty flag is atomic: boot
@@ -1235,6 +1298,9 @@ if (channel) {
       if (!initialLoadComplete) return;
       channel.send({ type: 'full-state', state: serializeState(store.getState()) });
       sendCameraIfBroadcasting();
+      // Phase 63 — re-broadcast our identity whenever a new
+      // spectator joins so they immediately see who's hosting.
+      broadcastIdentity();
     } else if (msg.type === 'request-full-state') {
       if (!initialLoadComplete) return;
       channel.send({ type: 'full-state', state: serializeState(store.getState()) });
@@ -1243,6 +1309,9 @@ if (channel) {
       sendCameraIfBroadcasting();
     } else if (msg.type === 'ping') {
       pingManager.add(msg.x, msg.y, msg.color);
+      if (msg.senderName) {
+        announcer.announce(`${msg.senderName} pinged the map.`);
+      }
     } else if (msg.type === 'spectator-viewport') {
       spectatorViewportRef.current = msg.viewport;
       spectatorViewportRef.lastUpdate = Date.now();
@@ -1250,11 +1319,16 @@ if (channel) {
     } else if (msg.type === 'dice-roll') {
       dicePanel.pushRemoteRoll(msg.roll);
       if (msg.roll.from !== 'gm') {
-        announcer.announce(`Spectator rolled ${msg.roll.source}: ${msg.roll.total}.`);
+        const who = msg.roll.senderName ?? 'Spectator';
+        announcer.announce(`${who} rolled ${msg.roll.source}: ${msg.roll.total}.`);
       }
     } else if (msg.type === 'gm-heartbeat') {
       conflictDetector.noteHeartbeat(msg.tabId, Date.now());
       checkConflictBanner();
+    } else if (msg.type === 'identity') {
+      identityRegistry.update(msg.identity);
+    } else if (msg.type === 'identity-leave') {
+      identityRegistry.forget(msg.id);
     }
   });
 }
@@ -1263,6 +1337,9 @@ function broadcastInitial(): void {
   if (!channel) return;
   channel.send({ type: 'hello', from: 'gm' });
   channel.send({ type: 'full-state', state: serializeState(store.getState()) });
+  // Phase 63 — also broadcast our identity so any listening
+  // Spectator immediately sees who's hosting the session.
+  broadcastIdentity();
 }
 
 const broadcastCameraThrottled = rafThrottle(sendCameraIfBroadcasting);
