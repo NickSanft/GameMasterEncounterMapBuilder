@@ -27,6 +27,26 @@ Post-1.0 roadmap, re-numbered after Phase 60 shipped:
 
 ---
 
+## [0.60.1] — 2026-04-23 — Phase 60 boot crash + dice/help button alignment
+
+### Fixed
+- **GM canvas was empty after upgrading to 0.60.0** when the notes panel was closed. The Scenes button click also threw "Cannot access 'scenesModal' before initialization" with no modal opening. Both errors had the same root cause: `notes-panel.ts` called `setOpen(initiallyOpen)` BEFORE its `let transcriber` declaration, but `setOpen(false)` references `transcriber?.isActive()` in its panel-closes-while-recording branch. The TDZ throw at `notes-panel.ts:203` aborted the rest of `gm.ts` module evaluation — every `const`/`let` declared after `mountNotesPanel()` (including `scenesModal`) was left in TDZ, so anything referencing them later (the Scenes button click lambda, `loadPersistedState().then(store.loadState)`) crashed too. Net effect: GM rendered the empty default state and several UI controls silently failed.
+- **Fix**: hoist the `let transcriber` and `let statusIsError` declarations to the very top of `mountNotesPanel`, before the initial `setOpen()` call. The function-scoped declarations now exist by the time `setOpen` evaluates their references in the (initially-not-taken) else branch.
+- **Why CI didn't catch it**: every existing notes-panel test pre-set `notes-open` to `true` in localStorage, which made `setOpen(true)` go into the `if (next)` branch and skip the TDZ-affected else branch. Pinned with a new spec that exercises the failing path.
+
+- **Floating Dice 🎲 + Help ❓ buttons jumped ~320px to the right when the notes panel opened** in the GM view. The notes panel itself lives on the RIGHT side of the viewport (`.notes-panel { right: 0 }`), so left-side floating buttons should never need to make room for it. The `body.notes-open .dice-button` / `body.notes-open .help-button` rules that shifted them rightward were a leftover copy-paste from a draft layout where the panel had been on the left — never noticed pre-Phase-60 because the user rarely opened the notes panel. **Fix**: deleted both `body.notes-open` shift rules. The buttons now stay anchored at bottom-left in every notes-open / notes-closed state. Session menu + zoom controls still shift correctly (those ARE on the right and DO need to move).
+
+### Regression test added
+- New Playwright spec `e2e/boot-no-tdz.spec.ts` with two pins:
+  1. **Cold-boot GM (notes panel closed) does not throw + Scenes button works** — explicitly clears the `notes-open` LS key, loads `gm.html`, asserts no `Cannot access` console errors, then clicks the Scenes button and verifies its dialog opens.
+  2. **Dice + Help buttons stay bottom-left when the notes panel is open** — pre-sets `notes-open=true`, asserts both buttons' computed `left` is under 50px (pre-fix: ~333px).
+- Both were verified to PASS only with the 0.60.1 code.
+
+### No other changes
+- Voice transcription wrapper, mic UI, settings toggle, and CHANGELOG entry from 0.60.0 are all unchanged. Bundle effectively unchanged. 559 unit tests + 156 Playwright specs green.
+
+---
+
 ## [0.60.0] — 2026-04-23 — Voice transcription → notes
 
 ### Added

@@ -73,6 +73,22 @@ export function mountNotesPanel(opts: NotesPanelOptions = {}): NotesPanelHandle 
   const micBtn = panel.querySelector<HTMLButtonElement>('.notes-panel-mic')!;
   const status = panel.querySelector<HTMLParagraphElement>('[data-field="status"]')!;
 
+  // ─── Voice transcription wiring (Phase 60) ────────────────────────
+  // These two `let`s MUST be declared before the initial `setOpen()`
+  // call below — `setOpen(false)` references `transcriber` in its
+  // panel-closes-while-recording branch, which would TDZ-crash the
+  // entire gm.ts boot if the declaration came later. (Caught in
+  // 0.60.1 — the cascade also broke the Scenes-button click handler
+  // because gm.ts crashed before `scenesModal` was initialized.)
+  let transcriber: VoiceTranscriber | null = null;
+  // Tracks whether the visible status banner is an error — used to
+  // decide whether `clearStatus()` (called on recognizer-end) should
+  // wipe the message or leave it up. We want errors to stay readable
+  // even after the recognizer naturally shuts down so the user knows
+  // why nothing's happening; success-path "Listening…" status SHOULD
+  // disappear on stop.
+  let statusIsError = false;
+
   textarea.value = localStorage.getItem(NOTES_TEXT_KEY) ?? '';
   const initiallyOpen = localStorage.getItem(NOTES_OPEN_KEY) === 'true';
   setOpen(initiallyOpen, { persist: false });
@@ -86,17 +102,6 @@ export function mountNotesPanel(opts: NotesPanelOptions = {}): NotesPanelHandle 
   }, 250);
 
   textarea.addEventListener('input', persist);
-
-  // ─── Voice transcription wiring (Phase 60) ────────────────────────
-  let transcriber: VoiceTranscriber | null = null;
-
-  // Tracks whether the visible status banner is an error — used to
-  // decide whether `clearStatus()` (called on recognizer-end) should
-  // wipe the message or leave it up. We want errors to stay readable
-  // even after the recognizer naturally shuts down so the user knows
-  // why nothing's happening; success-path "Listening…" status SHOULD
-  // disappear on stop.
-  let statusIsError = false;
 
   function showStatus(message: string, kind: 'info' | 'error' = 'info'): void {
     status.textContent = message;

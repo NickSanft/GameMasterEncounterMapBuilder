@@ -2514,9 +2514,15 @@ body.notes-open .mini-map {
 
 .dice-button:active { transform: translateY(0); }
 
-body.notes-open .dice-button {
-  left: calc(320px + 0.85rem);
-}
+/* 0.60.1 — the notes panel lives on the RIGHT side (`right: 0`), so
+   the LEFT-side dice button doesn't need to move when the panel
+   opens. The original rule (a hand-me-down from a draft layout
+   where the panel had been on the left) shifted the dice button
+   rightward as if the panel ate left-side space — a long-standing
+   pre-existing bug, not noticeable until the user opened the panel
+   and wondered why the dice + help buttons jumped. Keeping the
+   rule deleted so both stay anchored at bottom-left in every
+   notes-open / notes-closed combination. */
 
 /* Dice panel modal */
 .dice-panel {
@@ -2732,10 +2738,9 @@ body.notes-open .dice-button {
   transform: translateY(0);
 }
 
-/* When the notes panel is open, nudge the help button inward so it stays visible. */
-body.notes-open .help-button {
-  left: calc(320px + 0.85rem);
-}
+/* 0.60.1 — same fix as `.dice-button` above: the notes panel is on
+   the right, so the help button doesn't need to nudge anywhere when
+   it opens. Pre-existing copy-paste of the wrong shift. */
 
 /* Help / tutorial overlay modal */
 .help-overlay {
