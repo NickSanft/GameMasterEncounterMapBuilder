@@ -161,6 +161,16 @@ const GM_SECTIONS: HelpSection[] = [
     ],
   },
   {
+    title: 'Voice transcription',
+    intro: 'Talk during play and have your words land in the Session Notes panel automatically. Browser-side; no audio leaves your machine if your browser uses on-device speech recognition.',
+    entries: [
+      { name: 'Where', desc: 'Open Session Notes (left-side menu) → tap the 🎤 button next to the close button. The first time, your browser will ask for microphone permission.' },
+      { name: 'How', desc: 'While active a red dot pulses on the mic button and a "Listening…" status bar shows your in-progress utterance. Each finalized sentence (after a brief pause) gets appended to the notes textarea — never the interim text, so you don\u2019t see typo-grade noise.' },
+      { name: 'Stop', desc: 'Click the mic again to stop, or close the notes panel — both stop the recognizer and release the mic.' },
+      { name: 'Browser support', desc: 'Works on Chrome, Edge, and recent Safari (which all expose the Web Speech API). Firefox doesn\u2019t expose it today, so the mic button is hidden there. You can also disable the button entirely under Settings → Accessibility → "Voice transcription" if you don\u2019t want it on shared devices.' },
+    ],
+  },
+  {
     title: 'Themes',
     intro: 'Settings → Appearance → Theme picks a base color palette for the whole UI. Layout / behavior is identical across themes — only the look changes.',
     entries: [

@@ -2036,6 +2036,12 @@ body.reduced-motion *::after {
   font-weight: 600;
 }
 
+.notes-panel-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
 .notes-panel-close {
   appearance: none;
   background: none;
@@ -2049,6 +2055,83 @@ body.reduced-motion *::after {
 
 .notes-panel-close:hover {
   color: var(--fg);
+}
+
+/* Phase 60 — voice-transcription mic button. The pulse element rides
+   along with the button DOM but only animates while the recognizer is
+   active (driven by the `.active` class on the button). */
+.notes-panel-mic {
+  appearance: none;
+  background: none;
+  border: 1px solid transparent;
+  color: var(--fg-muted);
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0.2rem 0.45rem;
+  border-radius: 4px;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.notes-panel-mic[hidden] {
+  display: none;
+}
+
+.notes-panel-mic:hover {
+  color: var(--fg);
+  background: var(--hover-overlay);
+}
+
+.notes-panel-mic.active {
+  color: #ff5252;
+  border-color: #ff5252;
+}
+
+.notes-panel-mic .mic-pulse {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #ff5252;
+  opacity: 0;
+}
+
+.notes-panel-mic.active .mic-pulse {
+  opacity: 1;
+  animation: mic-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes mic-pulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50%      { transform: scale(1.7); opacity: 0.4; }
+}
+
+body.reduced-motion .notes-panel-mic.active .mic-pulse {
+  animation: none;
+}
+
+.notes-panel-status {
+  margin: 0;
+  padding: 0.45rem 0.8rem;
+  background: var(--bg);
+  color: var(--fg-muted);
+  font-size: 0.78rem;
+  border-bottom: 1px solid var(--border);
+  font-style: italic;
+}
+
+.notes-panel-status.error {
+  color: var(--accent);
+  font-style: normal;
+}
+
+.notes-panel-status[hidden] {
+  display: none;
 }
 
 .notes-panel-textarea {

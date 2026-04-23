@@ -99,6 +99,21 @@ export interface Preferences {
    * on first boot of 0.58.
    */
   autoRevealFromViewers: boolean;
+  /**
+   * Phase 60 — voice transcription → notes. When true, a 🎤 button
+   * appears in the Session Notes panel header; clicking it starts
+   * the browser's SpeechRecognition pipeline and appends finalized
+   * transcripts to the notes textarea. Default true (it's a privacy-
+   * neutral default — the mic only activates when the user clicks
+   * the button), but the toggle is exposed in Settings → Accessibility
+   * for users who want to suppress the button entirely on shared
+   * devices or never-mic-please setups.
+   *
+   * The mic button is also automatically hidden when the browser
+   * doesn't expose `SpeechRecognition` (Firefox today) — this pref
+   * only controls the show/hide behavior on supported browsers.
+   */
+  voiceTranscription: boolean;
 }
 
 export const DEFAULT_PREFERENCES: Preferences = {
@@ -123,6 +138,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   showMiniMap: false,
   losMode: 'off',
   autoRevealFromViewers: false,
+  voiceTranscription: true,
 };
 
 export interface PreferencesStore {

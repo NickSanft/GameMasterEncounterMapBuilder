@@ -18,13 +18,43 @@ Every release is an annotated git tag (`vX.Y.Z`) on the commit that introduced t
 
 ## [Unreleased]
 
-Post-1.0 roadmap, re-numbered after Phase 59 shipped:
+Post-1.0 roadmap, re-numbered after Phase 60 shipped:
 
-- **0.60.0** — Voice transcription → notes
 - **0.61.0** — Onboarding tour
 - **0.62.0** — Network sync: WebRTC transport
 - **0.63.0** — Rooms + player identity
 - **0.64.0** — Reconnection + conflict resolution
+
+---
+
+## [0.60.0] — 2026-04-23 — Voice transcription → notes
+
+### Added
+- **Speech-to-text in the Session Notes panel.** A new 🎤 button appears in the notes panel header on browsers that support the Web Speech API (Chrome / Edge / recent Safari). Click to start listening; the recognizer streams what you say and appends each finalized utterance to the notes textarea. The mic only activates on click — no always-on capture.
+- **Live "Listening…" status banner** above the textarea shows the recognizer state. While speaking, the interim (un-finalized) text is mirrored into the banner so the GM sees their words landing in real time. Only finalized chunks (post-pause) get committed to the notes.
+- **Pulsing red dot** on the mic button while active. Honors `prefers-reduced-motion` (the dot stays solid red instead of pulsing).
+- **Permission-error UX** — denied / blocked / no-mic / network errors surface in the status banner with a friendly message ("Microphone access blocked. Allow it in your browser settings, then try again."). Errors stay visible after the recognizer ends so the user can read them; the next click on the mic clears the banner.
+- **Settings → Accessibility** gets a new toggle *"Voice transcription (microphone in Notes panel)"* (default on). Turning it off hides the mic button entirely — useful for shared / kiosk setups where you never want a one-click mic affordance. The toggle is functional even on browsers that don't expose `SpeechRecognition` (Firefox today); the button stays hidden either way on those.
+- **Help overlay** gets a new *Voice transcription* section walking through where, how, stop, and the browser-support caveat.
+
+### Implementation notes
+- New pure module `src/util/voice-transcription.ts` wraps the Web Speech API. Detects either `window.SpeechRecognition` or `window.webkitSpeechRecognition` (Chrome / older Safari shipped the prefixed name). Returns a typed `VoiceTranscriber` with `start` / `stop` / `isActive` / `onTranscript` / `onStateChange` / `onError` / `destroy` — no recognizer internals leak to consumers.
+- **Auto-restart on silence** — most browsers end the recognition session after ~30s of silence even with `continuous: true`. The wrapper detects the natural `onend`, checks whether the user explicitly stopped, and re-starts otherwise. Permission-class errors flip an internal flag so we don't ping-pong start/error/end forever.
+- **Coalesced transcript events** — `onTranscript` listeners receive `(finalText, interimText)` shaped objects instead of having to walk the raw `SpeechRecognitionResultList`. Final text is what gets appended to the textarea; interim is just shown in the status banner.
+- **Notes panel mounts the recognizer lazily** — `createVoiceTranscriber()` only fires on the first mic click, so unsupported browsers + privacy-off setups don't pay any cost. Closing the notes panel while recording stops the recognizer (no orphaned mic state).
+- New `voiceTranscription: boolean` preference defaults to `true`. Hidden behind the same body-class machinery as other prefs; cross-tab `storage` event already in place.
+
+### Tests
+- **+14 unit tests** in `src/util/voice-transcription.test.ts` covering: feature-detection (no-ctor / standard / webkit-prefixed), default + explicit `lang`, state machine (start / no-double-start / stop), final+interim split, permission-denied error code mapping + auto-restart suppression, natural-end auto-restart, destroy-aborts-and-clears-listeners, unknown-error mapping. Stub recognizer is fully sync — no flaky timing.
+- **+5 Playwright specs** in `e2e/voice-transcription.spec.ts` using `addInitScript` to inject a stub `SpeechRecognition` so the tests don't depend on a real mic / permission grant. Covers: mic button visible by default, hidden when pref is off, click toggles `aria-pressed` + listening status, final transcript appends to textarea, permission-denied error surfaces in error-styled status banner with auto-restart suppressed.
+- All 53 unit-test files green: 559 unit tests total (+14 from 0.59.0's 545).
+
+### Bundle
+- +~1.2 KB JS (new util module + the notes-panel wiring + the Settings input). Comfortable under the 75 KB brotli budget.
+
+### No behavior change for existing maps
+- The pref defaults to `true`, but the mic button is opt-in (the user has to click it AND grant browser mic permission). Sessions saved before 0.60 deserialize unchanged; the notes panel just gains a new icon in its header.
+- Browsers that don't expose `SpeechRecognition` (Firefox today) silently hide the mic button — no error shown, no console noise.
 
 ---
 

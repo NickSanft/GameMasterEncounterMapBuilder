@@ -700,7 +700,7 @@ const damageHealDialog = mountDamageHealDialog({
   onAnnounce: (msg) => announcer.announce(msg),
 });
 
-const notesPanel = mountNotesPanel();
+const notesPanel = mountNotesPanel({ preferences });
 const shortcutOverlay = mountShortcutOverlay('gm');
 const initiativeModal = mountInitiativeModal({ store });
 mountInitiativeBar(store, 'gm', {

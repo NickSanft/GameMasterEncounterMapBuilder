@@ -71,6 +71,7 @@ export function mountSettingsModal(
   const reducedMotionInput = modal.querySelector<HTMLInputElement>('[data-field="reducedMotion"]')!;
   const highContrastInput = modal.querySelector<HTMLInputElement>('[data-field="highContrast"]')!;
   const colorblindInput = modal.querySelector<HTMLInputElement>('[data-field="colorblindMarkers"]')!;
+  const voiceTranscriptionInput = modal.querySelector<HTMLInputElement>('[data-field="voiceTranscription"]')!;
   const labelSizeRadios = Array.from(
     modal.querySelectorAll<HTMLInputElement>('input[name="settings-label-size"]'),
   );
@@ -152,6 +153,7 @@ export function mountSettingsModal(
     reducedMotionInput.checked = prefs.reducedMotion;
     highContrastInput.checked = prefs.highContrast;
     colorblindInput.checked = prefs.colorblindMarkers;
+    voiceTranscriptionInput.checked = prefs.voiceTranscription;
     for (const r of labelSizeRadios) r.checked = r.value === prefs.labelSize;
     for (const r of themeRadios) r.checked = r.value === prefs.theme;
     if (gmFogColorInput) gmFogColorInput.value = prefs.gmFogColor;
@@ -264,6 +266,10 @@ export function mountSettingsModal(
 
   colorblindInput.addEventListener('change', () => {
     preferences.update({ colorblindMarkers: colorblindInput.checked });
+  });
+
+  voiceTranscriptionInput.addEventListener('change', () => {
+    preferences.update({ voiceTranscription: voiceTranscriptionInput.checked });
   });
 
   for (const r of labelSizeRadios) {
@@ -596,6 +602,11 @@ function renderAccessibilityPane(): string {
         <span>Colorblind-friendly team markers</span>
       </label>
       <p class="settings-hint">Markers add a small shape badge to tokens with a preset team border color (Ally, Enemy, etc.).</p>
+      <label class="check">
+        <input type="checkbox" data-field="voiceTranscription" />
+        <span>Voice transcription (microphone in Notes panel)</span>
+      </label>
+      <p class="settings-hint">Adds a 🎤 button to the Session Notes panel that uses your browser's speech recognition to transcribe what you say into the notes textarea. The mic only activates when you click the button. Hidden automatically on browsers that don't support speech recognition (e.g. Firefox today).</p>
     </section>
   `;
 }
