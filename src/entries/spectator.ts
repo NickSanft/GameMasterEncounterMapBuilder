@@ -3,6 +3,7 @@ import { attachPanZoom } from '../input/pan-zoom.js';
 import { createStore } from '../state/store.js';
 import { DEFAULT_CAMERA } from '../state/types.js';
 import { createSyncChannel } from '../sync/channel.js';
+import { mountRemotePlayModal } from '../ui/remote-play-modal.js';
 import { deserializeState, fromSerializablePatch } from '../sync/messages.js';
 import {
   loadPersistedState,
@@ -222,9 +223,15 @@ function setRulerActive(active: boolean) {
   announcer.announce(active ? 'Ruler tool active.' : 'Ruler tool off.');
 }
 
+// Late-bound reference — `remotePlayModal` is constructed below
+// (after `channel` is created). The menu lambda runs on click, by
+// which time the ref is populated. Using a box instead of directly
+// referencing the const dodges the TDZ diagnostic.
+const remotePlayRef: { current: (() => void) | null } = { current: null };
 mountSpectatorMenu({
   onSettings: () => settingsModal.open(),
   onShortcuts: () => shortcutOverlay.open(),
+  onRemotePlay: () => remotePlayRef.current?.(),
 });
 
 mountZoomControls(document.body, {
@@ -276,6 +283,15 @@ store.subscribe((patch) => {
 });
 
 const channel = createSyncChannel();
+
+// Phase 62 — Remote Play modal (Spectator side). Populate the
+// late-bound ref the session menu uses so the button works.
+const remotePlayModal = channel
+  ? mountRemotePlayModal({ channel, viewLabel: 'Spectator' })
+  : null;
+if (remotePlayModal) {
+  remotePlayRef.current = () => remotePlayModal.open();
+}
 
 function broadcastViewport() {
   if (!channel) return;
@@ -438,7 +454,11 @@ function mountSpectatorToolbar(onRuler: () => void): HTMLButtonElement {
   return btn;
 }
 
-function mountSpectatorMenu(actions: { onSettings: () => void; onShortcuts: () => void }) {
+function mountSpectatorMenu(actions: {
+  onSettings: () => void;
+  onShortcuts: () => void;
+  onRemotePlay?: () => void;
+}) {
   const menu = document.createElement('div');
   menu.className = 'session-menu';
   menu.setAttribute('role', 'group');
@@ -453,6 +473,21 @@ function mountSpectatorMenu(actions: { onSettings: () => void; onShortcuts: () =
     actions.onShortcuts();
   });
 
+  // Phase 62 — optional Remote Play entry on the Spectator side so
+  // a player can join a remote GM's session across the internet.
+  let remotePlayBtn: HTMLButtonElement | null = null;
+  if (actions.onRemotePlay) {
+    const handler = actions.onRemotePlay;
+    remotePlayBtn = document.createElement('button');
+    remotePlayBtn.type = 'button';
+    remotePlayBtn.textContent = 'Remote play…';
+    remotePlayBtn.title = 'Connect to a remote GM via WebRTC (beta)';
+    remotePlayBtn.addEventListener('click', () => {
+      remotePlayBtn?.blur();
+      handler();
+    });
+  }
+
   const settingsBtn = document.createElement('button');
   settingsBtn.type = 'button';
   settingsBtn.textContent = 'Settings';
@@ -463,6 +498,7 @@ function mountSpectatorMenu(actions: { onSettings: () => void; onShortcuts: () =
   });
 
   menu.appendChild(shortcutsBtn);
+  if (remotePlayBtn) menu.appendChild(remotePlayBtn);
   menu.appendChild(settingsBtn);
   document.body.appendChild(menu);
 }

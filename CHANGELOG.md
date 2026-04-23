@@ -18,11 +18,41 @@ Every release is an annotated git tag (`vX.Y.Z`) on the commit that introduced t
 
 ## [Unreleased]
 
-Post-1.0 roadmap, re-numbered after Phase 61 shipped:
+Post-1.0 roadmap, re-numbered after Phase 62 shipped:
 
-- **0.62.0** — Network sync: WebRTC transport
 - **0.63.0** — Rooms + player identity
 - **0.64.0** — Reconnection + conflict resolution
+
+---
+
+## [0.62.0] — 2026-04-23 — Network sync: WebRTC transport (beta)
+
+### Added
+- **Cross-machine sync via WebRTC**. A new "Remote play…" entry in both the GM and Spectator session menus opens a modal with Host / Join tabs. The Host flow creates an SDP invitation string; paste it to the guest (Discord, email, whatever). The guest pastes it into the Join tab, generates an answer string, sends it back, GM accepts it, and the connection opens. From that point, the remote peer behaves identically to a same-browser Spectator tab — the same `SyncMessage` protocol flows through the WebRTC datachannel.
+- **Star topology**: GM is always the hub. Spectators connect to the GM; they don't need to know about each other. The GM broadcasts patches over *both* BroadcastChannel (for same-browser Spectators) AND every attached remote peer (for cross-machine Spectators). Spectators only send back to the GM they connected to.
+- **No dedicated signaling server**. Phase 62 ships with manual copy-paste of SDP strings — which is enough for friend-to-friend sessions started over an out-of-band chat, and keeps the deploy story "just GitHub Pages." Future phases can layer WebSocket signaling + room codes on top without changing the connection protocol itself.
+- **Theme-aware modal**. Host / Join tabs, step instructions, monospace SDP textareas with Copy buttons, real-time connection-state pill. All five Phase 59 themes render the panel correctly (CSS variable-driven).
+- **Help overlay** gets a new *Remote play (beta)* section with Host / Join walkthroughs + the phase's known limitations (no room codes, no auto-reconnect, can fail behind symmetric NATs).
+
+### Implementation notes
+- **`src/sync/remote-peer.ts`** is a pure wrapper around `RTCPeerConnection` + `RTCDataChannel`. Host / guest roles expose `offer()` / `acceptAnswer()` / `answer()` respectively, plus the common `send(msg)` / `onMessage(fn)` / `onStateChange(fn)` / `close()` surface. No ICE trickle — we wait for `iceGatheringState === 'complete'` before returning the SDP so the user gets one self-contained string. STUN defaults to Google's public `stun.l.google.com:19302`. TURN is out of scope for Phase 62.
+- **`src/sync/channel.ts`** grew a new `attachRemote(remote)` method on the existing `SyncChannel` interface. Outbound `channel.send(msg)` fans out to the BroadcastChannel AND every attached remote in a single step. Inbound messages from any attached remote get routed to the channel's existing `onMessage` listeners — callers don't have to know whether a message came in via BC or WebRTC. Loop prevention comes for free from star topology: BroadcastChannel doesn't echo to self, remote peers don't forward messages between themselves, so no message can come back to its origin via a different transport.
+- **`src/ui/remote-play-modal.ts`** drives the two-tab UI, handles Copy-to-clipboard (with a Select-text fallback for browsers that refuse Clipboard API in non-focused tabs), and wires the peer's `onStateChange` into a live status pill ("Idle" → "Connecting…" → "Connected ✓" → "Disconnected" / "Failed" / "Closed"). It hides the form + surfaces a friendly message on browsers that don't expose `RTCPeerConnection` (rare — all modern browsers do, but good to fail helpfully).
+- The GM and Spectator entries both mount their own `remotePlayModal` instance (one `RemotePeer` per modal, role chosen by which tab the user interacts with). Neither side touches the other's modal state.
+
+### Tests
+- **+10 unit tests** in `src/sync/channel.test.ts` for the new `attachRemote` surface: outbound fan-out, inbound routing, multiple remotes, detach, idempotent re-attach, send-failure isolation, close detaches everything.
+- **+16 unit tests** in `src/sync/remote-peer.test.ts` for the WebRTC wrapper (mocked `RTCPeerConnection`): feature-detection, host flow (create datachannel with the versioned label, offer() returns SDP, state transitions on datachannel open, send/drop when closed, message parsing + malformed-JSON drop, acceptAnswer, close), guest flow (answer() returns SDP, message routing, send-after-open, send-before-datachannel is a no-op, close).
+- **+5 Playwright specs** in `e2e/remote-play.spec.ts` covering the real Chromium WebRTC path: GM menu opens the modal, Spectator menu opens the modal, Host/Join tab switching, "Create invitation" populates a real SDP offer (ICE gathering actually runs), Join flow pasting + Generate answer returns a real answer.
+- Regenerated the `session-menu-light` visual-regression baselines (Win32 + Linux) to account for the new "Remote play…" entry making the menu ~39px taller.
+- All 56 unit-test files green: 599 unit tests total (+26 from 0.61.2's 573). All 159 Playwright specs green.
+
+### Bundle
+- Adds ~3 KB JS (remote-peer wrapper + modal UI) and ~0.5 KB CSS. **73.62 KB / 75 KB brotli budget** — getting close; the budget might need to grow in a future phase if we keep adding features, but still comfortably under for now.
+
+### No behavior change for existing flows
+- Same-browser BroadcastChannel sync works exactly as before. Remote play is purely additive — opt in by opening the modal + running the handshake. Users who never touch the modal see no functional difference from 0.61.x.
+- The `SyncMessage` protocol didn't change — every message shape is still the same. Only the transport layer grew a second possible wire.
 
 ---
 

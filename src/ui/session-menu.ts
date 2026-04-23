@@ -20,6 +20,12 @@ export interface SessionMenuActions {
    * absent.
    */
   onReplayTour?: () => void;
+  /**
+   * Phase 62 — open the Remote Play (WebRTC) modal. Optional for
+   * the same reason as `onReplayTour` — the button is only mounted
+   * when the caller wires a handler.
+   */
+  onRemotePlay?: () => void;
 }
 
 export function mountSessionMenu(
@@ -152,6 +158,23 @@ export function mountSessionMenu(
     });
   }
 
+  // Phase 62 — "Remote play" opens the WebRTC connection modal.
+  // Same opt-in pattern as `onReplayTour`: button only mounted when
+  // the caller wires a handler.
+  const remotePlayBtn = actions.onRemotePlay
+    ? createButton(
+        'Remote play…',
+        'Connect to a peer across the internet via WebRTC (beta)',
+      )
+    : null;
+  if (remotePlayBtn && actions.onRemotePlay) {
+    const handler = actions.onRemotePlay;
+    remotePlayBtn.addEventListener('click', () => {
+      remotePlayBtn.blur();
+      handler();
+    });
+  }
+
   menu.appendChild(uploadBtn);
   menu.appendChild(presetBtn);
   menu.appendChild(scenesBtn);
@@ -165,6 +188,7 @@ export function mountSessionMenu(
   menu.appendChild(clearDrawingsBtn);
   menu.appendChild(shortcutsBtn);
   if (replayTourBtn) menu.appendChild(replayTourBtn);
+  if (remotePlayBtn) menu.appendChild(remotePlayBtn);
   menu.appendChild(settingsBtn);
   menu.appendChild(newBtn);
   menu.appendChild(bgFileInput);

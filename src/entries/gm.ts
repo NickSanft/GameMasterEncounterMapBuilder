@@ -97,6 +97,7 @@ import { createPingManager } from '../state/ping-manager.js';
 import { mountNotesPanel } from '../ui/notes-panel.js';
 import { mountOnboardingTour } from '../ui/onboarding-tour.js';
 import { createTourController, GM_TOUR_STEPS } from '../state/onboarding-tour.js';
+import { mountRemotePlayModal } from '../ui/remote-play-modal.js';
 import { mountShortcutOverlay } from '../ui/shortcut-overlay.js';
 import { mountInitiativeBar } from '../ui/initiative-bar.js';
 import { mountInitiativeModal } from '../ui/initiative-modal.js';
@@ -677,6 +678,7 @@ mountSessionMenu(document.body, {
   onTemplateLibrary: () => templateLibraryModal.open(),
   onScenes: () => scenesModal.open(),
   onReplayTour: () => openOnboardingTour(),
+  onRemotePlay: () => remotePlayModal?.open(),
   onClearDrawings: () => {
     const state = store.getState();
     if (state.strokes.length === 0) return;
@@ -1136,6 +1138,13 @@ canvas.addEventListener('contextmenu', (e) => {
 });
 
 const channel = createSyncChannel();
+
+// Phase 62 — Remote Play modal. Only mounted when BroadcastChannel
+// is available (same prereq as the channel itself); `onRemotePlay`
+// in the session-menu wiring above becomes a no-op otherwise.
+const remotePlayModal = channel
+  ? mountRemotePlayModal({ channel, viewLabel: 'GM' })
+  : null;
 
 // ---- Conflict detection + crash recovery ---------------------------------
 // Every GM tab gets a random id + broadcasts it every ~2 s. Two open GMs

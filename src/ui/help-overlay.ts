@@ -161,6 +161,16 @@ const GM_SECTIONS: HelpSection[] = [
     ],
   },
   {
+    title: 'Remote play (beta)',
+    intro: 'Connect two browsers across the internet via WebRTC. No server required — just share a short connection string once, then the session syncs the same way as a same-browser Spectator tab.',
+    entries: [
+      { name: 'Host a session', desc: 'Session menu → "Remote play…" → leave the Host tab selected → click "Create invitation." Copy the generated invitation and share it with your player (Discord / email / chat). When they send back their "answer" paste it in + click "Accept answer."' },
+      { name: 'Join a session', desc: 'Session menu → "Remote play…" → switch to the Join tab → paste the invitation the GM sent you → click "Generate answer" → copy the answer back to the GM.' },
+      { name: 'What syncs', desc: 'Same protocol as same-browser BroadcastChannel sync: tokens, fog, annotations, walls, lighting, dice rolls, the active initiative state, and camera broadcasts (when the GM has camera-sharing on). Once connected, the remote peer behaves identically to a Spectator tab open in the same browser.' },
+      { name: 'Limitations', desc: 'Phase 62 is a manual-signaling MVP: no room codes, no server-backed auto-reconnect, no trickle ICE (so connection setup can take 2–5 seconds). If both peers are behind symmetric NATs the connection may fail — exporting + importing a session file is a reliable fallback.' },
+    ],
+  },
+  {
     title: 'Onboarding tour',
     intro: 'A 6-step popover walk-through that auto-shows on first launch.',
     entries: [

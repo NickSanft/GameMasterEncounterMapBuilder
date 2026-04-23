@@ -3138,3 +3138,167 @@ body.reduced-motion .tour-popover {
   background: var(--accent-hover);
   border-color: var(--accent-hover);
 }
+
+/* ─── Phase 62 — Remote Play modal ───────────────────────────────
+   Host / Join tabs with copy-paste SDP flow. All colors come from
+   theme variables so parchment / console / purple-dusk render
+   consistently. */
+.remote-play-modal {
+  min-width: 560px;
+  max-width: min(720px, 94vw);
+  max-height: 88vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.remote-play-beta {
+  display: inline-block;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  padding: 0.15rem 0.4rem;
+  border-radius: 3px;
+  background: var(--accent);
+  color: var(--bg);
+  text-transform: uppercase;
+  margin-left: 0.5rem;
+  vertical-align: middle;
+}
+
+.remote-play-intro {
+  margin: 0 0 1rem;
+}
+
+.remote-play-tabs {
+  display: flex;
+  gap: 0.3rem;
+  margin-bottom: 1rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.remote-play-tabs [role='tab'] {
+  appearance: none;
+  background: none;
+  border: none;
+  color: var(--fg-muted);
+  padding: 0.55rem 0.85rem;
+  font-size: 0.9rem;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  font-family: inherit;
+}
+
+.remote-play-tabs [role='tab']:hover {
+  color: var(--fg);
+}
+
+.remote-play-tabs [role='tab'][aria-selected='true'] {
+  color: var(--fg);
+  border-bottom-color: var(--accent);
+  font-weight: 600;
+}
+
+.remote-play-pane[hidden] {
+  display: none;
+}
+
+.remote-play-steps {
+  margin: 0 0 1rem;
+  padding-left: 1.2rem;
+  color: var(--fg-muted);
+  font-size: 0.88rem;
+  line-height: 1.5;
+}
+
+.remote-play-steps li {
+  margin-bottom: 0.25rem;
+}
+
+.remote-play-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.remote-play-state {
+  color: var(--fg-muted);
+  font-size: 0.85rem;
+  font-style: italic;
+}
+
+.remote-play-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-bottom: 0.75rem;
+}
+
+.remote-play-field > span {
+  font-size: 0.8rem;
+  color: var(--fg-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 600;
+}
+
+.remote-play-field textarea {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.75rem;
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.5rem;
+  resize: vertical;
+  min-height: 4em;
+}
+
+.remote-play-field textarea[readonly] {
+  color: var(--fg-muted);
+}
+
+.remote-play-copy {
+  align-self: flex-start;
+  appearance: none;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--fg);
+  padding: 0.3rem 0.7rem;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-family: inherit;
+}
+
+.remote-play-copy:hover:not(:disabled) {
+  background: var(--hover-overlay);
+}
+
+.remote-play-copy:disabled,
+.remote-play-field button.primary:disabled,
+.remote-play-row button.primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.remote-play-field button.primary,
+.remote-play-row button.primary {
+  align-self: flex-start;
+  appearance: none;
+  background: var(--accent);
+  color: var(--bg);
+  border: 1px solid var(--accent);
+  padding: 0.4rem 0.85rem;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 600;
+  font-family: inherit;
+}
+
+.remote-play-field button.primary:hover:not(:disabled),
+.remote-play-row button.primary:hover:not(:disabled) {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
