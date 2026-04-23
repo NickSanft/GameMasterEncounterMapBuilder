@@ -95,6 +95,8 @@ import { mountTokenLibraryModal } from '../ui/token-library-modal.js';
 import { mountTemplateLibraryModal } from '../ui/template-library-modal.js';
 import { createPingManager } from '../state/ping-manager.js';
 import { mountNotesPanel } from '../ui/notes-panel.js';
+import { mountOnboardingTour } from '../ui/onboarding-tour.js';
+import { createTourController, GM_TOUR_STEPS } from '../state/onboarding-tour.js';
 import { mountShortcutOverlay } from '../ui/shortcut-overlay.js';
 import { mountInitiativeBar } from '../ui/initiative-bar.js';
 import { mountInitiativeModal } from '../ui/initiative-modal.js';
@@ -674,6 +676,7 @@ mountSessionMenu(document.body, {
   onTokenLibrary: () => tokenLibraryModal.open(),
   onTemplateLibrary: () => templateLibraryModal.open(),
   onScenes: () => scenesModal.open(),
+  onReplayTour: () => openOnboardingTour(),
   onClearDrawings: () => {
     const state = store.getState();
     if (state.strokes.length === 0) return;
@@ -701,6 +704,28 @@ const damageHealDialog = mountDamageHealDialog({
 });
 
 const notesPanel = mountNotesPanel({ preferences });
+
+// ─── Phase 61 — Onboarding tour ──────────────────────────────────
+// `openOnboardingTour` constructs a fresh controller every time so
+// each replay starts at step 1. The controller's `onComplete` /
+// `onSkip` callbacks both flip `onboardingComplete=true` so the
+// tour doesn't auto-show again on subsequent boots; the user can
+// still replay it from the session-menu "Take the tour" entry.
+function openOnboardingTour(): void {
+  const controller = createTourController({
+    steps: GM_TOUR_STEPS,
+    onComplete: () => preferences.update({ onboardingComplete: true }),
+    onSkip: () => preferences.update({ onboardingComplete: true }),
+  });
+  const tour = mountOnboardingTour(controller);
+  tour.open();
+}
+// Auto-show the tour on first boot. Deferred via setTimeout so it
+// runs AFTER the initial render — the popover layout needs the
+// toolbar / canvas to have non-zero bounding rects to anchor against.
+if (!preferences.get().onboardingComplete) {
+  window.setTimeout(() => openOnboardingTour(), 250);
+}
 const shortcutOverlay = mountShortcutOverlay('gm');
 const initiativeModal = mountInitiativeModal({ store });
 mountInitiativeBar(store, 'gm', {

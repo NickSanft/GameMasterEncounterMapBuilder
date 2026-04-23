@@ -18,12 +18,43 @@ Every release is an annotated git tag (`vX.Y.Z`) on the commit that introduced t
 
 ## [Unreleased]
 
-Post-1.0 roadmap, re-numbered after Phase 60 shipped:
+Post-1.0 roadmap, re-numbered after Phase 61 shipped:
 
-- **0.61.0** — Onboarding tour
 - **0.62.0** — Network sync: WebRTC transport
 - **0.63.0** — Rooms + player identity
 - **0.64.0** — Reconnection + conflict resolution
+
+---
+
+## [0.61.0] — 2026-04-23 — Onboarding tour
+
+### Added
+- **6-step popover walk-through** of the GM view that auto-shows on first launch. Each step has a title, body, and (most steps) anchors a popover next to a highlighted UI element so the user can see what's being explained: Welcome → Toolbar → Map canvas → Session menu → Spectator-tab tip → Help reference.
+- **Highlight cutout backdrop** — the dim layer is rendered as four positioned divs surrounding the target rect, so the highlighted element stays interactive (no SVG mask trickery; `pointer-events: auto` only on the dim pieces). Centered "no anchor" steps collapse the four pieces into one full-viewport piece.
+- **Auto-show on first boot** — the GM entry checks `preferences.onboardingComplete` and opens the tour ~250ms after boot when it's still `false` (default). Once finished or skipped (or dismissed via Esc) the flag flips to `true` and the tour stops auto-showing.
+- **Replay anytime** — a new "Take the tour" entry in the GM session menu re-opens the walk-through from step 1 without resetting the completion flag. Useful after a feature update or just to refresh.
+- **Esc / Skip equivalence** — both close the tour AND mark it complete (we treat skip as an explicit user action). The Skip button is always visible; the Esc shortcut works in any focus state.
+- **Back / Next / Finish buttons** — Back is hidden on step 1, Next becomes "Finish" on the last step. Counter ("3 of 6") in the popover header shows progress.
+- **Theme-aware** — popover + buttons read CSS variables (`--bg-elev`, `--accent`, `--border`, etc.), so all five Phase 59 themes (Dark / Light / Parchment / Console / Purple Dusk) render the tour consistently.
+- **Reduced-motion-aware** — `body.reduced-motion` disables the popover + backdrop transitions so users who prefer instant updates get them.
+- **Help overlay** — new *Onboarding tour* section explains first-boot behavior, replay path, and how to bring the tour back if needed.
+
+### Implementation notes
+- `src/state/onboarding-tour.ts` exports a pure `createTourController({ steps, onComplete?, onSkip? })` plus the canonical `GM_TOUR_STEPS` array. The controller is a small state machine: `getState()` / `next()` / `prev()` / `goTo(n)` / `subscribe(listener)` / `finish()` / `skip()` plus the terminal-state guards (`isComplete()` / `isSkipped()`). Easy to unit-test without touching the DOM.
+- `src/ui/onboarding-tour.ts` mounts the popover + four backdrop pieces, listens for window resize / scroll to keep the popover anchored as layout shifts, and tears the whole thing down on `close()`. Step changes come through `controller.subscribe(...)`.
+- `gm.ts` constructs a fresh `TourController` per replay so step counters always reset to "1 of N". Both `onComplete` and `onSkip` flip `preferences.onboardingComplete = true` — terminal states are interchangeable from the persistence point of view.
+- Session menu's `onReplayTour` callback is OPTIONAL on `SessionMenuActions` so any future caller (e.g. a Spectator-side tour) can omit it without TypeScript yelling. The button is only mounted when the callback is present.
+
+### Tests
+- **+14 unit tests** in `src/state/onboarding-tour.test.ts` covering: empty-steps throws, initial state at step 0, next/prev navigation + clamping, isFirst/isLast boundary flips, goTo with clamp + same-index skip, finish + skip exclusivity (one terminal wins), unsubscribe semantics. Plus 3 sanity checks on the canonical `GM_TOUR_STEPS` (non-empty content, valid selectors, unique ids).
+- **+7 Playwright specs** in `e2e/onboarding-tour.spec.ts`: auto-show on first boot, no-show after onboarded, full Next walk-through + Finish closes + persists across reload, Skip closes + persists, Esc dismisses + persists, "Take the tour" replay entry works after completion, Back button shows/hides at the right boundaries.
+- All 54 unit-test files green: 573 unit tests total (+14 from 0.60.1's 559).
+
+### Bundle
+- Adds ~2 KB JS (tour state machine + UI module + the gm.ts wiring + the menu entry) and ~1.5 KB CSS for the backdrop + popover styles.
+
+### No behavior change for upgrading users
+- The pref defaults to `false`, so users upgrading from < 0.61 will see the tour once on next boot. After they finish or skip (one click either way), the flag flips and the tour never auto-shows again. Sessions / scenes / preferences are otherwise untouched.
 
 ---
 

@@ -13,6 +13,13 @@ export interface SessionMenuActions {
   onTemplateLibrary(): void;
   onClearDrawings(): void;
   onScenes(): void;
+  /**
+   * Phase 61 — replay the onboarding tour. Optional so existing
+   * Spectator-side `mountSessionMenu` callers (if any) don't need
+   * to wire it; the menu hides the button when the callback is
+   * absent.
+   */
+  onReplayTour?: () => void;
 }
 
 export function mountSessionMenu(
@@ -132,6 +139,19 @@ export function mountSessionMenu(
     actions.onScenes();
   });
 
+  // Phase 61 — "Take the tour" replay entry. Only mounted when the
+  // caller wired `onReplayTour` (Spectator entries don't, today).
+  const replayTourBtn = actions.onReplayTour
+    ? createButton('Take the tour', 'Replay the onboarding walk-through')
+    : null;
+  if (replayTourBtn && actions.onReplayTour) {
+    const handler = actions.onReplayTour;
+    replayTourBtn.addEventListener('click', () => {
+      replayTourBtn.blur();
+      handler();
+    });
+  }
+
   menu.appendChild(uploadBtn);
   menu.appendChild(presetBtn);
   menu.appendChild(scenesBtn);
@@ -144,6 +164,7 @@ export function mountSessionMenu(
   menu.appendChild(notesBtn);
   menu.appendChild(clearDrawingsBtn);
   menu.appendChild(shortcutsBtn);
+  if (replayTourBtn) menu.appendChild(replayTourBtn);
   menu.appendChild(settingsBtn);
   menu.appendChild(newBtn);
   menu.appendChild(bgFileInput);

@@ -114,6 +114,18 @@ export interface Preferences {
    * only controls the show/hide behavior on supported browsers.
    */
   voiceTranscription: boolean;
+  /**
+   * Phase 61 — onboarding tour completion flag. Set to `true` once
+   * the user has either finished or skipped the tour. While `false`,
+   * the GM entry auto-opens the tour on boot. Users can replay the
+   * tour anytime from the session menu's "Take the tour" entry — that
+   * doesn't reset this flag (it just opens the modal again).
+   *
+   * Default `false` so first-time users see the walk-through; users
+   * upgrading from < 0.61 also see it once because the spread-defaults
+   * loadFromStorage path treats missing keys as the default value.
+   */
+  onboardingComplete: boolean;
 }
 
 export const DEFAULT_PREFERENCES: Preferences = {
@@ -139,6 +151,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   losMode: 'off',
   autoRevealFromViewers: false,
   voiceTranscription: true,
+  onboardingComplete: false,
 };
 
 export interface PreferencesStore {

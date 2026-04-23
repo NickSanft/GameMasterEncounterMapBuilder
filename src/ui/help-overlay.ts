@@ -161,6 +161,15 @@ const GM_SECTIONS: HelpSection[] = [
     ],
   },
   {
+    title: 'Onboarding tour',
+    intro: 'A 6-step popover walk-through that auto-shows on first launch.',
+    entries: [
+      { name: 'First boot', desc: 'A welcome popover appears the first time you open the GM view. Click "Next ›" to step through the tour, or "Skip tour" / press Esc to dismiss it.' },
+      { name: 'Replay anytime', desc: 'Session menu → "Take the tour" replays the walk-through whenever you want a refresher (e.g. after a feature update).' },
+      { name: 'Persistence', desc: 'Once you finish or skip, the tour stops auto-showing on subsequent boots. Clearing browser preferences (or the "Reset to defaults" button in Settings → Accessibility) brings it back on next load.' },
+    ],
+  },
+  {
     title: 'Voice transcription',
     intro: 'Talk during play and have your words land in the Session Notes panel automatically. Browser-side; no audio leaves your machine if your browser uses on-device speech recognition.',
     entries: [

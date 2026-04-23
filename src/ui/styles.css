@@ -3005,3 +3005,138 @@ body.notes-open .mini-map {
     right: calc(min(320px, 92vw) + 0.5rem);
   }
 }
+
+/* ─── Phase 61 — Onboarding tour ──────────────────────────────────
+   Four-piece backdrop surrounds the highlighted target so the
+   underlying element stays interactive (no SVG mask needed).
+   Centered (no-target) steps collapse to a single full-viewport
+   piece via the layout logic in `ui/onboarding-tour.ts`. */
+.tour-root {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  pointer-events: none;
+}
+
+.tour-backdrop-piece {
+  position: fixed;
+  background: rgba(0, 0, 0, 0.55);
+  pointer-events: auto;
+  transition: top 160ms ease, left 160ms ease, width 160ms ease, height 160ms ease;
+}
+
+body.reduced-motion .tour-backdrop-piece {
+  transition: none;
+}
+
+.tour-popover {
+  position: fixed;
+  width: 340px;
+  max-width: 92vw;
+  background: var(--bg-elev);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: var(--panel-shadow);
+  padding: 1rem 1.1rem 0.85rem;
+  pointer-events: auto;
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  transition: top 160ms ease, left 160ms ease;
+}
+
+body.reduced-motion .tour-popover {
+  transition: none;
+}
+
+.tour-popover-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.tour-popover-title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.tour-popover-counter {
+  font-size: 0.72rem;
+  color: var(--fg-muted);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.tour-popover-body {
+  margin: 0;
+  font-size: 0.88rem;
+  line-height: 1.45;
+  color: var(--fg);
+}
+
+.tour-popover-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+}
+
+.tour-popover-skip {
+  appearance: none;
+  background: none;
+  border: none;
+  color: var(--fg-muted);
+  font-size: 0.82rem;
+  cursor: pointer;
+  padding: 0.3rem 0.4rem;
+  border-radius: 4px;
+}
+
+.tour-popover-skip:hover {
+  color: var(--fg);
+  background: var(--hover-overlay);
+}
+
+.tour-popover-nav {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.tour-popover-nav button {
+  appearance: none;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--fg);
+  font-size: 0.85rem;
+  cursor: pointer;
+  padding: 0.4rem 0.75rem;
+  border-radius: 4px;
+  font-family: inherit;
+}
+
+.tour-popover-nav button:hover {
+  background: var(--hover-overlay);
+}
+
+.tour-popover-nav button[hidden] {
+  display: none;
+}
+
+.tour-popover-nav button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--bg);
+  font-weight: 600;
+}
+
+.tour-popover-nav button.primary:hover {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+ 
+ 
