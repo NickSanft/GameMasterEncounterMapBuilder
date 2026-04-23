@@ -1169,8 +1169,8 @@ const identityRegistry = createIdentityRegistry();
 
 function ownIdentity(): PlayerIdentity {
   const prefs = preferences.get();
-  const displayName = resolveName(prefs.playerName, 'gm');
-  const color = prefs.playerColor || colorForName(displayName);
+  const displayName = resolveName(prefs.playerNameGm, 'gm');
+  const color = prefs.playerColorGm || colorForName(displayName);
   return { id: playerId, name: displayName, color, role: 'gm' };
 }
 

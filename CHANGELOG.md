@@ -24,6 +24,25 @@ Post-1.0 roadmap, re-numbered after Phase 63 shipped:
 
 ---
 
+## [0.63.1] — 2026-04-23 — Player identity is per-view (GM ≠ Spectator)
+
+### Fixed
+- **Renaming the GM also renamed the Spectator (and vice versa)** when both tabs were open in the same browser. Reported by the user immediately after 0.63.0 shipped. Root cause: `playerName` + `playerColor` were single fields in `Preferences`, and `preferences.ts` syncs the entire prefs blob across same-context tabs via the `storage` event. So a GM editing their own name wrote `playerName="Alice"` to localStorage, the Spectator tab's `storage` listener fired, picked up `playerName="Alice"`, re-broadcast its own identity as "Alice", and the GM panel suddenly showed two Alices.
+- **Fix**: split each field by view role.
+  - `playerName` → `playerNameGm` + `playerNameSpectator`.
+  - `playerColor` → `playerColorGm` + `playerColorSpectator`.
+  - GM entry reads `playerNameGm`; Spectator entry reads `playerNameSpectator`. Cross-tab sync still works (same prefs blob travels) but each view watches its own scoped key, so they don't step on each other.
+- **Settings UI** is now view-aware: the "Your identity" fieldset reads + writes whichever scoped pair matches the modal's `viewMode`. GM Settings only edits the GM identity; Spectator Settings only edits the Spectator identity.
+
+### Tests
+- **+1 Playwright spec** (5 total): `Renaming the GM does NOT affect the Spectator's name (regression)` — opens both tabs, sets distinct names, renames the GM, verifies the Spectator's name + Settings input stay untouched. Verified to FAIL on 0.63.0 (single-key clobber) and PASS on 0.63.1.
+- All 619 unit tests + 165 Playwright specs green.
+
+### No other changes
+- Same identity-broadcast protocol on the wire (the `identity` SyncMessage shape is unchanged — it only carries `(id, name, color, role)`, no schema bump). Bundle effectively unchanged.
+
+---
+
 ## [0.63.0] — 2026-04-23 — Player identity + Connected Players panel
 
 ### Added

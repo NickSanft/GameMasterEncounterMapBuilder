@@ -127,19 +127,25 @@ export interface Preferences {
    */
   onboardingComplete: boolean;
   /**
-   * Phase 63 — display name shown to peers. Empty string means
+   * Phase 63 — display name shown to peers (scoped per role as of
+   * 0.63.1 so a GM tab and a Spectator tab in the same browser can
+   * have different names — previously both tabs shared a single
+   * `playerName` via the cross-tab `storage` event, which surprised
+   * users testing both views locally). Empty string means
    * "anonymous" → the player-identity helpers fall back to "GM" /
-   * "Spectator" for display + a hashed-from-name color. Persisted
-   * across reloads.
+   * "Spectator" for display + a hashed-from-name color.
    */
-  playerName: string;
+  playerNameGm: string;
+  playerNameSpectator: string;
   /**
-   * Phase 63 — display color for the player's chip / dot. Empty
-   * string means "use the hashed-from-name default" (so two players
-   * with the same name look the same; two with different names
-   * usually look different). Hex `#rgb` or `#rrggbb`.
+   * Phase 63 — display color for the player's chip / dot. Same
+   * per-role scoping as the names. Empty string means "use the
+   * hashed-from-name default" (so two players with the same name
+   * look the same; two with different names usually differ). Hex
+   * `#rgb` or `#rrggbb`.
    */
-  playerColor: string;
+  playerColorGm: string;
+  playerColorSpectator: string;
 }
 
 export const DEFAULT_PREFERENCES: Preferences = {
@@ -166,8 +172,10 @@ export const DEFAULT_PREFERENCES: Preferences = {
   autoRevealFromViewers: false,
   voiceTranscription: true,
   onboardingComplete: false,
-  playerName: '',
-  playerColor: '',
+  playerNameGm: '',
+  playerNameSpectator: '',
+  playerColorGm: '',
+  playerColorSpectator: '',
 };
 
 export interface PreferencesStore {

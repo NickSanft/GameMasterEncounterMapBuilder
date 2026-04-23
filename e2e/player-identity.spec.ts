@@ -108,7 +108,7 @@ test.describe('Player identity (Phase 63)', () => {
     }
   });
 
-  test('Changing your name re-renders the chip via preferences cross-tab sync', async ({
+  test('Changing the GM name updates the GM chip (without duplicating)', async ({
     browser,
   }) => {
     const ctx = await browser.newContext();
@@ -125,10 +125,7 @@ test.describe('Player identity (Phase 63)', () => {
       await gm.waitForTimeout(400);
       await expect(gm.locator('.connected-players-panel')).toContainText('GM');
 
-      // Rename via Settings on the GM tab. Because preferences sync
-      // across same-context tabs, the Spectator also picks up the
-      // new name — but the identity broadcast is keyed by playerId,
-      // so the GM's chip gets updated, not duplicated.
+      // Rename via Settings on the GM tab.
       await setPlayerName(gm, 'Alice');
       // Wait for the re-broadcast to arrive + the panel to re-render.
       await gm.waitForTimeout(300);
@@ -137,6 +134,62 @@ test.describe('Player identity (Phase 63)', () => {
       );
       // Still just 2 chips — renames don't create duplicates.
       await expect(gm.locator('.connected-player-chip')).toHaveCount(2);
+    } finally {
+      await ctx.close();
+    }
+  });
+
+  // 0.63.1 regression — user-reported: "changing the name of either
+  // the GM or spectator changes both." Pre-0.63.1 the preference
+  // was a single `playerName` field synced across tabs via the
+  // cross-tab `storage` event, so renaming the GM clobbered the
+  // Spectator's name too. Fix: scoped `playerNameGm` vs
+  // `playerNameSpectator`, so each tab reads its own key and the
+  // other's stays untouched.
+  test('Renaming the GM does NOT affect the Spectator\u2019s name (regression)', async ({
+    browser,
+  }) => {
+    const ctx = await browser.newContext();
+    try {
+      const gm = await ctx.newPage();
+      await gm.goto('./gm.html');
+      await gm.waitForSelector('#canvas');
+
+      const spec = await ctx.newPage();
+      await spec.goto('./spectator.html');
+      await spec.waitForSelector('#canvas');
+
+      // Set distinct names: GM → "Alice", Spectator → "Bob".
+      await setPlayerName(gm, 'Alice');
+      await setPlayerName(spec, 'Bob');
+
+      // Wait for identity re-broadcasts to round-trip.
+      await gm.waitForTimeout(500);
+
+      const panel = gm.locator('.connected-players-panel');
+      await expect(panel).toContainText('Alice');
+      await expect(panel).toContainText('Bob');
+      await expect(panel.locator('.connected-player-chip')).toHaveCount(2);
+
+      // Now verify that renaming Alice doesn't reach Bob's tab.
+      await setPlayerName(gm, 'Alicia');
+      await gm.waitForTimeout(300);
+      await expect(panel).toContainText('Alicia');
+      // Spectator is still Bob — NOT renamed to Alicia.
+      await expect(panel).toContainText('Bob');
+
+      // Cross-check the Spectator's own Settings Modal — its name
+      // input should still read "Bob", not "Alicia". Pre-fix this
+      // would have been "Alicia" because the single shared key got
+      // clobbered.
+      await spec
+        .getByRole('button', { name: 'Settings', exact: true })
+        .click();
+      const specDialog = spec.getByRole('dialog', { name: 'Settings' });
+      await specDialog.getByRole('tab', { name: 'Accessibility' }).click();
+      await expect(
+        specDialog.locator('input[data-field="playerName"]'),
+      ).toHaveValue('Bob');
     } finally {
       await ctx.close();
     }
