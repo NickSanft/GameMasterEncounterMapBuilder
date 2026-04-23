@@ -136,6 +136,7 @@ const GM_SECTIONS: HelpSection[] = [
       { name: 'What Spectator sees', desc: 'With LoS on, a cell shows on the Spectator map only when the GM has revealed it AND at least one viewer token\u2019s polygon reaches it. Back-of-the-room fog returns if every viewer walks away.' },
       { name: 'What GM sees', desc: 'The GM canvas still shows all revealed fog as-is, plus a translucent yellow outline of every viewer\u2019s current visibility polygon so you can tell at a glance what\u2019s visible to the party.' },
       { name: 'Walls + sight blocking', desc: 'Only walls with sight-blocking enabled (default on; right-click a wall to toggle) occlude vision. Non-blocking walls still render as the map outline but don\u2019t interrupt rays.' },
+      { name: 'Follow-the-fog (auto-reveal)', desc: 'Settings → Grid → "Follow-the-fog (auto-reveal as viewers move)". When on (requires Dynamic line of sight), every cell a viewer token can see gets automatically revealed — no chasing the party with the Reveal tool. One-way: cells stay revealed even after the viewer walks away, so the GM can paint over with the Hide tool if they want to take terrain back.' },
     ],
   },
   {

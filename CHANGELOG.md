@@ -18,15 +18,42 @@ Every release is an annotated git tag (`vX.Y.Z`) on the commit that introduced t
 
 ## [Unreleased]
 
-Post-1.0 roadmap, re-numbered after Phase 57 shipped:
+Post-1.0 roadmap, re-numbered after Phase 58 shipped:
 
-- **0.58.0** — Follow-the-fog exploration mode
 - **0.59.0** — Theme variants (parchment / console / purple dusk)
 - **0.60.0** — Voice transcription → notes
 - **0.61.0** — Onboarding tour
 - **0.62.0** — Network sync: WebRTC transport
 - **0.63.0** — Rooms + player identity
 - **0.64.0** — Reconnection + conflict resolution
+
+---
+
+## [0.58.0] — 2026-04-22 — Follow-the-fog exploration mode
+
+### Added
+- **Auto-reveal fog from viewer line-of-sight.** New preference `autoRevealFromViewers` (default `false`). With Dynamic line of sight on AND this toggle on, every fresh viewer visibility polygon also paints `revealed=1` into the GM-painted fog buffer for any cell inside the polygon that wasn't already revealed. Result: a viewer token walking onto unrevealed terrain auto-uncovers what it sees, with no manual Reveal-tool work from the GM.
+- **Settings UI** — new checkbox in Settings → Grid: *"Follow-the-fog (auto-reveal as viewers move)"*. Disabled (and visually de-emphasized) when Dynamic line of sight is off, so the dependency is obvious.
+- **One-way semantics** — auto-reveal only flips cells from hidden→revealed. The GM remains the authority for hiding cells via the Hide tool. Once revealed, cells stay revealed even after the viewer walks away — gives the party a "we explored this room" memory without any extra work.
+- **Help overlay** — new bullet *"Follow-the-fog (auto-reveal)"* added to the Line of sight section.
+
+### Implementation notes
+- New pure helper `cellsToReveal(polygons, fog, grid)` in `src/state/auto-reveal.ts`. Rasterizes the union of polygons to a per-cell mask (re-using Phase 55's `rasterizeVisibility`), then walks mask + fog in lockstep — emits a `{x, y, value: 1}` cell whenever the mask says "visible" but the fog says "hidden." Empty inputs short-circuit so the caller can skip the `fog-set` patch entirely (avoids spurious BroadcastChannel traffic + idle undo entries).
+- `gm.ts` hooks `fogWorkerClient.onLosUpdate` and applies a `fog-set` patch when the helper produces non-empty cells. Toggling the preference from off→on triggers an immediate auto-reveal against the current cached polygons (otherwise the user would have to nudge a viewer to see anything happen — confusing UX).
+- **Bug fix found while wiring the e2e**: `losInline` (the synchronous fallback used when the fog worker isn't created yet) wasn't calling `notifyLos()`. Pre-fix, `onLosUpdate` listeners only fired on actual worker responses — so on a fresh page that hadn't done any fog compaction yet, auto-reveal silently never happened. Worker-path notification was already correct. Fixed by calling `notifyLos()` at the end of `losInline` too. Preexisting LoS rendering code wasn't impacted (its render-on-update was either being satisfied via the worker path or via the existing store subscriber that requests a render anyway).
+- No mid-drag throttling needed: the worker client's existing input-signature cache means a refreshLos call with unchanged viewers/walls/lights returns synchronously without re-firing listeners. Auto-reveal patches DO fire per drag tick but the cells diff is empty most ticks (viewer position changes by sub-cell amounts).
+- Spectator does NOT auto-reveal locally — GM is the source of truth for fog. Spectator receives the resulting `fog-set` patches via the BroadcastChannel like any other patch.
+
+### Tests
+- **9 new unit tests** in `src/state/auto-reveal.test.ts` for `cellsToReveal`: null/empty polygons, all-revealed-already short-circuit, partial diff, multi-polygon union, multi-row index→(x,y) mapping, degenerate polygon (< 3 points), and a defensive size-mismatch check.
+- **3 new Playwright specs** in `e2e/follow-the-fog.spec.ts`: Settings exposes the toggle gated on `losMode`, placing a viewer with the toggle on auto-reveals fog (verified via the canvas aria-label's "X% of fog revealed" readout going from 0 → positive), and toggling off mid-flight stops further auto-reveals while preserving already-revealed cells.
+- All 51 unit-test files green: 535 unit tests total (+9 from 0.57.1's 526). All Playwright suites green.
+
+### Bundle
+- Adds ~600 bytes to the JS chunk (the helper + the gm.ts wiring + the settings UI + the help text). Comfortably under the 75 KB brotli budget.
+
+### No behavior change for existing maps
+- The pref defaults to `false`, so 0.57.1 maps boot at exactly the same fog state. Auto-reveal only activates when the user explicitly opts in via Settings → Grid.
 
 ---
 

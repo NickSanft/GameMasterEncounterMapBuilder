@@ -46,6 +46,20 @@ export interface Preferences {
   showMiniMap: boolean;
   /** Dynamic line-of-sight mode (see LosMode for semantics). */
   losMode: LosMode;
+  /**
+   * Phase 58 — "Follow-the-fog" exploration mode. When true (and
+   * `losMode !== 'off'`), every fresh viewer line-of-sight polygon
+   * also paints `revealed=1` into the manual fog buffer for any cell
+   * inside the polygon that wasn't already revealed. Effect: a
+   * viewer token walking onto unrevealed terrain auto-uncovers the
+   * cells it can see, without the GM having to reach for the Reveal
+   * tool. One-way (never re-hides), so the GM can still paint over
+   * with the Hide tool if they want to obscure something post-hoc.
+   *
+   * Default `false` so existing maps don't suddenly get auto-revealed
+   * on first boot of 0.58.
+   */
+  autoRevealFromViewers: boolean;
 }
 
 export const DEFAULT_PREFERENCES: Preferences = {
@@ -69,6 +83,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   sceneLightOpacity: 0,
   showMiniMap: false,
   losMode: 'off',
+  autoRevealFromViewers: false,
 };
 
 export interface PreferencesStore {

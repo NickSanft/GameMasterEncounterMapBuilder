@@ -240,6 +240,13 @@ export function createFogWorkerClient(
     latestPolygons = polys;
     latestLightPolygons = lightPolys;
     latestLosSignature = losSignatureOf(viewers, walls, lights);
+    // Phase 58 fix: also notify listeners on the inline path. Without
+    // this the auto-reveal listener (which runs on every LoS update)
+    // never fires when the fog worker hasn't been created yet (e.g.
+    // a fresh page that hasn't done any fog compaction). Worker-path
+    // notification is handled by `notifyLos()` from the response
+    // handler; inline-path callers were missing it.
+    notifyLos();
     return polys;
   }
 

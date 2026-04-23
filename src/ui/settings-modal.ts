@@ -62,6 +62,7 @@ export function mountSettingsModal(
   const showGridLabelsInput = modal.querySelector<HTMLInputElement>('[data-field="showGridLabels"]')!;
   const showMiniMapInput = modal.querySelector<HTMLInputElement>('[data-field="showMiniMap"]')!;
   const losModeInput = modal.querySelector<HTMLInputElement>('[data-field="losMode"]')!;
+  const autoRevealInput = modal.querySelector<HTMLInputElement>('[data-field="autoRevealFromViewers"]')!;
   const sceneLightColorInput = modal.querySelector<HTMLInputElement>('[data-field="sceneLightColor"]')!;
   const sceneLightOpacityInput = modal.querySelector<HTMLInputElement>('[data-field="sceneLightOpacity"]')!;
   const sceneLightOpacityLabel = modal.querySelector<HTMLSpanElement>('[data-field="sceneLightOpacityValue"]')!;
@@ -138,6 +139,11 @@ export function mountSettingsModal(
     showGridLabelsInput.checked = prefs.showGridLabels;
     showMiniMapInput.checked = prefs.showMiniMap;
     losModeInput.checked = prefs.losMode !== 'off';
+    autoRevealInput.checked = prefs.autoRevealFromViewers;
+    // Follow-the-fog only makes sense with LoS on; disable + visually
+    // de-emphasize the checkbox when losMode is off so the user sees
+    // why it has no effect.
+    autoRevealInput.disabled = prefs.losMode === 'off';
     sceneLightColorInput.value = prefs.sceneLightColor;
     sceneLightOpacityInput.value = String(Math.round(prefs.sceneLightOpacity * 100));
     sceneLightOpacityLabel.textContent = `${Math.round(prefs.sceneLightOpacity * 100)}%`;
@@ -225,6 +231,9 @@ export function mountSettingsModal(
     preferences.update({
       losMode: losModeInput.checked ? 'revealed-and-visible' : 'off',
     });
+  });
+  autoRevealInput.addEventListener('change', () => {
+    preferences.update({ autoRevealFromViewers: autoRevealInput.checked });
   });
   showMiniMapInput.addEventListener('change', () => {
     preferences.update({ showMiniMap: showMiniMapInput.checked });
@@ -465,6 +474,11 @@ function renderGridPane(): string {
         <span>Dynamic line of sight</span>
       </label>
       <p class="settings-hint">When on, Spectator fog is clipped to the visibility polygons of tokens with a sight radius (configured in the token editor). Walls marked as sight-blocking (Walls tool, right-click) occlude vision. Turning this off reverts to the classic GM-painted fog behavior.</p>
+      <label class="check">
+        <input type="checkbox" data-field="autoRevealFromViewers" />
+        <span>Follow-the-fog (auto-reveal as viewers move)</span>
+      </label>
+      <p class="settings-hint">When on, viewer tokens automatically reveal the cells they can see — no need to chase them with the Reveal tool. One-way: cells stay revealed even after the viewer walks away (use the Hide tool to take them back). Requires <em>Dynamic line of sight</em>.</p>
       <p class="settings-hint">Changing grid dimensions preserves fog state for cells that still exist after the resize.</p>
     </section>
   `;

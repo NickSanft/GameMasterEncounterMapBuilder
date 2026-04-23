@@ -129,6 +129,7 @@ import { registerPwa } from '../util/pwa.js';
 import { createFogWorkerClient } from '../render/fog-worker-client.js';
 import FogWorker from '../render/fog-worker.js?worker';
 import { collectLights, collectSightWalls, collectViewers } from '../state/los-compose.js';
+import { cellsToReveal } from '../state/auto-reveal.js';
 
 const canvasEl = document.getElementById('canvas');
 if (!(canvasEl instanceof HTMLCanvasElement)) {
@@ -292,7 +293,29 @@ function refreshFogRects(): void {
   fogWorkerClient.request(state.fog, state.grid.cols, state.grid.rows);
 }
 
-fogWorkerClient.onLosUpdate(() => renderer.requestRender());
+fogWorkerClient.onLosUpdate((polygons) => {
+  renderer.requestRender();
+  // Phase 58 — "Follow-the-fog": when the user has opted into
+  // auto-reveal AND LoS is on, every fresh viewer polygon update
+  // also paints `revealed=1` into the manual fog buffer for any
+  // cell inside the polygon that wasn't already revealed. The
+  // helper short-circuits when the diff is empty, so non-moving
+  // viewers don't churn out empty patches.
+  maybeAutoRevealFromPolygons(polygons);
+});
+
+function maybeAutoRevealFromPolygons(
+  polygons: readonly (readonly import('../state/los.js').LosPoint[])[],
+): void {
+  const prefs = preferences.get();
+  if (!prefs.autoRevealFromViewers) return;
+  if (prefs.losMode === 'off') return;
+  if (polygons.length === 0) return;
+  const state = store.getState();
+  const cells = cellsToReveal(polygons, state.fog, state.grid);
+  if (cells.length === 0) return;
+  store.applyPatch({ kind: 'fog-set', cells });
+}
 
 refreshLos();
 refreshFogRects();
@@ -304,6 +327,7 @@ const persistCameraDebounced = debounce(() => {
 }, 400);
 renderer.onCameraChange(persistCameraDebounced);
 
+let lastAutoRevealPref = preferences.get().autoRevealFromViewers;
 preferences.subscribe((prefs) => {
   applyPrefsToBody(prefs);
   renderer.requestRender();
@@ -315,6 +339,15 @@ preferences.subscribe((prefs) => {
   // overlay + Spectator's effective fog reflect the preference
   // immediately (no reload needed).
   refreshLos();
+  // Phase 58 — when the user flips autoRevealFromViewers from off→on,
+  // immediately auto-reveal cells under the current viewer polygons
+  // (otherwise nothing happens until a viewer next moves, which is
+  // a confusing UX — "I turned the toggle on and nothing changed").
+  if (prefs.autoRevealFromViewers && !lastAutoRevealPref) {
+    const polys = fogWorkerClient.getLatestPolygons();
+    if (polys) maybeAutoRevealFromPolygons(polys);
+  }
+  lastAutoRevealPref = prefs.autoRevealFromViewers;
 });
 
 const inputContext = {
