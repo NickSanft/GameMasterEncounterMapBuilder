@@ -5,6 +5,7 @@ import type {
   DistanceUnit,
   DiagonalRule,
 } from '../state/preferences.js';
+import { ALL_THEMES, THEME_LABELS } from '../state/preferences.js';
 import type { Store } from '../state/store.js';
 import type { ViewMode } from '../state/types.js';
 import { attachFocusTrap, rememberFocus, restoreFocus, getFocusables } from '../util/focus.js';
@@ -501,11 +502,14 @@ function renderAppearancePane(viewMode: ViewMode): string {
   return `
     <section ${paneAttrs('appearance', false)}>
       <label>Theme
-        <div class="radio-group">
-          <label><input type="radio" name="settings-theme" value="dark" /> Dark</label>
-          <label><input type="radio" name="settings-theme" value="light" /> Light</label>
+        <div class="radio-group radio-group-wrap">
+          ${ALL_THEMES.map(
+            (t) =>
+              `<label><input type="radio" name="settings-theme" value="${t}" /> ${THEME_LABELS[t]}</label>`,
+          ).join('')}
         </div>
       </label>
+      <p class="settings-hint">Pick a base theme. <em>Parchment</em> reads like an old hand-drawn map; <em>Console</em> goes terminal green-on-black for sci-fi; <em>Purple Dusk</em> is a moodier midnight-purple variant.</p>
       <label>Label size
         <div class="radio-group">
           <label><input type="radio" name="settings-label-size" value="small" /> Small</label>

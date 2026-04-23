@@ -18,14 +18,47 @@ Every release is an annotated git tag (`vX.Y.Z`) on the commit that introduced t
 
 ## [Unreleased]
 
-Post-1.0 roadmap, re-numbered after Phase 58 shipped:
+Post-1.0 roadmap, re-numbered after Phase 59 shipped:
 
-- **0.59.0** — Theme variants (parchment / console / purple dusk)
 - **0.60.0** — Voice transcription → notes
 - **0.61.0** — Onboarding tour
 - **0.62.0** — Network sync: WebRTC transport
 - **0.63.0** — Rooms + player identity
 - **0.64.0** — Reconnection + conflict resolution
+
+---
+
+## [0.59.0] — 2026-04-23 — Theme variants (parchment / console / purple dusk)
+
+### Added
+- **Three new visual themes** alongside the original Dark + Light, picked from Settings → Appearance → Theme:
+  - **Parchment** — warm cream background, dark-brown ink, faded-gold borders. Reads like an old hand-drawn map; works well for classic fantasy campaigns.
+  - **Console** — terminal green-on-black, accents that glow in the same green so the whole UI feels CRT. Built for sci-fi or cyberpunk one-shots.
+  - **Purple Dusk** — deep midnight purple background with lavender accents. Moodier alternative to plain Dark for horror or twilight scenes.
+- Each theme covers everything the existing Dark/Light themes did:
+  - **CSS variable palette** (`--bg`, `--fg`, `--accent`, `--border`, `--panel-bg`, `--modal-backdrop`, etc.) — drives the whole UI shell.
+  - **Canvas backdrop** (`CANVAS_BG` in renderer + snapshot) — the void around the map matches each theme's tone.
+  - **Grid line color** (`LINE_COLORS` in `layer-grid.ts`) — parchment uses faded brown ink, console uses dim green, purple-dusk uses pale lavender. Keeps the grid readable on each backdrop without looking out of place.
+  - **Background fallback fill** (`FALLBACK_FILL` in `layer-background.ts`) — the inner-map color when no map image is set picks a slightly lighter shade of each theme's palette.
+- **Help overlay** gets a new *Themes* section listing all five with a one-line flavor summary each.
+
+### Implementation notes
+- `Theme` type extended from `'dark' | 'light'` → `'dark' | 'light' | 'parchment' | 'console' | 'purple-dusk'`. Two new exports give the Settings picker + tests a single source of truth: `ALL_THEMES` (display order) and `THEME_LABELS` (`Record<Theme, string>`).
+- `applyTheme(theme)` is now a shared helper in `src/util/theme.ts` — clears every `theme-*` body class then adds the one for the current preference (`'dark'` is the `:root` baseline so it gets no class). Both GM and Spectator entries call it from their `applyPrefsToBody` so the two paths can't drift on which classes they apply.
+- The Settings picker switched from a hard-coded 2-radio block to `ALL_THEMES.map(...)` rendered in a `radio-group radio-group-wrap` (new modifier that lets the row wrap on narrow viewports without crowding).
+- All canvas-side palette maps were promoted from inline `{dark, light}` objects to `Record<Theme, string>` — TypeScript now refuses to ship an incomplete map, so future Theme additions are fail-fast.
+
+### Tests
+- **+10 unit tests** in `src/util/theme.test.ts` — covers the no-class-for-dark default, every Phase-59 variant getting its `theme-<name>` class, switching themes clears the previous class, switching back to dark wipes everything, and other body classes (`high-contrast` / `reduced-motion`) survive the swap. Plus two sanity checks on `ALL_THEMES` + `THEME_LABELS`.
+- **+7 Playwright specs** in `e2e/theme-variants.spec.ts`: picker exposes every theme, each theme applies the correct body class + computed `--bg` color (sharp regression pin against TS↔CSS palette drift), and the chosen theme persists across reload.
+- All 52 unit-test files green: 545 unit tests total (+10 from 0.58.0's 535).
+
+### Bundle
+- +~700 bytes JS (theme map entries + util/theme + Settings picker rewrite). 66.91KB / 75KB brotli budget.
+
+### No behavior change for existing maps
+- Pre-0.59 sessions deserialize with `theme: 'dark'` (or `'light'` if the user previously switched). Both themes render exactly the same as before — the new variants are purely additive.
+- The visual-regression suite continues to use `theme: 'dark'` for its baselines; Phase 59 doesn't add any new baseline images.
 
 ---
 

@@ -10,9 +10,17 @@ import { drawAoeTemplates } from './layer-aoe.js';
 import { drawStrokes } from './layer-strokes.js';
 import { drawGridLabels, drawSceneTint } from './layer-grid-labels.js';
 
-const CANVAS_BG = {
+/**
+ * Canvas background for snapshot exports — must match the renderer's
+ * `CANVAS_BG` so a saved-image of the map looks identical to what the
+ * GM sees. Phase 59 extended this with the new theme variants.
+ */
+const CANVAS_BG: Record<import('../state/preferences.js').Theme, string> = {
   dark: '#14161a',
   light: '#e6e7ec',
+  parchment: '#ebe0c5',
+  console: '#080d08',
+  'purple-dusk': '#0e0a1f',
 };
 
 export type SnapshotScope = 'whole-map' | 'visible-area';

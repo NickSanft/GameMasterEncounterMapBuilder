@@ -7,9 +7,17 @@ export interface BackgroundRenderOptions {
   theme: Theme;
 }
 
+/**
+ * Fallback fill for the map area when no background image is set.
+ * One per theme so a brand-new scene doesn't show a slab of dark gray
+ * inside a parchment- or console-themed UI.
+ */
 const FALLBACK_FILL: Record<Theme, string> = {
   dark: '#2a2d34',
   light: '#d7d9df',
+  parchment: '#dfd2b0',
+  console: '#15201a',
+  'purple-dusk': '#2a234a',
 };
 
 export function drawBackground(

@@ -6,7 +6,20 @@ export interface GridRenderOptions {
   theme: Theme;
 }
 
-const LINE_COLORS = {
+/**
+ * Grid-line palette keyed by theme. Phase 59 added 3 new themes — we
+ * group them by "ink on light" (parchment) vs "light on dark"
+ * (console, purple-dusk) so the lines stay readable on each backdrop.
+ * Colors borrow each theme's own accent hue lightly so the grid feels
+ * native (warm brown for parchment, terminal green for console, etc.)
+ * rather than just plain black/white everywhere.
+ */
+const LINE_COLORS: Record<import('../state/preferences.js').Theme, {
+  normal: string;
+  boundary: string;
+  highContrastNormal: string;
+  highContrastBoundary: string;
+}> = {
   dark: {
     normal: 'rgba(255, 255, 255, 0.12)',
     boundary: 'rgba(255, 255, 255, 0.25)',
@@ -18,6 +31,26 @@ const LINE_COLORS = {
     boundary: 'rgba(0, 0, 0, 0.3)',
     highContrastNormal: 'rgba(0, 0, 0, 0.35)',
     highContrastBoundary: 'rgba(0, 0, 0, 0.7)',
+  },
+  parchment: {
+    // Faded brown ink — matches the "old hand-drawn map" feel.
+    normal: 'rgba(80, 50, 20, 0.15)',
+    boundary: 'rgba(80, 50, 20, 0.4)',
+    highContrastNormal: 'rgba(60, 35, 10, 0.45)',
+    highContrastBoundary: 'rgba(60, 35, 10, 0.85)',
+  },
+  console: {
+    // Terminal green at low alpha so it doesn't drown the map.
+    normal: 'rgba(0, 255, 127, 0.12)',
+    boundary: 'rgba(0, 255, 127, 0.3)',
+    highContrastNormal: 'rgba(0, 255, 127, 0.4)',
+    highContrastBoundary: 'rgba(0, 255, 127, 0.75)',
+  },
+  'purple-dusk': {
+    normal: 'rgba(220, 200, 255, 0.12)',
+    boundary: 'rgba(220, 200, 255, 0.28)',
+    highContrastNormal: 'rgba(220, 200, 255, 0.4)',
+    highContrastBoundary: 'rgba(220, 200, 255, 0.75)',
   },
 };
 

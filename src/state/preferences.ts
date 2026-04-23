@@ -2,7 +2,46 @@ import { PREFERENCES_KEY } from '../util/constants.js';
 import type { DiagonalRule, DistanceUnit } from './distance.js';
 
 export type LabelSize = 'small' | 'medium' | 'large';
-export type Theme = 'dark' | 'light';
+/**
+ * Visual theme. The original `'dark'` and `'light'` themes are the
+ * sober defaults; Phase 59 adds three flavored variants for table
+ * mood-setting:
+ *   - `'parchment'` — warm sepia / cream, dark-brown ink. Reads like
+ *     an old hand-drawn map.
+ *   - `'console'` — terminal green-on-black, for sci-fi / cyberpunk
+ *     campaigns.
+ *   - `'purple-dusk'` — deep midnight purple with lavender accents,
+ *     for moodier sessions.
+ *
+ * Theme switching is purely visual — same layout, same components,
+ * same canvas math; only the CSS variable palette + a few canvas
+ * fill colors change.
+ */
+export type Theme = 'dark' | 'light' | 'parchment' | 'console' | 'purple-dusk';
+
+/**
+ * Every theme value, in display order. Used by the Settings UI to
+ * render the picker without duplicating the list.
+ */
+export const ALL_THEMES: readonly Theme[] = [
+  'dark',
+  'light',
+  'parchment',
+  'console',
+  'purple-dusk',
+];
+
+/**
+ * Human-readable label for each theme — single source of truth for
+ * the picker UI + the help overlay.
+ */
+export const THEME_LABELS: Record<Theme, string> = {
+  dark: 'Dark',
+  light: 'Light',
+  parchment: 'Parchment',
+  console: 'Console',
+  'purple-dusk': 'Purple Dusk',
+};
 /**
  * Dynamic line-of-sight mode.
  *   - `'off'` — fog is driven entirely by the GM's manual Reveal / Hide

@@ -119,9 +119,18 @@ const RENDER_DEFAULTS = {
   theme: 'dark' as const,
 };
 
-const CANVAS_BG = {
+/**
+ * Background color for the canvas "void" outside the map area —
+ * what shows through when the camera is panned beyond the grid. Each
+ * Phase 59 theme picks a slightly darker / off shade of its own
+ * palette so the map region still reads as a distinct surface.
+ */
+const CANVAS_BG: Record<import('../state/preferences.js').Theme, string> = {
   dark: '#14161a',
   light: '#e6e7ec',
+  parchment: '#ebe0c5',
+  console: '#080d08',
+  'purple-dusk': '#0e0a1f',
 };
 
 export function createRenderer(opts: CreateRendererOptions): Renderer {

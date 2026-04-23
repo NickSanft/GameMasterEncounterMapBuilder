@@ -29,6 +29,53 @@ body.theme-light {
   --panel-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
 }
 
+/* Phase 59 — flavored theme variants. Layout / component sizing is
+   unchanged across themes; only the palette swaps via CSS variables. */
+body.theme-parchment {
+  --bg: #f4ecd8;
+  --bg-elev: #fbf6e8;
+  --fg: #3a2e1f;
+  --fg-muted: #7a6a4d;
+  --accent: #8b4513;
+  --accent-hover: #a0522d;
+  --border: #d4c5a3;
+  --panel-bg: rgba(251, 246, 232, 0.95);
+  --hover-overlay: rgba(80, 60, 30, 0.06);
+  --modal-backdrop: rgba(70, 55, 30, 0.45);
+  --active-glow: rgba(139, 69, 19, 0.18);
+  --panel-shadow: 0 8px 28px rgba(80, 60, 30, 0.22);
+}
+
+body.theme-console {
+  --bg: #0a0e0a;
+  --bg-elev: #121712;
+  --fg: #9affb0;
+  --fg-muted: #5c8a66;
+  --accent: #00ff7f;
+  --accent-hover: #33ffaa;
+  --border: #1d2a1d;
+  --panel-bg: rgba(8, 14, 8, 0.94);
+  --hover-overlay: rgba(0, 255, 127, 0.08);
+  --modal-backdrop: rgba(0, 0, 0, 0.6);
+  --active-glow: rgba(0, 255, 127, 0.15);
+  --panel-shadow: 0 8px 30px rgba(0, 255, 127, 0.08);
+}
+
+body.theme-purple-dusk {
+  --bg: #1a1532;
+  --bg-elev: #241e3d;
+  --fg: #e8e4f5;
+  --fg-muted: #9c93b8;
+  --accent: #bb7cff;
+  --accent-hover: #d39bff;
+  --border: #3a3158;
+  --panel-bg: rgba(36, 30, 61, 0.94);
+  --hover-overlay: rgba(187, 124, 255, 0.07);
+  --modal-backdrop: rgba(15, 10, 30, 0.55);
+  --active-glow: rgba(187, 124, 255, 0.18);
+  --panel-shadow: 0 8px 28px rgba(15, 10, 30, 0.5);
+}
+
 * {
   box-sizing: border-box;
 }
@@ -742,6 +789,14 @@ body.view {
 .radio-group {
   display: flex;
   gap: 0.85rem;
+}
+
+/* Phase 59 — `.radio-group-wrap` adds wrapping for picker rows that
+   are wider than fit (e.g. the 5-option theme picker). Plain
+   `.radio-group` keeps its single-row default for short lists. */
+.radio-group-wrap {
+  flex-wrap: wrap;
+  row-gap: 0.4rem;
 }
 
 .radio-group > label {

@@ -160,6 +160,17 @@ const GM_SECTIONS: HelpSection[] = [
       { name: 'Damage / Heal…', desc: 'Right-click a token (or a selection) → "Damage / Heal…" opens a dialog. Positive = damage, negative = healing. Apply with Enter. Applies to every HP-tracked token in the selection at once.' },
     ],
   },
+  {
+    title: 'Themes',
+    intro: 'Settings → Appearance → Theme picks a base color palette for the whole UI. Layout / behavior is identical across themes — only the look changes.',
+    entries: [
+      { name: 'Dark', desc: 'Default. Charcoal background, warm orange accent — easy on the eyes for long sessions.' },
+      { name: 'Light', desc: 'Soft off-white surface with the same warm accent — better for daylight rooms or projector setups.' },
+      { name: 'Parchment', desc: 'Warm cream background with dark-brown ink and faded-gold borders. Reads like an old hand-drawn map; works well for classic fantasy campaigns.' },
+      { name: 'Console', desc: 'Terminal green-on-black. Built for sci-fi or cyberpunk one-shots — accents glow in the same green so the whole UI feels CRT.' },
+      { name: 'Purple Dusk', desc: 'Deep midnight-purple background with lavender accents. Moodier alternative to plain Dark for horror or twilight scenes.' },
+    ],
+  },
 ];
 
 const SPECTATOR_SECTIONS: HelpSection[] = [

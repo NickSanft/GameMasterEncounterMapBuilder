@@ -37,6 +37,7 @@ import { isEditableFocus } from '../util/focus.js';
 import { createAnnouncer } from '../util/announcer.js';
 import { registerPwa } from '../util/pwa.js';
 import { mountStatusBanners } from '../ui/status-banners.js';
+import { applyTheme } from '../util/theme.js';
 import { createFogWorkerClient } from '../render/fog-worker-client.js';
 import FogWorker from '../render/fog-worker.js?worker';
 import {
@@ -469,11 +470,11 @@ function mountSpectatorMenu(actions: { onSettings: () => void; onShortcuts: () =
 function applyPrefsToBody(prefs: {
   reducedMotion: boolean;
   highContrast: boolean;
-  theme: 'dark' | 'light';
+  theme: import('../state/preferences.js').Theme;
 }) {
   document.body.classList.toggle('reduced-motion', prefs.reducedMotion);
   document.body.classList.toggle('high-contrast', prefs.highContrast);
-  document.body.classList.toggle('theme-light', prefs.theme === 'light');
+  applyTheme(prefs.theme);
 }
 
 function showSyncWarning() {
