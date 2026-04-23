@@ -1,11 +1,11 @@
 {
   "name": "gm-encounter-maps",
   "private": true,
-  "version": "0.61.1",
+  "version": "0.61.2",
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && vite build",
+    "build": "node scripts/check-no-null-bytes.mjs && tsc --noEmit && vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",

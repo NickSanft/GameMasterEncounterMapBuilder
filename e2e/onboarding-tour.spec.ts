@@ -15,7 +15,12 @@ import { test, expect, type Page } from '@playwright/test';
 const PREFS_KEY = 'gm-encounter-maps-prefs';
 
 async function bootGmFresh(page: Page) {
-  // Ensure no leaked notes-open from a sibling spec gets in our way.
+  // Belt: clear any leaked notes-open key from a sibling spec.
+  // Suspenders: the describe block opts out of `globalSetup`'s
+  // `onboardingComplete: true` seed via `test.use({storageState: undefined})`
+  // so this spec's reload tests can verify the tour DOES persist
+  // its complete state across reload (an addInitScript-based clear
+  // would re-fire on every reload + wipe the just-saved completion).
   await page.addInitScript(() => {
     try {
       localStorage.removeItem('gm-encounter-maps-notes-open');
@@ -36,6 +41,14 @@ async function bootGmOnboarded(page: Page) {
 }
 
 test.describe('Onboarding tour (Phase 61)', () => {
+  // Opt out of the global storage state (which seeds `onboardingComplete:
+  // true` for every other spec). Tour specs need to start with NO prefs
+  // so the auto-show fires; the persistence tests then assert that
+  // Finish / Skip / Esc correctly write the flag for subsequent reloads.
+  // (`undefined` here would inherit the project default — pass an
+  // explicit empty state to override.)
+  test.use({ storageState: { cookies: [], origins: [] } });
+
   test('Auto-shows on first boot with the welcome popover', async ({ page }) => {
     await bootGmFresh(page);
     await page.goto('./gm.html');

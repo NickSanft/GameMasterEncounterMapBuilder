@@ -38,6 +38,12 @@ const FIXED_PREFS = {
   sceneLightColor: '#0a0530',
   sceneLightOpacity: 0,
   showMiniMap: false,
+  // 0.61.2 — visual baselines were captured before Phase 61 added the
+  // onboarding tour. Without this flag the tour auto-shows on every
+  // fresh GM boot and its dim backdrop covers the canvas → every
+  // baseline diff fails. Mark onboarding done to suppress it; the
+  // tour spec covers the auto-show separately.
+  onboardingComplete: true,
 };
 
 /**

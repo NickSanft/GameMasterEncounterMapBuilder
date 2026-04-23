@@ -26,6 +26,30 @@ Post-1.0 roadmap, re-numbered after Phase 61 shipped:
 
 ---
 
+## [0.61.2] — 2026-04-23 — Phase 61 CI fallout: CSS bundle, e2e tour interference, baseline drift
+
+CI on the 0.61.1 push went red on **23 specs failing** (mostly annotations + AoE + visual-regression). Three independent root causes — diagnosed by walking the CI logs + reproducing locally; all three fixed in this patch.
+
+### Fixed
+1. **CSS bundle silently truncated** by 2 trailing null bytes in `src/ui/styles.css`. The bytes (`\r\0\n\0`) came from a PowerShell `>>` redirect I ran during a styles.css edit — PS 5.1 defaults to UTF-16 LE for redirects, which adds nulls when extending a UTF-8 file. Vite's CSS bundler tolerated the file but warned `Expected "{" but found end of file` and dropped everything past the corruption. Page styles partially missing → many e2e assertions timing out on layout-dependent selectors.
+   - **Fix**: stripped the trailing junk bytes, ending the file cleanly at the last `}\n`. Verified the CSS bundler is now warning-free + the file scans clean for null bytes.
+2. **Onboarding tour auto-show backdrop blocked clicks in non-tour e2e specs**. Phase 61's tour pops up 250ms after first GM boot and its dim backdrop has `pointer-events: auto` to focus user attention on the highlighted target — but for the centered Welcome step the backdrop covers the whole viewport. Specs like `annotations.spec.ts` and `aoe-tool.spec.ts` start fresh (no prefs), the tour fires during their setup, and every `mouse.click` / `mouse.move` after that hits the backdrop instead of the canvas. Result: 30s timeouts on right-click and context-menu interactions.
+   - **Fix**: added `e2e/global-setup.ts` that writes a Playwright `storageState.json` pre-seeding `{onboardingComplete: true}` so the tour stays dormant for every spec by default. The `onboarding-tour.spec.ts` opts out via `test.use({storageState: {cookies: [], origins: []}})` so its `bootGmFresh()` helper still triggers the auto-show. Per-spec `addInitScript` calls run AFTER the seeded state is applied, so individual tests can still override (e.g. `voice-transcription.spec.ts` pre-sets `notes-open=true`).
+3. **`e2e/visual-regression.spec.ts`'s `FIXED_PREFS` was missing `onboardingComplete`**. The visual baselines were captured pre-Phase-61, so any auto-show-then-screenshot run produced an image with the tour overlay → 100% pixel diff. Also: Phase 61 added the "Take the tour" entry to the session menu, so the *session-menu-light* baseline got 39px taller (one button + gap).
+   - **Fix**: added `onboardingComplete: true` to `FIXED_PREFS` so the tour is suppressed during baseline runs. Regenerated the *session-menu-light* baselines on both platforms (Win32 locally + Linux via the pinned `mcr.microsoft.com/playwright:v1.59.1-jammy` Docker container, same `/scratch` workaround as 0.59.1's baseline regen).
+
+### Build guard added
+- New `scripts/check-no-null-bytes.mjs` scans every tracked source file under `src/`, `e2e/`, `public/`, and the project root for null bytes; fails the build with a named offending file if any are found. Wired into `npm run build` ahead of `tsc` + `vite build`. Now any future PowerShell `>>` accident (or other UTF-16-on-UTF-8 mishap) fails loud at build time instead of silently corrupting the CSS bundle.
+
+### Verified
+- Local: `npm run build` passes the new guard cleanly (247 files scanned). Full Playwright suite green (`154 / 154`). Unit suite unchanged at 573.
+- New tour-spec assertion was already in 0.61.1 — confirmed it still passes.
+
+### No other changes
+- Tour state machine, UI module, persistence wiring, session-menu replay entry — all unchanged from 0.61.1. Bundle effectively unchanged.
+
+---
+
 ## [0.61.1] — 2026-04-23 — Onboarding tour: fix Tools step selector
 
 ### Fixed
