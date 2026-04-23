@@ -26,6 +26,20 @@ Post-1.0 roadmap, re-numbered after Phase 61 shipped:
 
 ---
 
+## [0.61.1] — 2026-04-23 — Onboarding tour: fix Tools step selector
+
+### Fixed
+- **The "Tools" step in the onboarding tour didn't highlight the toolbar**, while every other anchored step (Session menu, Map canvas, Help button) drew the cutout correctly. Root cause: `GM_TOUR_STEPS[1].target` was `.toolbar`, but the actual class on the toolbar element is `.gm-toolbar`. The selector silently failed (no DOM match → null target), and `layoutPopover` falls back to a centered popover with the four-piece backdrop collapsed into a single full-viewport piece. Net effect: the popover content was correct but the highlight was missing.
+- **Fix**: change the selector to `.gm-toolbar` to match the DOM.
+
+### Why CI didn't catch it
+- The Phase 61 e2e walked all 6 steps but only asserted popover content + step counter — neither of which depends on whether the target was found. Pinned forward with a new spec that walks each step and asserts `tour-popover[data-placement]` matches the step's expected placement (`'center'` for the no-target intro/outro steps; `'top'` / `'bottom'` / `'left'` / `'right'` for anchored steps). Pre-fix it FAILS at step 2 (placement is `'center'` instead of `'bottom'`); post-fix it PASSES.
+
+### No other changes
+- Tour state machine, UI module, CSS, and persistence wiring unchanged. Bundle effectively unchanged. 573 unit tests + 8 onboarding-tour e2e specs (was 7) green.
+
+---
+
 ## [0.61.0] — 2026-04-23 — Onboarding tour
 
 ### Added

@@ -165,7 +165,13 @@ export const GM_TOUR_STEPS: readonly TourStep[] = [
     id: 'toolbar',
     title: 'Tools',
     body: "Pick a tool here, or use the keyboard shortcut shown on each button — T for Token, S for Select, R/H for Reveal/Hide fog, M for Map, W for Walls.",
-    target: '.toolbar',
+    // 0.61.1 — actual class is `.gm-toolbar`; the original `.toolbar`
+    // selector silently failed (no DOM match → null target → layout
+    // helper fell back to a centered popover with no highlight, which
+    // is what the user observed). The Phase 61 e2e didn't catch it
+    // because it only asserted popover content + counter, not whether
+    // the highlight cutout actually surrounded the target.
+    target: '.gm-toolbar',
     placement: 'bottom',
   },
   {

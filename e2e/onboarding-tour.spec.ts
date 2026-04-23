@@ -139,6 +139,47 @@ test.describe('Onboarding tour (Phase 61)', () => {
     await expect(tour.locator('[data-field="counter"]')).toHaveText(/1 of 6/);
   });
 
+  test('Every anchored step resolves its target selector + draws a highlight cutout', async ({
+    page,
+  }) => {
+    // Regression for 0.61.1 — the original GM_TOUR_STEPS used
+    // `.toolbar` for the Tools step, but the actual class name is
+    // `.gm-toolbar`, so the selector resolved to null + the popover
+    // silently fell back to centered with no highlight cutout. This
+    // test walks every step and asserts (a) anchored steps have a
+    // target element in the DOM AND (b) the popover got a non-
+    // 'center' placement (i.e. the target was found and the layout
+    // helper anchored to it).
+    await bootGmFresh(page);
+    await page.goto('./gm.html');
+    await page.waitForSelector('#canvas');
+    const tour = page.locator('.tour-popover');
+    await expect(tour).toBeVisible({ timeout: 2000 });
+
+    // Walk through all 6 steps. For each, read the placement data
+    // attribute set by `layoutPopover`. Anchored steps should NOT
+    // be 'center'; centered (no-target) steps should be 'center'.
+    const expectedPlacements: ReadonlyArray<'center' | 'top' | 'bottom' | 'left' | 'right'> = [
+      'center', // welcome
+      'bottom', // toolbar (was the broken one — pre-fix would fall back to 'center')
+      'top',    // canvas
+      'left',   // session-menu
+      'center', // spectator
+      'top',    // help
+    ];
+    for (let i = 0; i < expectedPlacements.length; i++) {
+      const expected = expectedPlacements[i]!;
+      await expect(tour.locator('[data-field="counter"]')).toHaveText(
+        new RegExp(`${i + 1} of 6`),
+      );
+      const placement = await tour.evaluate((el) => el.dataset['placement']);
+      expect(placement).toBe(expected);
+      if (i < expectedPlacements.length - 1) {
+        await tour.locator('[data-action="next"]').click();
+      }
+    }
+  });
+
   test('Back button shows on later steps + steps backward correctly', async ({
     page,
   }) => {
