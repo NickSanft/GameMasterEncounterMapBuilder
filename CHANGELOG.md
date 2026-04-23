@@ -18,10 +18,58 @@ Every release is an annotated git tag (`vX.Y.Z`) on the commit that introduced t
 
 ## [Unreleased]
 
-Phase 64 was the last minor on the post-1.0 roadmap. Future work is
-TBD — candidates include WebSocket-backed signaling for Remote Play
-(auto-reconnect without manual SDP copy-paste), a server-side room
-directory, and richer conflict-merge UI for diverged sessions.
+Second post-1.0 phase plan (Phases 65 → 84) — see PLAN.md / the
+chat history for the full breakdown:
+
+- **0.66.0** — SyncMessage envelope with `senderId` + `timestamp`
+- **0.67.0** — Move identity storage off `preferences`
+- **0.68.0** — Visual-regression baseline auto-regen tooling
+- **0.69.0** — Auto-roll initiative + `Token.initiativeMod`
+- **0.70.0** — Round-counted conditions
+- **0.71.0** — Concentration tracking + auto-prompt
+- **0.72.0** — Death saves UI
+- **0.73.0** — 3D dice animation + multi-dice rolling
+- **0.74.0** — `/dice` chat shortcuts
+- **0.75.0** — Recent-scenes quick-switch (Ctrl+1..9)
+- **0.76.0** — Auto-save indicator pill
+- **0.77.0** — Token damage / heal animations
+- **0.78.0** — Fog reveal fade-in
+- **0.79.0** — Weather overlays
+- **0.80.0** — Day / night cycle
+- **0.81.0** — Animated GIF token portraits
+- **0.82.0** — Per-Spectator permissions
+- **0.83.0** — Latency indicator on the status chip
+- **0.84.0** — Conflict-merge UI
+
+---
+
+## [0.65.0] — 2026-04-23 — Bundle profiling + lazy-load 3 modals (−18% initial JS)
+
+### Added
+- **`npm run analyze`** — convenience script that builds with `ANALYZE_BUNDLE=1`, emits `dist/stats.html` (rollup-plugin-visualizer treemap), and prints a per-chunk module breakdown to the terminal. Wraps `scripts/analyze.mjs` (cross-platform Node, no `cross-env` dep). The treemap stays out of the production build (only generated when the env var is set).
+- **`scripts/analyze-bundle.mjs`** — parses `dist/stats.html`, walks the chunk tree, and prints the top 18 modules per chunk by brotli size. Handy any time we need to find the next round of trim candidates.
+
+### Changed
+- **3 heavy modals are now lazy-loaded** via dynamic `import()`:
+  - `ui/help-overlay.ts` — split into a thin stub + `help-overlay-content.ts` (8.5 KB brotli of section text). The "?" button mounts immediately at boot; the modal markup loads on first click.
+  - `ui/settings-modal.ts` — split into a stub + `settings-modal-content.ts` (5.3 KB brotli). Settings opens on the next tick after the user clicks the menu entry; subsequent opens are instant.
+  - `ui/remote-play-modal.ts` — split into a stub + `remote-play-modal-content.ts` (2.8 KB brotli). Same pattern.
+- **`size-limit` config split** into two budgets so the lazy chunks no longer count against the initial-load budget:
+  - **JavaScript (initial load, brotli)**: was `80 KB` for *all* chunks → now **`65 KB`** for everything except the 3 lazy bundles.
+  - **JavaScript (lazy chunks, brotli)**: new bucket, `20 KB` ceiling.
+- **rollup-plugin-visualizer** added as a `devDependency` for the new `analyze` script. Production builds are unaffected.
+
+### Bundle math
+- **Before**: 76.7 KB brotli total (everything in the initial load).
+- **After**: 63.1 KB initial-load + 16.55 KB lazy = 79.65 KB total.
+- **Initial-load reduction**: −13.6 KB (−18%). The user's first paint is now noticeably faster, especially on slow networks; the lazy chunks are fetched in parallel with the user reading the page.
+- **Total** is technically slightly higher (rollup overhead per chunk + a few extra import statements) but that's the right trade-off — most users never open Remote Play, many never open Settings beyond the first time, and a clean first paint matters more than a slightly bigger overall footprint.
+
+### Tests
+- All 629 unit tests + 166 Playwright specs pass — lazy-loading the modals doesn't change any user-visible behavior. The Playwright specs were the primary safety net here (they exercise every modal-open flow end-to-end).
+
+### No content changes
+- Behavior of the modals is unchanged — same DOM, same wiring, same close-on-Esc semantics. The only difference is that the first `.open()` does an `await import(...)` under the hood; subsequent opens are instant.
 
 ---
 

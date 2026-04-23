@@ -1,7 +1,7 @@
 {
   "name": "gm-encounter-maps",
   "private": true,
-  "version": "0.64.0",
+  "version": "0.65.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -13,13 +13,28 @@
     "test:e2e": "playwright test",
     "test:e2e:install": "playwright install --with-deps chromium",
     "test:e2e:report": "playwright show-report",
-    "size": "size-limit"
+    "size": "size-limit",
+    "analyze": "node scripts/analyze.mjs"
   },
   "size-limit": [
     {
-      "name": "JavaScript (all chunks, brotli)",
-      "path": "dist/assets/*.js",
-      "limit": "80 KB"
+      "name": "JavaScript (initial load, brotli)",
+      "path": [
+        "dist/assets/*.js",
+        "!dist/assets/help-overlay-content-*.js",
+        "!dist/assets/settings-modal-content-*.js",
+        "!dist/assets/remote-play-modal-content-*.js"
+      ],
+      "limit": "65 KB"
+    },
+    {
+      "name": "JavaScript (lazy chunks, brotli)",
+      "path": [
+        "dist/assets/help-overlay-content-*.js",
+        "dist/assets/settings-modal-content-*.js",
+        "dist/assets/remote-play-modal-content-*.js"
+      ],
+      "limit": "20 KB"
     },
     {
       "name": "CSS (all chunks, brotli)",
@@ -50,6 +65,7 @@
     "@types/node": "^22.9.0",
     "fake-indexeddb": "^6.0.0",
     "jsdom": "^25.0.1",
+    "rollup-plugin-visualizer": "^7.0.1",
     "size-limit": "^12.1.0",
     "typescript": "^5.6.3",
     "vite": "^5.4.10",
