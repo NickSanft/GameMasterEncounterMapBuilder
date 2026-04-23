@@ -107,6 +107,52 @@ test.describe('Remote play modal (Phase 62)', () => {
     expect(offer).toContain('"offer"');
   });
 
+  // Phase 64 — after creating an invitation, the modal surfaces a
+  // connection row + Disconnect button (both driven by the shared
+  // RemoteSession). The status chip at top-left also appears so the
+  // user can see the connection state without re-opening the modal.
+  test('Phase 64: Create invitation → connection row + status chip appear; Disconnect tears down', async ({
+    page,
+  }) => {
+    await page.goto('./gm.html');
+    await page.waitForSelector('#canvas');
+    await page.getByRole('button', { name: 'Remote play…', exact: true }).click();
+    const dialog = page.getByRole('dialog', { name: 'Remote play' });
+
+    // Pre-click: chip + connection row hidden.
+    await expect(page.locator('.remote-status-chip')).toBeHidden();
+    await expect(dialog.locator('[data-field="connection-row"]')).toBeHidden();
+
+    await dialog.locator('[data-action="host-create"]').click();
+    await expect(dialog.locator('[data-field="host-offer"]')).not.toHaveValue('', {
+      timeout: 10_000,
+    });
+
+    // Post-click: connection row + Disconnect button are visible.
+    await expect(dialog.locator('[data-field="connection-row"]')).toBeVisible();
+    const disconnect = dialog.locator('[data-action="disconnect"]');
+    await expect(disconnect).toBeVisible();
+
+    // Close the modal — the session stays alive and the chip should
+    // now be visible at top-left.
+    await page.keyboard.press('Escape');
+    await expect(dialog).toBeHidden();
+    await expect(page.locator('.remote-status-chip')).toBeVisible();
+
+    // Click the chip to re-open the modal + click Disconnect.
+    await page.locator('.remote-status-chip').click();
+    await expect(dialog).toBeVisible();
+    await dialog.locator('[data-action="disconnect"]').click();
+
+    // Post-disconnect: connection row hides + chip goes back to
+    // hidden. Host offer textarea got cleared so the next attempt
+    // starts fresh.
+    await expect(dialog.locator('[data-field="connection-row"]')).toBeHidden();
+    await expect(dialog.locator('[data-field="host-offer"]')).toHaveValue('');
+    await page.keyboard.press('Escape');
+    await expect(page.locator('.remote-status-chip')).toBeHidden();
+  });
+
   test('Spectator: pasting an offer + "Generate answer" produces the answer', async ({
     browser,
   }) => {

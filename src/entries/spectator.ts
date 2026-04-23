@@ -4,6 +4,8 @@ import { createStore } from '../state/store.js';
 import { DEFAULT_CAMERA } from '../state/types.js';
 import { createSyncChannel } from '../sync/channel.js';
 import { mountRemotePlayModal } from '../ui/remote-play-modal.js';
+import { createRemoteSession } from '../sync/remote-session.js';
+import { mountRemoteStatusChip } from '../ui/remote-status-chip.js';
 import {
   colorForName,
   createIdentityRegistry,
@@ -299,12 +301,47 @@ const channel = createSyncChannel();
 
 // Phase 62 — Remote Play modal (Spectator side). Populate the
 // late-bound ref the session menu uses so the button works.
+// Phase 64 — same shared-session + status-chip setup as the GM
+// side. The session tracks the active WebRTC peer; the chip
+// surfaces its state outside the modal; a status-banner warns
+// the Spectator when the connection drops.
+const remoteSession = createRemoteSession();
 const remotePlayModal = channel
-  ? mountRemotePlayModal({ channel, viewLabel: 'Spectator' })
+  ? mountRemotePlayModal({ channel, viewLabel: 'Spectator', session: remoteSession })
   : null;
 if (remotePlayModal) {
   remotePlayRef.current = () => remotePlayModal.open();
 }
+if (channel) {
+  mountRemoteStatusChip({
+    session: remoteSession,
+    onClick: () => remotePlayModal?.open(),
+  });
+}
+// Phase 64 — when the Spectator's connection to a remote GM drops,
+// surface a banner so the user knows they're no longer mirroring
+// a live session. Clicking the chip (top-left) or opening Remote
+// Play from the menu brings up the reconnect flow.
+let lastRemoteState: string = 'idle';
+remoteSession.subscribe(({ state }) => {
+  if (
+    (state === 'disconnected' || state === 'failed' || state === 'closed') &&
+    lastRemoteState === 'connected'
+  ) {
+    statusBanners.show({
+      message:
+        'Remote connection lost. Your local view is still usable; open Remote Play from the menu to reconnect.',
+      variant: 'warn',
+      dismissible: true,
+      onDismiss: () => statusBanners.hide(),
+    });
+  } else if (state === 'connected' && lastRemoteState !== 'connected') {
+    // Clear any stale "connection lost" banner on successful
+    // reconnect.
+    statusBanners.hide();
+  }
+  lastRemoteState = state;
+});
 
 function broadcastViewport() {
   if (!channel) return;

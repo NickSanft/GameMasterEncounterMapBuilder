@@ -3366,3 +3366,108 @@ body.reduced-motion .tour-popover {
   text-overflow: ellipsis;
   max-width: 14ch;
 }
+
+/* ─── Phase 64 — Remote Play status chip + connection row ───────
+   The status chip lives top-left (out of the way of the Connected
+   Players panel in the top-center). The connection row is inside
+   the Remote Play modal and mirrors the same state. Both use a
+   color-coded dot for the peer state. */
+.remote-status-chip {
+  position: fixed;
+  top: 0.85rem;
+  left: 0.85rem;
+  z-index: 12;
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.25rem 0.65rem 0.25rem 0.5rem;
+  background: var(--panel-bg);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--fg);
+  font-family: inherit;
+  font-size: 0.78rem;
+  cursor: pointer;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.18);
+  line-height: 1.3;
+}
+
+.remote-status-chip[hidden] {
+  display: none;
+}
+
+.remote-status-chip:hover {
+  background: var(--hover-overlay);
+}
+
+.remote-status-dot,
+.remote-play-connection-dot {
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: 50%;
+  display: inline-block;
+  background: #9e9e9e;
+  flex-shrink: 0;
+}
+
+/* State-based colors shared between the chip + connection row. */
+.remote-status-dot.connecting,
+.remote-play-connection-dot.state-new,
+.remote-play-connection-dot.state-connecting {
+  background: #ffb74d; /* amber — in-flight */
+}
+.remote-status-dot.connected,
+.remote-play-connection-dot.state-connected {
+  background: #66bb6a; /* green — live */
+}
+.remote-status-dot.disconnected,
+.remote-status-dot.failed,
+.remote-status-dot.closed,
+.remote-play-connection-dot.state-disconnected,
+.remote-play-connection-dot.state-failed,
+.remote-play-connection-dot.state-closed {
+  background: #e57373; /* red — down */
+}
+
+.remote-play-connection-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.55rem 0.75rem;
+  margin-top: 0.75rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.remote-play-connection-row[hidden] {
+  display: none;
+}
+
+.remote-play-connection-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  color: var(--fg);
+}
+
+.remote-play-disconnect {
+  appearance: none;
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--fg);
+  padding: 0.3rem 0.7rem;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-family: inherit;
+}
+
+.remote-play-disconnect:hover {
+  background: var(--hover-overlay);
+  border-color: var(--accent);
+  color: var(--accent);
+}

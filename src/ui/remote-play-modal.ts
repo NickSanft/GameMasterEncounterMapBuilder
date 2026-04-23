@@ -28,6 +28,7 @@ import {
   type HostPeer,
   type PeerState,
 } from '../sync/remote-peer.js';
+import type { RemoteSession } from '../sync/remote-session.js';
 
 type Role = 'host' | 'guest';
 
@@ -41,6 +42,14 @@ export interface RemotePlayModalOptions {
   channel: SyncChannel;
   /** Friendly label used in UI copy (`GM view` / `Spectator view`). */
   viewLabel: 'GM' | 'Spectator';
+  /**
+   * Phase 64 — shared session state. The modal attaches created
+   * peers here so external observers (the connection-status chip +
+   * the entry's full-state-rebroadcast logic) can react. Passing
+   * a session is optional; when omitted the modal keeps its
+   * internal-only behavior from Phase 62.
+   */
+  session?: RemoteSession;
 }
 
 /**
@@ -142,6 +151,17 @@ export function mountRemotePlayModal(
         works fine in same-browser same-origin mode via the built-in
         BroadcastChannel — remote play is purely additive.
       </p>
+      <!-- Phase 64: persistent connection row. Visible when a peer
+           is attached to the session; hidden otherwise. Shows the
+           current status + gives the user an explicit Disconnect
+           button to tear down the peer without having to reload. -->
+      <div class="remote-play-connection-row" data-field="connection-row" hidden>
+        <div class="remote-play-connection-status">
+          <span class="remote-play-connection-dot" data-field="connection-dot" aria-hidden="true"></span>
+          <span data-field="connection-text" aria-live="polite">Idle</span>
+        </div>
+        <button type="button" class="remote-play-disconnect" data-action="disconnect">Disconnect</button>
+      </div>
     </div>
   `;
   backdrop.appendChild(modal);
@@ -168,10 +188,60 @@ export function mountRemotePlayModal(
   const guestAcceptBtn = modal.querySelector<HTMLButtonElement>('[data-action="guest-accept"]')!;
   const guestCopyBtn = modal.querySelector<HTMLButtonElement>('[data-action="guest-copy-answer"]')!;
   const notSupportedMsg = modal.querySelector<HTMLElement>('[data-field="not-supported"]')!;
+  const connectionRow = modal.querySelector<HTMLElement>('[data-field="connection-row"]')!;
+  const connectionDot = modal.querySelector<HTMLElement>('[data-field="connection-dot"]')!;
+  const connectionText = modal.querySelector<HTMLElement>('[data-field="connection-text"]')!;
+  const disconnectBtn = modal.querySelector<HTMLButtonElement>('[data-action="disconnect"]')!;
 
   let hostPeer: HostPeer | null = null;
   let guestPeer: GuestPeer | null = null;
   let detachAttached: (() => void) | null = null;
+
+  // Phase 64 — reflect the shared session state into the modal's
+  // connection row: show "Connected / Connecting / Disconnected /
+  // Closed" + the Disconnect button when a peer is attached. Hide
+  // the row entirely when the session is idle.
+  function renderConnectionRow(
+    state: PeerState | 'idle',
+    hasPeer: boolean,
+  ): void {
+    if (!hasPeer || state === 'idle') {
+      connectionRow.hidden = true;
+      return;
+    }
+    connectionRow.hidden = false;
+    connectionText.textContent = stateToText(state);
+    connectionDot.className = `remote-play-connection-dot state-${state}`;
+  }
+  opts.session?.subscribe(({ peer, state }) => {
+    renderConnectionRow(state, peer !== null);
+  });
+  // Initial render (in case a peer was already attached when the
+  // modal mounted).
+  if (opts.session) {
+    renderConnectionRow(opts.session.getState(), opts.session.getActivePeer() !== null);
+  }
+
+  disconnectBtn.addEventListener('click', () => {
+    opts.session?.disconnect();
+    detachAttached?.();
+    detachAttached = null;
+    hostPeer = null;
+    guestPeer = null;
+    // Reset the input/output textareas so the flow is clean for
+    // the next connection attempt.
+    hostOfferTa.value = '';
+    hostAnswerTa.value = '';
+    guestOfferTa.value = '';
+    guestAnswerTa.value = '';
+    hostCreateBtn.disabled = false;
+    hostCopyBtn.disabled = true;
+    hostAcceptBtn.disabled = true;
+    guestAcceptBtn.disabled = true;
+    guestCopyBtn.disabled = true;
+    hostState.textContent = 'Idle';
+    guestState.textContent = 'Idle';
+  });
 
   if (!isWebRtcSupported()) {
     notSupportedMsg.hidden = false;
@@ -224,6 +294,9 @@ export function mountRemotePlayModal(
       if (hostPeer) hostPeer.close();
       const peer = createHostPeer();
       hostPeer = peer;
+      // Phase 64: register with the session so the status chip +
+      // the entry's full-state-rebroadcast logic can observe.
+      opts.session?.attachPeer(peer);
       peer.onStateChange((s) => {
         hostState.textContent = stateToText(s);
       });
@@ -270,6 +343,8 @@ export function mountRemotePlayModal(
       if (guestPeer) guestPeer.close();
       const peer = createGuestPeer(offerStr);
       guestPeer = peer;
+      // Phase 64: same session attachment as the host flow.
+      opts.session?.attachPeer(peer);
       peer.onStateChange((s) => {
         guestState.textContent = stateToText(s);
       });

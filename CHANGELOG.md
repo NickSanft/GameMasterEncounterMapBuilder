@@ -18,9 +18,46 @@ Every release is an annotated git tag (`vX.Y.Z`) on the commit that introduced t
 
 ## [Unreleased]
 
-Post-1.0 roadmap, re-numbered after Phase 63 shipped:
+Phase 64 was the last minor on the post-1.0 roadmap. Future work is
+TBD — candidates include WebSocket-backed signaling for Remote Play
+(auto-reconnect without manual SDP copy-paste), a server-side room
+directory, and richer conflict-merge UI for diverged sessions.
 
-- **0.64.0** — Reconnection + conflict resolution
+---
+
+## [0.64.0] — 2026-04-23 — Reconnection + conflict resolution (Remote Play)
+
+### Added
+- **Persistent Remote Play connection state.** The active `RemotePeer` used to live as a local variable inside `mountRemotePlayModal`'s closure — closing the modal hid the UI but left no way to observe the connection from outside. Phase 64 extracts the peer ownership into a new `RemoteSession` module that the modal writes to + external observers read from.
+- **Status chip** anchored to the top-left of the viewport (away from the Connected Players panel in the top-center). Shows at-a-glance whether you're connected + what state the peer is in via a color-coded dot:
+  - 🟡 amber while `connecting`
+  - 🟢 green when `connected`
+  - 🔴 red on `disconnected` / `failed` / `closed`
+  Hidden when the session is idle (no peer attached). Clicking the chip re-opens the Remote Play modal.
+- **Graceful Disconnect button** inside the Remote Play modal, visible whenever a peer is attached. Closes the peer + clears the textareas + resets the session back to idle — a clean surface for starting a fresh invitation without leaving the modal.
+- **Disconnect banner on the Spectator side**. When the remote peer transitions from `connected` → `disconnected` / `failed` / `closed`, a dismissible warn-variant banner surfaces: *"Remote connection lost. Your local view is still usable; open Remote Play from the menu to reconnect."* It self-clears when a reconnect succeeds.
+- **GM full-state rebroadcast on peer (re)connect.** When a remote peer transitions to `connected` (fresh handshake OR a reconnect after `disconnected`), the GM entry immediately sends a `full-state` SyncMessage + its identity — so the newly-connected peer starts from a clean sync point without relying on whatever message fragments might have been mid-flight when the disconnect happened. Cross-tab BroadcastChannel peers were already handled by `broadcastInitial()` on boot; this closes the gap for WebRTC peers that arrive long after the GM loaded.
+- **Help overlay** — the *Remote play* section grows two new bullets covering the status chip + the reconnect flow.
+
+### Implementation notes
+- **`src/sync/remote-session.ts`** — new pure module. `createRemoteSession()` returns `{getActivePeer, getState, attachPeer(peer), disconnect, subscribe(listener)}`. Internally tracks a single active peer, mirrors the peer's state via its own subscribe events, and closes + replaces cleanly when a new peer is attached. The session stays on a `closed` peer until an explicit `disconnect()` or `attachPeer(next)` — so the UI can render "Disconnected — click to reconnect" without racing the session back to idle.
+- **`src/ui/remote-status-chip.ts`** — new UI module. Mounts a small `<button>` pinned top-left, reads from the session's `subscribe` stream, toggles visibility + updates the dot color class on every state transition.
+- **`src/ui/remote-play-modal.ts`** — accepts an optional `session` in its options. When supplied, the Host / Join flows call `session.attachPeer(peer)` as part of their existing "peer created" path; a new `.remote-play-connection-row` inside the modal body shows the same state as the chip + exposes a Disconnect button.
+- **`src/entries/gm.ts`** + **`src/entries/spectator.ts`** construct the session, wire it into the modal + chip, and subscribe to observe peer transitions. GM rebroadcasts `full-state` on `connected`; Spectator raises a status banner on `disconnected` and self-clears it on reconnect.
+
+### Conflict resolution — GM-wins
+Star topology + single-writer semantics make this easy. The only way state "drifts" is if a remote Spectator's local store was edited while disconnected (Spectator shouldn't mutate, but they could via their IndexedDB). On reconnect, the GM's full-state broadcast overwrites. Deliberate design: the GM is the session's authoritative source; merging isn't something a Spectator's local view can meaningfully contribute to. Documented in the Help overlay and the CHANGELOG.
+
+### Tests
+- **+10 unit tests** in `src/sync/remote-session.test.ts` for the session state machine: starts idle, attach/detach cycle, mirrors peer state, replaces cleanly on re-attach, `disconnect` no-op when idle, detach fn is no-op for a stale peer, unsubscribe semantics, stays on a closed peer until explicit disconnect.
+- **+1 Playwright** in `e2e/remote-play.spec.ts` (7 total): "Create invitation → connection row + status chip appear → closing the modal keeps the chip → click the chip re-opens → Disconnect tears down + both go hidden again."
+- All 57 unit-test files green: 629 unit tests total (+10 from 0.63.1's 619). 166 Playwright specs (+1 from 165).
+
+### Bundle
+- Adds ~2 KB JS (remote-session + remote-status-chip + the wiring). Bundle well under the 80 KB brotli budget bumped in 0.63.0.
+
+### No other changes
+- Same wire protocol (`SyncMessage` shape unchanged). BroadcastChannel + WebRTC fan-out in `SyncChannel.attachRemote` unchanged. Phase 62's manual-signaling invitation / answer copy-paste flow unchanged; reconnect is still a manual re-handshake (future phase: server-backed signaling for auto-reconnect).
 
 ---
 

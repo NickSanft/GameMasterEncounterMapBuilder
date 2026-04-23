@@ -98,6 +98,8 @@ import { mountNotesPanel } from '../ui/notes-panel.js';
 import { mountOnboardingTour } from '../ui/onboarding-tour.js';
 import { createTourController, GM_TOUR_STEPS } from '../state/onboarding-tour.js';
 import { mountRemotePlayModal } from '../ui/remote-play-modal.js';
+import { createRemoteSession } from '../sync/remote-session.js';
+import { mountRemoteStatusChip } from '../ui/remote-status-chip.js';
 import {
   colorForName,
   createIdentityRegistry,
@@ -1158,9 +1160,38 @@ const channel = createSyncChannel();
 // Phase 62 — Remote Play modal. Only mounted when BroadcastChannel
 // is available (same prereq as the channel itself); `onRemotePlay`
 // in the session-menu wiring above becomes a no-op otherwise.
+// Phase 64 — shared `RemoteSession` holds the active peer so the
+// status chip + the full-state-rebroadcast logic can observe.
+const remoteSession = createRemoteSession();
 const remotePlayModal = channel
-  ? mountRemotePlayModal({ channel, viewLabel: 'GM' })
+  ? mountRemotePlayModal({ channel, viewLabel: 'GM', session: remoteSession })
   : null;
+// Phase 64 — persistent status chip. Hidden while `remoteSession`
+// is idle; clicking it reopens the Remote Play modal so the user
+// can Disconnect / Reconnect without hunting through the menu.
+if (channel) {
+  mountRemoteStatusChip({
+    session: remoteSession,
+    onClick: () => remotePlayModal?.open(),
+  });
+}
+// Phase 64 — when a remote peer transitions to 'connected' (fresh
+// handshake OR a reconnect), immediately re-broadcast the full
+// state + the GM's identity so the peer starts from a clean sync
+// point. Cross-tab BroadcastChannel peers already received
+// `broadcastInitial()` at load; this handles the WebRTC arrival
+// case where a peer hooks in long after the GM booted.
+let lastRemotePeerState: string = 'idle';
+remoteSession.subscribe(({ state }) => {
+  if (state === 'connected' && lastRemotePeerState !== 'connected' && initialLoadComplete) {
+    channel?.send({
+      type: 'full-state',
+      state: serializeState(store.getState()),
+    });
+    broadcastIdentity();
+  }
+  lastRemotePeerState = state;
+});
 
 // ─── Phase 63 — Player identity ────────────────────────────────────
 // Stable per-tab id (regenerated each boot — reload = new session).
