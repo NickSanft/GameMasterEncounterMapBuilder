@@ -25,6 +25,22 @@ Post-1.0 roadmap, re-numbered after Phase 62 shipped:
 
 ---
 
+## [0.62.1] — 2026-04-23 — Remote Play: cap ICE gathering at 5 seconds
+
+### Fixed
+- **"Create invitation" sometimes took a full minute to return the SDP string.** Reported by the user immediately after 0.62.0 shipped. Root cause: `waitForIceGathering` waited for `iceGatheringState === 'complete'` with no timeout, which in practice waits for Chrome's internal ICE timeout (~30-40 seconds per unreachable STUN candidate). On networks where a firewall / captive portal / ad-blocking DNS makes one of the STUN servers unreachable, the user experiences the full 30-40s wait on top of the normal 1-2s gathering.
+- **Fix**: cap gathering at 5 seconds. Return whatever candidates are present at that point — always includes at least the local host (LAN) candidate and usually a srflx (public IP) candidate, which is enough for LAN peers + most home-NAT setups. Peers behind symmetric NATs would have needed a TURN server anyway — waiting 60s for a never-arriving relay candidate doesn't help.
+- **Also added**: listen for the `icecandidate` event's `null` candidate (per WebRTC spec: "end of gathering"). Some browsers fire that before `iceGatheringState` transitions to `complete`, so we short-circuit as early as the spec allows. Three resolve paths now: `iceGatheringState === 'complete'` (best), `null candidate event` (end-of-gathering spec signal), timeout (pragmatic guard).
+
+### Tests
+- **+1 unit test** in `remote-peer.test.ts` (18 total) pinning the timeout path: a `StuckRtcPeerConnection` mock that never flips `iceGatheringState` verifies `offer()` resolves after the 5s cap instead of hanging. Uses vitest fake timers to jump the clock.
+- The null-candidate event path is exercised by the existing `e2e/remote-play.spec.ts` — real Chromium fires it well within the timer budget (observed: 1-2s).
+
+### No behavior change on fast networks
+- Offers on a well-connected network still resolve in 1-2s — the cap is an upper bound, not a delay. Users who were seeing 60s are now seeing 5s.
+
+---
+
 ## [0.62.0] — 2026-04-23 — Network sync: WebRTC transport (beta)
 
 ### Added

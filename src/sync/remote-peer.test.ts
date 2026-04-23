@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { afterEach, describe, it, expect, beforeEach, vi } from 'vitest';
 import {
   createHostPeer,
   createGuestPeer,
@@ -207,6 +207,53 @@ describe('createHostPeer', () => {
     peer.close();
     expect(peer.getState()).toBe('closed');
     expect(lastPc!.hostDc!.readyState).toBe('closed');
+  });
+
+  // 0.62.1 — regression for user-reported 60s wait on networks
+  // where one of the STUN servers is unreachable.
+  describe('ICE gathering timeout (0.62.1)', () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('offer() resolves at the 5s timeout even if gathering never completes', async () => {
+      // Override the mock to NEVER flip iceGatheringState to complete.
+      // Mirrors the real-world bug where Chrome waits ~40s for an
+      // unreachable STUN candidate before giving up.
+      class StuckRtcPeerConnection extends MockRtcPeerConnection {
+        constructor() {
+          super();
+          this.iceGatheringState = 'gathering';
+        }
+      }
+      let stuckPc: StuckRtcPeerConnection | null = null;
+      const stuckFactory = (): RTCPeerConnection => {
+        stuckPc = new StuckRtcPeerConnection();
+        return stuckPc as unknown as RTCPeerConnection;
+      };
+      const peer = createHostPeer({ pcFactory: stuckFactory });
+      const offerPromise = peer.offer();
+
+      // Without the timeout, this promise would never resolve. With
+      // the 5s guard, it resolves once the fake timer fires.
+      await vi.advanceTimersByTimeAsync(6_000);
+      const offer = await offerPromise;
+      expect(offer).toContain('fake-offer-sdp');
+      // Hostname of any candidate-less SDP would still be the
+      // local description the browser assembled; the test just
+      // confirms we didn't hang.
+      expect(stuckPc!.iceGatheringState).toBe('gathering');
+    });
+
+    // The end-of-gathering-via-null-candidate path is exercised
+    // by the real browser in e2e/remote-play.spec.ts ("Create
+    // invitation" populates the offer in well under the 5s timer).
+    // Verifying it precisely here would require fighting with fake
+    // timers + the microtask chain inside the wrapper; the e2e
+    // covers it well enough.
   });
 });
 

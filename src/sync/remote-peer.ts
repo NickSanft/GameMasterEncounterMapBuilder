@@ -149,27 +149,73 @@ function wireDataChannel(
 }
 
 /**
- * Wait for ICE gathering to complete on a freshly-created offer
- * or answer. Resolves with the fully-populated local description.
- * Without this we'd hand the user an SDP with zero candidates and
- * the connection would never establish.
+ * Hard cap on how long we wait for ICE gathering to finish before
+ * returning the SDP with whatever candidates have arrived so far.
+ *
+ * Why a cap matters (0.62.1): some networks can't reach one or more
+ * of the STUN endpoints (corporate firewall, captive portal, ad-
+ * blocking DNS, …). Chrome's internal ICE timeout is ~40 seconds
+ * per unreachable candidate server — which the user experiences as
+ * "creating the invitation took a full minute." By short-circuiting
+ * at 5s we return a SDP containing at least the host candidates
+ * (the LAN IP) and whatever srflx candidates finished in time;
+ * that's enough for LAN peers + the vast majority of home NATs.
+ * Peers behind symmetric NATs would have needed TURN anyway —
+ * waiting 60s for a never-arriving relay candidate doesn't help.
+ */
+const ICE_GATHERING_TIMEOUT_MS = 5_000;
+
+/**
+ * Wait for ICE gathering to resolve. Returns a JSON-stringified
+ * `localDescription` containing every candidate gathered by the
+ * time we resolve. Resolution order of preference:
+ *
+ *   1. `iceGatheringState === 'complete'` (best case — all
+ *      reachable servers answered and gathering finished naturally).
+ *   2. A `null` ICE candidate event (MDN + webrtc-pc spec: "An
+ *      icecandidate event with a null candidate indicates that the
+ *      end of gathering has been reached"). Some browsers fire
+ *      this before flipping `iceGatheringState`.
+ *   3. Timeout after {@link ICE_GATHERING_TIMEOUT_MS}. This is the
+ *      pragmatic "don't make the user wait a full minute" guard;
+ *      returns whatever SDP candidates are present.
  */
 async function waitForIceGathering(pc: RTCPeerConnection): Promise<string> {
   if (pc.iceGatheringState === 'complete') {
     return JSON.stringify(pc.localDescription);
   }
   return new Promise<string>((resolve) => {
-    const check = () => {
-      if (pc.iceGatheringState === 'complete') {
-        pc.removeEventListener('icegatheringstatechange', check);
-        resolve(JSON.stringify(pc.localDescription));
-      }
+    let settled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      pc.removeEventListener('icegatheringstatechange', onStateChange);
+      pc.removeEventListener('icecandidate', onCandidate);
+      if (timer !== null) clearTimeout(timer);
+      resolve(JSON.stringify(pc.localDescription));
     };
-    pc.addEventListener('icegatheringstatechange', check);
-    // Defensive: some browsers don't fire the event on 'complete'
-    // when the state was 'gathering' already — poll on the next
-    // microtask in case we missed the transition.
-    Promise.resolve().then(check);
+
+    const onStateChange = () => {
+      if (pc.iceGatheringState === 'complete') finish();
+    };
+
+    const onCandidate = (ev: RTCPeerConnectionIceEvent) => {
+      // Null candidate = end-of-gathering signal per the WebRTC spec.
+      // Some browsers fire this before the iceGatheringState
+      // transitions to 'complete', so we listen for both.
+      if (ev.candidate === null) finish();
+    };
+
+    pc.addEventListener('icegatheringstatechange', onStateChange);
+    pc.addEventListener('icecandidate', onCandidate);
+    timer = setTimeout(finish, ICE_GATHERING_TIMEOUT_MS);
+
+    // Defensive: if gathering already finished between
+    // `setLocalDescription` and this listener being attached,
+    // the events would never fire — re-check on the next microtask.
+    Promise.resolve().then(onStateChange);
   });
 }
 
