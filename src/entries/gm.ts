@@ -773,8 +773,15 @@ async function refreshSceneIndicator(): Promise<void> {
 
 async function switchToScene(id: string): Promise<void> {
   // Persist the outgoing scene (with a fresh thumbnail) before swapping.
+  // 0.72.2 — skip the outgoing save when the initial hydrate hasn't
+  // resolved yet. Same class of bug as the beforeunload handler: if
+  // the user opens the scenes modal + clicks a scene (including the
+  // currently-active one) before `loadPersistedState` has populated
+  // the store, `store.getState()` here is the EMPTY default. Writing
+  // that over the outgoing scene record silently wipes it while
+  // leaving the scene catalog intact.
   const outgoingId = getActiveSceneId();
-  if (outgoingId) {
+  if (outgoingId && initialLoadComplete) {
     try {
       const thumb = captureThumbnail(canvas);
       await saveScene(outgoingId, store.getState(), {
@@ -1924,6 +1931,28 @@ registerPwa({
 });
 
 window.addEventListener('beforeunload', () => {
+  // 0.72.2 — guard the save path behind `initialLoadComplete`. If
+  // the tab is reloaded BEFORE the initial hydrate resolves, `store`
+  // still holds the default empty state. Flushing a save at that
+  // point would overwrite the real active-scene record in IDB + the
+  // LS backup with blank data. Without the guard, a fast reload
+  // (< ~200ms from first paint, typical during Vite dev-mode cold
+  // compiles) silently wipes the current scene while leaving the
+  // scene catalog intact — the exact symptom reported mid-Phase-72.
+  //
+  // Related: the 0.57.1 fix guarded outbound `full-state` broadcasts
+  // behind the same flag. This is the local persistence half of the
+  // same race: if a Spectator tab doesn't receive the empty broadcast
+  // (because no Spectator is open), the race still manifests via the
+  // local beforeunload save.
+  if (!initialLoadComplete) {
+    // Still clear the dirty flag so the next boot doesn't show the
+    // spurious "last session wasn't closed cleanly" banner — we
+    // haven't modified anything, so from the user's perspective this
+    // WAS a clean close.
+    markClean();
+    return;
+  }
   persist.flush();
   // Belt-and-suspenders: the async IDB write kicked off by flush()
   // won't complete during unload, so also do a synchronous

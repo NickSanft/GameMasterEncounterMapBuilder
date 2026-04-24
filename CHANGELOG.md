@@ -43,6 +43,35 @@ chat history for the full breakdown:
 
 ---
 
+## [0.72.2] — 2026-04-24 — Fix: active scene wiped by a fast reload during pre-load
+
+### Fixed
+- **Reloading the GM tab BEFORE the initial hydrate resolved would silently blank the active scene** while leaving the rest of the scene catalog intact. Reported by a user mid-Phase-72. Same failure shape as 0.57.1 (same silent-data-loss-on-reload symptom), but a different code path — the 0.57.1 fix plugged the cross-tab broadcast leak; this one plugs the equivalent local-persistence leak.
+
+### Root cause
+Two spots wrote `store.getState()` to IDB / localStorage without checking `initialLoadComplete`:
+
+1. **`window.addEventListener('beforeunload', ...)`** in `src/entries/gm.ts`. Calls `persist.flush()` + `saveStateSync(store.getState())` on every tab close / reload. If the reload fires DURING the pre-load window (< ~200-300ms from first paint, common in Vite dev mode where cold compiles push first-paint past a user's Ctrl+R reflex), `store.getState()` is the empty default state. The `saveStateSync` call then writes that empty state to the localStorage backup AND the `persist.flush()` kicks off an async IDB write to the active scene's record. Next boot reads back the blanked scene.
+2. **`switchToScene(id)`** in `src/entries/gm.ts`. Saves the outgoing scene's state before swapping. If the user opened the scenes modal + clicked a scene (including the currently-active one) before the initial load completed, the outgoing save wrote the empty default state over that scene's real data.
+
+### Fix
+Both sites now early-return when `initialLoadComplete === false`:
+- `beforeunload` still calls `markClean()` so the next boot doesn't spuriously show the "last session wasn't closed cleanly" banner — we haven't modified anything, so from the user's perspective this WAS a clean close. It just doesn't flush the empty state.
+- `switchToScene` skips the outgoing save; the scene-load half still runs, so clicking a scene early works, the just-left scene's data survives.
+
+### How to reproduce (pre-fix)
+1. Open the GM tab with a scene that has tokens.
+2. Reload (Ctrl+R) before the canvas is fully painted — roughly within the first 200-300ms on a cold dev-mode boot.
+3. On the next boot, the active scene's tokens / fog / walls are gone, but the scenes catalog still lists it with its old name + thumbnail.
+
+### Why it escaped the 0.57.1 regression test
+`e2e/active-scene-clearing.spec.ts` pins the cross-tab failure (Spectator receiving + persisting an empty broadcast). That spec spies on `BroadcastChannel.postMessage` to assert no empty `full-state` was sent. It doesn't model the single-tab reload race, where no Spectator is involved and the data loss happens entirely via the local `beforeunload` / `switchToScene` paths. Writing a deterministic e2e for the reload race requires throttling IDB from the test harness so the pre-load window stretches long enough to hit reliably in CI — worth doing as a follow-up, but the fix itself is a two-line guard that's sound by inspection.
+
+### No app behavior change for users without the bug
+- If you never triggered the race (most users on fast disks / production builds), the new guard is a pure no-op. `initialLoadComplete` flips to `true` within the first tick after boot completes; beforeunload / switchToScene from that point on behave identically to before.
+
+---
+
 ## [0.72.0] — 2026-04-24 — Death saves UI
 
 ### Added
