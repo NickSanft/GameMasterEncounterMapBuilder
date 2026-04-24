@@ -23,7 +23,7 @@ chat history for the full breakdown:
 
 - **0.66.0** — SyncMessage envelope with `senderId` + `timestamp`
 - **0.67.0** — Move identity storage off `preferences`
-- **0.68.0** — Visual-regression baseline auto-regen tooling
+- **0.68.0** — Visual-regression baseline auto-regen tooling ✅
 - **0.69.0** — Auto-roll initiative + `Token.initiativeMod`
 - **0.70.0** — Round-counted conditions
 - **0.71.0** — Concentration tracking + auto-prompt
@@ -40,6 +40,32 @@ chat history for the full breakdown:
 - **0.82.0** — Per-Spectator permissions
 - **0.83.0** — Latency indicator on the status chip
 - **0.84.0** — Conflict-merge UI
+
+---
+
+## [0.68.0] — 2026-04-23 — Visual-regression baseline auto-regen tooling
+
+### Added
+- **`scripts/regen-baselines.mjs`** — single-command regeneration of the platform-specific PNG baselines that back `e2e/visual-regression.spec.ts`. Wraps the two-step dance we'd been hand-rolling since Phase 55 (and again in 59, 61, 63, 67) every time even a few-pixel layout drift turned CI red:
+  1. **Local host-platform pass** — `npx playwright test e2e/visual-regression.spec.ts --update-snapshots`, writes the `*-chromium-win32.png` (or `*-darwin.png` on macOS) baselines.
+  2. **Linux pass via Docker** — same command inside `mcr.microsoft.com/playwright:v1.59.1-jammy` (the exact image CI runs), writes the `*-chromium-linux.png` baselines. Mounts the host repo read-only at `/host`, copies it to a writable `/scratch` so a fresh `npm ci` can build Linux node_modules from scratch (the host's Windows `esbuild.exe` / `rollup` native bins would otherwise break a Linux unlink). Updated PNGs are copied back to the host via a separate writable `/snapshots-out` mount.
+- **`npm run baselines`** package script wires the above into `package.json`. Supported flags:
+  - `--grep "<pattern>"` — only regenerate baselines for matching tests (e.g. `--grep "settings"` after a Settings-modal style tweak).
+  - `--win-only` — skip the Docker step. Useful for fast local iteration before pushing — CI will still verify the Linux side.
+  - `--linux-only` — only run the Docker step. Useful on a real Linux dev box (you ARE the Linux baseline platform; the local pass would write a separate `*-linux.png` that the script's Docker step would then redundantly overwrite).
+
+### Changed
+- **`e2e/visual-regression.spec.ts` docblock** updated to reference `npm run baselines` (and document the `--grep` / `--win-only` flags) instead of the old `npx playwright test … --update-snapshots` invocation.
+
+### Why
+Across Phases 55, 59, 61, 63, and 67 we hit the same cycle: a tiny layout change → Linux baselines drift by &lt;1% pixels → CI red → manually run `playwright --update-snapshots` locally for win32 → manually run a Docker container for linux → realize the host's `node_modules` has Windows-only native bins → `rm -rf node_modules` inside the container → `npm ci` (slow) → realize you forgot to mount the snapshots dir writable → re-run → commit. The script collapses that into one command + documents the workarounds (the `/scratch` copy, the writable `/snapshots-out` mount, the `--grep` passthrough) so the next person to touch a fog overlay or a button color doesn't have to rediscover them from chat history.
+
+### Argv quoting
+- `spawnSync` with `shell: true` joins argv with spaces and re-parses, so any arg containing whitespace gets re-split. The script wraps each arg in double-quotes (escaping any embedded `"`) before shelling through. Required for `--grep "Multi word match"`.
+
+### No app behavior change
+- Build output, runtime, and visual baselines themselves are unchanged. This phase ships tooling only.
+- All 644 unit tests + 166 Playwright specs continue to pass.
 
 ---
 

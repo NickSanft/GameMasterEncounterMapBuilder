@@ -1,7 +1,7 @@
 {
   "name": "gm-encounter-maps",
   "private": true,
-  "version": "0.67.0",
+  "version": "0.68.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -14,7 +14,8 @@
     "test:e2e:install": "playwright install --with-deps chromium",
     "test:e2e:report": "playwright show-report",
     "size": "size-limit",
-    "analyze": "node scripts/analyze.mjs"
+    "analyze": "node scripts/analyze.mjs",
+    "baselines": "node scripts/regen-baselines.mjs"
   },
   "size-limit": [
     {
