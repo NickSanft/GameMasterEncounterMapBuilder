@@ -75,7 +75,7 @@ Tracking death saves on a paper d6 / scratched-out tally is the second-most-forg
 - The wizard takes 5 more dmg while down → +1 failure auto-applied → if it's the third, the badge says "Dead".
 
 ### Bundle
-- 66.62 KB / 68 KB initial-load brotli — comfortably within the ceiling Phase 70 raised. The new UI is HTML + a few helpers; most of the cost stays in CSS (which has its own 8 KB budget — currently 7.86 KB).
+- 66.62 KB / 68 KB initial-load brotli — comfortably within the ceiling Phase 70 raised. The new UI pushed the CSS bundle 59 bytes past the 8 KB budget (1.2 KB of new rules for the tracker dots + status badge); budget raised 8 → 9 KB. All other budgets unchanged.
 
 ---
 

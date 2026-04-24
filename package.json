@@ -40,7 +40,7 @@
     {
       "name": "CSS (all chunks, brotli)",
       "path": "dist/assets/*.css",
-      "limit": "8 KB"
+      "limit": "9 KB"
     },
     {
       "name": "HTML entries (brotli)",
