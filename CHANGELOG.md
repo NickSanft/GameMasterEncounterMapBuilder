@@ -26,7 +26,7 @@ chat history for the full breakdown:
 - **0.68.0** — Visual-regression baseline auto-regen tooling ✅
 - **0.69.0** — Auto-roll initiative + `Token.initiativeMod` ✅
 - **0.70.0** — Round-counted conditions ✅
-- **0.71.0** — Concentration tracking + auto-prompt
+- **0.71.0** — Concentration tracking + auto-prompt ✅
 - **0.72.0** — Death saves UI
 - **0.73.0** — 3D dice animation + multi-dice rolling
 - **0.74.0** — `/dice` chat shortcuts
@@ -40,6 +40,40 @@ chat history for the full breakdown:
 - **0.82.0** — Per-Spectator permissions
 - **0.83.0** — Latency indicator on the status chip
 - **0.84.0** — Conflict-merge UI
+
+---
+
+## [0.71.0] — 2026-04-24 — Concentration tracking + auto-prompt CON save
+
+### Added
+- **Auto-prompt for Constitution saves on damage** when a token has the `concentrating` condition. After clicking "Apply" in the Damage / Heal dialog, the modal switches to a "Concentration check" view listing one row per affected concentrating token:
+  - `Wizard — took 12 dmg, DC 10  [Failed] [Saved]`
+  - The DC follows the SRD: `max(10, floor(damage / 2))`. So 1–20 dmg → DC 10, 22 dmg → DC 11, 50 dmg → DC 25.
+  - **Failed** strips the `concentrating` condition (and its round timer if any) via a `token-update` patch and announces "Wizard lost concentration." through the existing aria-live channel — Spectator peers see the update via the normal sync wire.
+  - **Saved** dismisses the row and announces "Wizard held concentration (DC 10)."
+  - When all rows are resolved, the dialog closes.
+- **Per-token damage clamping** for the DC calculation. A 50-dmg blow that drops a 12-HP target to 0 counts as 12 dmg (the actual damage taken), not 50 — matches the rules' "damage you take" wording and avoids inflating the DC for overkill hits.
+- **First-action focus** in the concentration view auto-focuses the first `Failed` button so keyboard users can resolve checks without reaching for the mouse. Tab cycles between the buttons within the focus trap.
+
+### New module
+- **`src/state/concentration.ts`** — pure helpers shared between the dialog and any future automation:
+  - `CONCENTRATING_CONDITION_ID = 'concentrating'` constant (matches the existing `CONDITION_PRESETS` entry — the condition is not new, only the auto-prompt around it).
+  - `concentrationDc(damageTaken)` — `max(10, floor(damage/2))`, returns `0` for non-positive / non-finite damage so callers can use `dc > 0` as a "is a check needed?" predicate.
+  - `concentrationChecksForDamage(tokens, damagePerToken)` — filters tokens down to those that are concentrating + took positive damage, returns ready-to-render `ConcentrationCheck` rows.
+
+### No schema change
+- The `concentrating` condition has been in `CONDITION_PRESETS` since Phase 50. This phase only adds the *prompt* logic + UI; existing saves with concentrating tokens get the new behavior immediately, no migration needed.
+- Phase 70's round-timer system composes cleanly: a concentrating token can have an `expiresAtRound` set (e.g. 1-min Bless on the cleric), and a failed save strips both the condition AND the timer atomically.
+
+### Tests
+- **+10 unit tests in `src/state/concentration.test.ts`**: DC boundaries (1, 5, 19, 20, 21, 22, 50, 101), non-positive / NaN / Infinity damage, fractional damage flooring; the filter helper covers concentrating-only filtering, zero / healing damage skip, missing-from-map handling, label preservation, and the `'Token'` fallback for unlabeled tokens.
+- **All 688 unit tests + 166 Playwright specs continue to pass.**
+
+### Why
+Concentration is the most commonly-forgotten 5e rule at the table — the spell stays on the character sheet until someone says "wait, did you take damage last round?" Auto-prompting fixes that without taking the rule out of the GM's hands: the GM still rolls the save and clicks Failed/Saved themselves, the prompt just makes sure the check happens.
+
+### Healing skips the check
+- Negative amounts in the dialog ("Heal 5") never trigger a concentration prompt — `concentrationChecksForDamage` skips any token whose damage in the batch was `<= 0`.
 
 ---
 

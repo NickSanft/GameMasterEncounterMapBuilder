@@ -1165,6 +1165,41 @@ body.view {
   filter: brightness(1.05);
 }
 
+/* Phase 71 — concentration check follow-up rendered after Apply
+   when one or more concentrating tokens took damage. */
+.damage-heal-dialog .dmg-conc-intro {
+  margin: 0 0 0.6rem;
+  color: var(--fg-muted);
+  font-size: 0.85rem;
+  text-transform: none;
+  letter-spacing: 0;
+  line-height: 1.4;
+}
+
+.damage-heal-dialog .dmg-conc-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.damage-heal-dialog .dmg-conc-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 0.4rem;
+  align-items: center;
+  padding: 0.4rem 0.5rem;
+  background: color-mix(in srgb, var(--accent) 10%, var(--bg));
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+
+.damage-heal-dialog .dmg-conc-label {
+  font-size: 0.85rem;
+}
+
 .modal button {
   appearance: none;
   background: transparent;

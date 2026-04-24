@@ -2,6 +2,12 @@ import type { Store } from '../state/store.js';
 import type { ID, Token } from '../state/types.js';
 import { applyDamage } from '../state/token-hp.js';
 import { attachFocusTrap, rememberFocus, restoreFocus } from '../util/focus.js';
+import {
+  CONCENTRATING_CONDITION_ID,
+  concentrationChecksForDamage,
+  type ConcentrationCheck,
+} from '../state/concentration.js';
+import { removeCondition, clearConditionExpiration } from '../state/conditions.js';
 
 export interface DamageHealDialogHandle {
   /**
@@ -46,22 +52,38 @@ export function mountDamageHealDialog(
   modal.setAttribute('aria-label', 'Damage or heal selected tokens');
   modal.innerHTML = `
     <div class="modal-header">
-      <h2>Damage / Heal</h2>
+      <h2 data-field="title">Damage / Heal</h2>
       <button type="button" class="modal-close" aria-label="Close">×</button>
     </div>
     <div class="modal-body">
-      <p class="dmg-target-summary" data-field="summary" aria-live="polite"></p>
-      <label>Amount (damage positive, healing negative)
-        <input type="number" data-field="amount" step="1" value="0" autocomplete="off" />
-      </label>
-      <div class="dmg-quick" data-field="quick">
-        <button type="button" data-action="heal" title="Heal (subtract from the amount)">− Heal 5</button>
-        <button type="button" data-action="damage" title="Damage (add to the amount)">+ Damage 5</button>
+      <!-- Default view: amount entry. Switches to the concentration
+           checks list after Apply if any concentrating tokens were
+           damaged in the batch. -->
+      <div data-field="amount-view">
+        <p class="dmg-target-summary" data-field="summary" aria-live="polite"></p>
+        <label>Amount (damage positive, healing negative)
+          <input type="number" data-field="amount" step="1" value="0" autocomplete="off" />
+        </label>
+        <div class="dmg-quick" data-field="quick">
+          <button type="button" data-action="heal" title="Heal (subtract from the amount)">− Heal 5</button>
+          <button type="button" data-action="damage" title="Damage (add to the amount)">+ Damage 5</button>
+        </div>
+        <hr />
+        <div class="modal-footer">
+          <button type="button" data-action="cancel">Cancel</button>
+          <button type="button" class="primary" data-action="apply">Apply</button>
+        </div>
       </div>
-      <hr />
-      <div class="modal-footer">
-        <button type="button" data-action="cancel">Cancel</button>
-        <button type="button" class="primary" data-action="apply">Apply</button>
+
+      <!-- Phase 71 — concentration check follow-up. Shown after Apply
+           when one or more concentrating tokens took damage. -->
+      <div data-field="concentration-view" hidden>
+        <p class="dmg-conc-intro">Damage taken — Constitution save needed to maintain concentration:</p>
+        <ul class="dmg-conc-list" data-field="conc-list" aria-label="Concentration checks"></ul>
+        <hr />
+        <div class="modal-footer">
+          <button type="button" data-action="conc-done">Done</button>
+        </div>
       </div>
     </div>
   `;
@@ -70,6 +92,7 @@ export function mountDamageHealDialog(
   document.body.appendChild(backdrop);
   attachFocusTrap(modal);
 
+  const titleEl = modal.querySelector<HTMLHeadingElement>('[data-field="title"]')!;
   const summary = modal.querySelector<HTMLParagraphElement>('[data-field="summary"]')!;
   const amountInput = modal.querySelector<HTMLInputElement>('[data-field="amount"]')!;
   const healBtn = modal.querySelector<HTMLButtonElement>('[data-action="heal"]')!;
@@ -77,6 +100,10 @@ export function mountDamageHealDialog(
   const applyBtn = modal.querySelector<HTMLButtonElement>('[data-action="apply"]')!;
   const cancelBtn = modal.querySelector<HTMLButtonElement>('[data-action="cancel"]')!;
   const closeBtn = modal.querySelector<HTMLButtonElement>('.modal-close')!;
+  const amountView = modal.querySelector<HTMLDivElement>('[data-field="amount-view"]')!;
+  const concView = modal.querySelector<HTMLDivElement>('[data-field="concentration-view"]')!;
+  const concList = modal.querySelector<HTMLUListElement>('[data-field="conc-list"]')!;
+  const concDoneBtn = modal.querySelector<HTMLButtonElement>('[data-action="conc-done"]')!;
 
   let targetIds: ID[] = [];
   let triggerFocus: HTMLElement | null = null;
@@ -115,6 +142,7 @@ export function mountDamageHealDialog(
     }
     triggerFocus = rememberFocus();
     amountInput.value = '0';
+    showAmountView();
     refreshSummary();
     backdrop.hidden = false;
     window.setTimeout(() => {
@@ -125,6 +153,10 @@ export function mountDamageHealDialog(
 
   function close() {
     targetIds = [];
+    pendingConcentrationChecks = [];
+    // Reset the view back to the amount-entry mode so the next openFor
+    // doesn't briefly show the previous run's concentration list.
+    showAmountView();
     // Blur any input/button inside the modal first so focus doesn't stay on
     // an element that just got display:none-d (which would otherwise block
     // canvas-level keyboard shortcuts).
@@ -135,6 +167,99 @@ export function mountDamageHealDialog(
     const prior = triggerFocus;
     triggerFocus = null;
     restoreFocus(prior);
+  }
+
+  /**
+   * Phase 71 — view-switching helpers. The dialog hosts two modes:
+   * the default amount-entry view and the post-apply concentration
+   * follow-up. Switching is just toggling `hidden` on two siblings;
+   * this keeps focus management trivial vs. mounting two modals.
+   */
+  let pendingConcentrationChecks: ConcentrationCheck[] = [];
+
+  function showAmountView() {
+    titleEl.textContent = 'Damage / Heal';
+    amountView.hidden = false;
+    concView.hidden = true;
+  }
+
+  function showConcentrationView() {
+    titleEl.textContent = 'Concentration check';
+    amountView.hidden = true;
+    concView.hidden = false;
+    renderConcentrationChecks();
+    window.setTimeout(() => {
+      // Focus the first action button in the list so keyboard users
+      // can resolve checks without reaching for the mouse.
+      const firstBtn = concList.querySelector<HTMLButtonElement>('button');
+      firstBtn?.focus();
+    }, 0);
+  }
+
+  function renderConcentrationChecks() {
+    concList.innerHTML = '';
+    if (pendingConcentrationChecks.length === 0) {
+      close();
+      return;
+    }
+    for (const check of pendingConcentrationChecks) {
+      const li = document.createElement('li');
+      li.className = 'dmg-conc-row';
+      li.dataset.tokenId = check.tokenId;
+
+      const label = document.createElement('span');
+      label.className = 'dmg-conc-label';
+      label.textContent = `${check.label} — took ${check.damage} dmg, DC ${check.dc}`;
+
+      const failedBtn = document.createElement('button');
+      failedBtn.type = 'button';
+      failedBtn.className = 'danger';
+      failedBtn.textContent = 'Failed';
+      failedBtn.title = 'Spell ends — strip the concentrating condition';
+      failedBtn.addEventListener('click', () => resolveCheck(check, false));
+
+      const savedBtn = document.createElement('button');
+      savedBtn.type = 'button';
+      savedBtn.textContent = 'Saved';
+      savedBtn.title = 'Concentration holds — leave the condition in place';
+      savedBtn.addEventListener('click', () => resolveCheck(check, true));
+
+      li.appendChild(label);
+      li.appendChild(failedBtn);
+      li.appendChild(savedBtn);
+      concList.appendChild(li);
+    }
+  }
+
+  function resolveCheck(check: ConcentrationCheck, saved: boolean) {
+    pendingConcentrationChecks = pendingConcentrationChecks.filter(
+      (c) => c.tokenId !== check.tokenId,
+    );
+    if (!saved) {
+      const tok = store.getState().tokens.find((t) => t.id === check.tokenId);
+      if (tok) {
+        const nextConditions = removeCondition(
+          tok.conditions,
+          CONCENTRATING_CONDITION_ID,
+        );
+        const nextExpirations = clearConditionExpiration(
+          tok.conditionExpirations,
+          CONCENTRATING_CONDITION_ID,
+        );
+        store.applyPatch({
+          kind: 'token-update',
+          id: check.tokenId,
+          changes: {
+            conditions: nextConditions,
+            conditionExpirations: nextExpirations,
+          },
+        });
+        opts.onAnnounce?.(`${check.label} lost concentration.`);
+      }
+    } else {
+      opts.onAnnounce?.(`${check.label} held concentration (DC ${check.dc}).`);
+    }
+    renderConcentrationChecks();
   }
 
   function nudge(delta: number) {
@@ -151,10 +276,18 @@ export function mountDamageHealDialog(
       close();
       return;
     }
+
+    // Phase 71 — track per-token damage taken (clamped against current
+    // HP so a 50-dmg blow on a 12-HP target only counts as 12 for
+    // the concentration check DC). Healing (negative amount) never
+    // triggers a check — `damageTaken` stays 0.
+    const damagePerToken = new Map<string, number>();
     store.batch(() => {
       for (const t of tokens) {
         if (!t.hp) continue;
         const nextHp = applyDamage(t.hp, amount);
+        const taken = Math.max(0, t.hp.current - nextHp.current);
+        damagePerToken.set(t.id, taken);
         store.applyPatch({
           kind: 'token-update',
           id: t.id,
@@ -171,6 +304,20 @@ export function mountDamageHealDialog(
         : `${tokens.length} tokens`;
       opts.onAnnounce(`${verb} ${magnitude} HP to ${suffix}.`);
     }
+
+    // Phase 71 — gather concentration checks for the damage we just
+    // applied. Read from the FRESH state so post-update conditions
+    // (e.g. unconscious from dropping to 0) are visible — though for
+    // now we only filter on the `concentrating` flag itself.
+    const stateAfter = store.getState();
+    pendingConcentrationChecks = concentrationChecksForDamage(
+      stateAfter.tokens,
+      damagePerToken,
+    );
+    if (pendingConcentrationChecks.length > 0) {
+      showConcentrationView();
+      return;
+    }
     close();
   }
 
@@ -179,6 +326,7 @@ export function mountDamageHealDialog(
   applyBtn.addEventListener('click', apply);
   cancelBtn.addEventListener('click', close);
   closeBtn.addEventListener('click', close);
+  concDoneBtn.addEventListener('click', close);
 
   backdrop.addEventListener('click', (e) => {
     if (e.target === backdrop) close();
