@@ -115,6 +115,8 @@ import { mountDiagnosticsOverlay } from '../ui/diagnostics-overlay.js';
 import { mountHelpOverlay } from '../ui/help-overlay.js';
 import { mountDamageHealDialog } from '../ui/damage-heal-dialog.js';
 import { mountDicePanel } from '../ui/dice-panel.js';
+import { mountSlashCommandInput } from '../ui/slash-command-input.js';
+import { rollInitiativeForUnlinkedTokens } from '../state/initiative.js';
 import { mountStatusBanners } from '../ui/status-banners.js';
 import { mountImportOptionsModal } from '../ui/import-options-modal.js';
 import { mergeImportState } from '../state/import-merge.js';
@@ -874,6 +876,47 @@ const dicePanel = mountDicePanel({
     const stamped = { ...roll, senderName: ownIdentity().name };
     channel?.send({ type: 'dice-roll', roll: stamped });
     announcer.announce(`You rolled ${roll.source}: ${roll.total}.`);
+  },
+});
+
+// Phase 74 — slash-command input. Press `/` (when no input is
+// focused) to type a slash command. The dispatcher routes:
+//   /r <expr> + /dN [+mod] → dicePanel.roll() (history + tray + sync)
+//   /init                  → roll initiative for unlinked tokens
+//   /help                  → open the keyboard-shortcut overlay
+const slashInput = mountSlashCommandInput({
+  onCommand: (action) => {
+    if (action.kind === 'roll') {
+      const ok = dicePanel.roll(action.expression);
+      // The panel's executeExpression already calls showError when
+      // the parse fails, but the panel might not be open — surface
+      // a copy in the slash input too so the user sees something.
+      return ok ? undefined : `Couldn't parse: ${action.expression}`;
+    }
+    if (action.kind === 'init') {
+      const state = store.getState();
+      const fresh = rollInitiativeForUnlinkedTokens(
+        state.tokens,
+        state.initiative,
+      );
+      if (fresh.length === 0) {
+        return 'No tokens to roll for (every token is already in the order).';
+      }
+      store.batch(() => {
+        for (const entry of fresh) {
+          store.applyPatch({ kind: 'initiative-add', entry });
+        }
+      });
+      announcer.announce(
+        `Rolled initiative for ${fresh.length} ${fresh.length === 1 ? 'token' : 'tokens'}.`,
+      );
+      return undefined;
+    }
+    if (action.kind === 'help') {
+      shortcutOverlay.open();
+      return undefined;
+    }
+    return undefined;
   },
 });
 
@@ -1728,6 +1771,16 @@ window.addEventListener('keydown', (e) => {
 
   if (e.key === '?') {
     shortcutOverlay.toggle();
+    e.preventDefault();
+    return;
+  }
+
+  // Phase 74 — `/` opens the slash-command input. Skipped when an
+  // editable field is already focused (handled above) so the user
+  // can still type a literal `/` in the dice / token / scenes
+  // inputs without hijacking it.
+  if (e.key === '/') {
+    slashInput.open();
     e.preventDefault();
     return;
   }

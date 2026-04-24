@@ -31,6 +31,7 @@ import { mountInitiativeBar } from '../ui/initiative-bar.js';
 import { mountDiagnosticsOverlay } from '../ui/diagnostics-overlay.js';
 import { mountHelpOverlay } from '../ui/help-overlay.js';
 import { mountDicePanel } from '../ui/dice-panel.js';
+import { mountSlashCommandInput } from '../ui/slash-command-input.js';
 import { mountMiniMap } from '../ui/mini-map.js';
 import { createPingManager } from '../state/ping-manager.js';
 import { createMeasurementOverlayRef } from '../input/context.js';
@@ -224,6 +225,26 @@ const dicePanel = mountDicePanel({
     const stamped = { ...roll, senderName: ownIdentity().name };
     channel?.send({ type: 'dice-roll', roll: stamped });
     announcer.announce(`You rolled ${roll.source}: ${roll.total}.`);
+  },
+});
+
+// Phase 74 — slash-command input (Spectator). Same `/` hotkey as
+// the GM side. `/init` is GM-only (the Spectator can't author
+// initiative entries); the dispatcher returns an inline error.
+const slashInput = mountSlashCommandInput({
+  onCommand: (action) => {
+    if (action.kind === 'roll') {
+      const ok = dicePanel.roll(action.expression);
+      return ok ? undefined : `Couldn't parse: ${action.expression}`;
+    }
+    if (action.kind === 'init') {
+      return 'Initiative rolls are GM-only.';
+    }
+    if (action.kind === 'help') {
+      shortcutOverlay.open();
+      return undefined;
+    }
+    return undefined;
   },
 });
 
@@ -473,6 +494,13 @@ window.addEventListener('keydown', (e) => {
   if (isEditableFocus(e.target)) return;
   if (e.key === '?') {
     shortcutOverlay.toggle();
+    e.preventDefault();
+    return;
+  }
+  // Phase 74 — `/` pops the slash-command input. Skipped when an
+  // editable field is already focused (handled above).
+  if (e.key === '/') {
+    slashInput.open();
     e.preventDefault();
     return;
   }

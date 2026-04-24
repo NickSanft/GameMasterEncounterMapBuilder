@@ -32,6 +32,15 @@ export interface DicePanelHandle {
   isOpen(): boolean;
   /** Record a roll made remotely (e.g. via sync channel) in the history. */
   pushRemoteRoll(roll: DiceRollBroadcast): void;
+  /**
+   * Phase 74 — execute an expression as if it had been typed into the
+   * panel's input. Used by the slash-command input to roll without
+   * requiring the user to open the panel first. Returns true on a
+   * successful parse + roll, false on a parse error (in which case the
+   * caller may want to surface its own error message — the panel's
+   * inline error only shows when the panel itself is open).
+   */
+  roll(expression: string): boolean;
   destroy(): void;
 }
 
@@ -199,15 +208,22 @@ export function mountDicePanel(opts: DicePanelOptions): DicePanelHandle {
     errorEl.classList.add('visible');
   }
 
-  function executeExpression(source: string) {
+  /**
+   * Internal: parse + roll. Returns the parse-error message (or null
+   * on success) so callers can route the error display themselves.
+   * The interactive panel surfaces it via `showError`; the slash-
+   * command input surfaces it inline in its own error span.
+   */
+  function executeExpression(source: string): string | null {
     clearError();
     let expr;
     try {
       expr = parseDiceExpression(source);
     } catch (err) {
-      if (err instanceof DiceParseError) showError(err.message);
-      else showError('Could not parse expression.');
-      return;
+      const msg =
+        err instanceof DiceParseError ? err.message : 'Could not parse expression.';
+      showError(msg);
+      return msg;
     }
     const result = rollDice(expr);
     const breakdown = formatRoll(result);
@@ -244,6 +260,7 @@ export function mountDicePanel(opts: DicePanelOptions): DicePanelHandle {
       })),
       modifier: result.modifier,
     });
+    return null;
   }
 
   /**
@@ -416,6 +433,15 @@ export function mountDicePanel(opts: DicePanelOptions): DicePanelHandle {
     toggle,
     isOpen: () => !backdrop.hidden,
     pushRemoteRoll,
+    // Phase 74 — public wrapper that the slash-command input uses
+    // to dispatch a roll without opening the panel modal first. The
+    // dice tray (Phase 73) still pops, the history entry still
+    // appends, and the broadcast still fires — same as if the user
+    // had typed the expression into the panel themselves.
+    roll(expression: string): boolean {
+      const err = executeExpression(expression);
+      return err === null;
+    },
     destroy() {
       window.removeEventListener('keydown', escListener);
       button.remove();

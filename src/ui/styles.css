@@ -2698,6 +2698,74 @@ body.notes-open .mini-map {
   right: calc(320px + 0.75rem);
 }
 
+/* ───── Phase 74 — slash-command input ──────────────────────────────
+   Floating one-liner pinned top-center. Press `/` to open; type a
+   command (`/r 1d20+5`, `/d20`, `/init`, `/help`) and Enter to fire.
+   Escape cancels. */
+
+.slash-input {
+  position: fixed;
+  top: 1.2rem;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-width: 22rem;
+  max-width: min(36rem, 92vw);
+  padding: 0.4rem 0.7rem;
+  background: rgba(20, 22, 26, 0.94);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 8px;
+  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.5);
+  color: #f5f5f5;
+  z-index: 60;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.92rem;
+}
+
+.slash-input[hidden] {
+  display: none;
+}
+
+.slash-input-prefix {
+  color: #ffd54a;
+  font-weight: 700;
+  font-size: 1rem;
+  user-select: none;
+}
+
+.slash-input-field {
+  flex: 1;
+  appearance: none;
+  background: transparent;
+  border: none;
+  color: inherit;
+  font-family: inherit;
+  font-size: inherit;
+  outline: none;
+  padding: 0.15rem 0;
+  min-width: 0;
+}
+
+.slash-input-field::placeholder {
+  color: rgba(255, 255, 255, 0.42);
+  font-size: 0.82rem;
+}
+
+.slash-input-error {
+  display: none;
+  flex-basis: 100%;
+  margin-top: 0.3rem;
+  font-size: 0.78rem;
+  color: #ffab91;
+  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif;
+}
+
+.slash-input-error.visible {
+  display: block;
+}
+
 /* ───── Phase 73 — animated dice tray ────────────────────────────────
    Rendered by `src/ui/dice-animation.ts` (lazy-loaded on first roll).
    Overlay panel floats center-bottom above the canvas; dice render

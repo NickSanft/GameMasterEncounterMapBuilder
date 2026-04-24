@@ -29,7 +29,7 @@ chat history for the full breakdown:
 - **0.71.0** — Concentration tracking + auto-prompt ✅
 - **0.72.0** — Death saves UI ✅
 - **0.73.0** — 3D dice animation + multi-dice rolling ✅
-- **0.74.0** — `/dice` chat shortcuts
+- **0.74.0** — `/dice` chat shortcuts ✅
 - **0.75.0** — Recent-scenes quick-switch (Ctrl+1..9)
 - **0.76.0** — Auto-save indicator pill
 - **0.77.0** — Token damage / heal animations
@@ -41,6 +41,46 @@ chat history for the full breakdown:
 - **0.83.0** — Latency indicator on the status chip
 - **0.84.0** — Conflict-merge UI
 - **0.85.0** — Wall editing revamp (in-place edit of endpoints, blocksSight / blocksMovement, thickness; live drag-out preview while drawing; chain merging so a corridor edits as one shape; per-wall `visibility: 'shared' | 'gm'` for secret features)
+
+---
+
+## [0.74.0] — 2026-04-24 — Slash-command input (`/r`, `/d20`, `/init`, `/help`)
+
+### Added
+- **Press `/` to pop a floating slash-command input** at the top-center of the viewport. Type a command, hit Enter to fire, Escape to cancel. The input is a single one-liner — not a full chat panel — so it stays out of the way and doesn't disrupt the user's flow.
+- **Supported commands:**
+  - `/r <expression>` or `/roll <expression>` — roll a dice expression. Equivalent to opening the dice panel and typing the expression there. The animated dice tray (Phase 73) still pops, the history entry still appends to the panel, and the broadcast still fires to remote peers.
+  - `/d4`, `/d6`, `/d8`, `/d10`, `/d12`, `/d20`, `/d100` — quick-die shortcuts (`/d20` → `1d20`). Inline modifier supported (`/d20+5` → `1d20+5`).
+  - `/init` (alias `/initiative`) — auto-roll initiative for every token NOT already in the order. Same logic as the "🎲 Roll all unlinked tokens" button from Phase 69. **GM only** — Spectator returns an inline error.
+  - `/help` (alias `/?`) — open the keyboard-shortcut overlay.
+  - **Bare expressions** like `1d20+5` or `2d6+3` also work — type them without a leading `/` and they roll. The visual `/` prefix in the chrome is decoration: the input "feels" Discord-style (you type the body, the `/` is implied) but you can also paste a raw expression and hit Enter.
+- **Inline error surface** — unknown commands show `Unknown command: /foo. Try /r 1d20+5, /d20, or /init.` in red below the input without dismissing it, so the user can correct + retry without re-typing.
+
+### How the input handles ambiguous input
+- The dispatcher normalizes input before parsing. If you type `r 1d20+5` (without the leading slash) we prepend `/` to match the Discord-style mental model. If you type a literal dice expression like `1d20+5`, we pass it through unchanged so the parser's bare-expression branch picks it up. `foo` (no slash, no `d` syntax) gets prepended too and surfaces as `Unknown command: /foo` so the error reflects what the user thought they were typing.
+- **Editable-field guard** — pressing `/` while focus is in the dice panel's expression input, the slash input itself, the token editor, or any other text field does NOT hijack the key. The literal `/` lands in the field as expected.
+
+### New modules
+- **`src/ui/slash-command-parser.ts`** — pure helpers, no DOM. `parseSlashCommand(raw)` returns a discriminated `SlashAction` (`roll` / `init` / `help` / `unknown` / `empty`). `unknownCommandMessage(raw)` formats the error string. Tested in isolation (26 unit tests).
+- **`src/ui/slash-command-input.ts`** — mounts the floating input + dispatcher. Exposes `mountSlashCommandInput({ onCommand })` returning an `open / close / toggle / isOpen / destroy` handle. The `onCommand` callback is host-specific: GM wires `/init` to roll initiative, Spectator returns "GM-only" for the same command.
+
+### Wire-up
+- **`gm.ts`** mounts the input with full handlers (`/r`, `/d20…`, `/init`, `/help`).
+- **`spectator.ts`** mounts a smaller variant — `/init` returns an inline error since Spectators don't author state.
+- Both entries hook the global `keydown` for `/`, gated by `isEditableFocus(e.target)` to avoid hijacking text input.
+- **`DicePanelHandle.roll(expression)`** — new public method on the dice panel exposing the parse + roll + tray + broadcast flow without requiring the panel modal to be open. The slash input calls this for every roll-style command.
+
+### Tests
+- **+26 unit tests** in `src/ui/slash-command-parser.test.ts` covering empty / bare / `/r` / `/roll` / `/init` / `/initiative` / `/help` / `/?` / `/dN` (every standard size + range edges + case insensitivity) / unknown-command formatting / case sensitivity / inline modifiers (`/d20+5`, `/d20-2`, space-separated `/d20 +5`).
+- **+9 Playwright specs** in `e2e/slash-command.spec.ts`: open/close via `/` + Escape, `/d20` populates history, `/r 2d6+3` pops the dice tray with two d6 silhouettes, `/d20+5` includes the modifier, `/foo` shows an inline error and keeps the input open, `/init` seeds initiative for placed tokens (GM), Spectator `/init` returns the GM-only error, `/help` opens the shortcut overlay, and the editable-field guard (typing `/` in the dice panel's expression input doesn't hijack the key).
+- **Shortcut overlay** updated to list `/` for both GM + Spectator, so users discover the feature from the in-app `?` help.
+
+### Bundle
+- **Initial-load JS budget raised 68 → 70 KB brotli.** The slash-command input + parser add ~1.3 KB brotli to the main chunk; current usage is **67.89 / 70 KB**. Lazy-loading the input would have saved that, but the `/` key needs to feel instant — the budget bump keeps the architecture simple and leaves headroom for one or two more small phases before the next round of lazy-loading work.
+- Lazy chunks: 18.37 / 20 KB, CSS: 8.77 / 9 KB — both unchanged.
+
+### Why this maps to "/dice chat shortcuts"
+The plan item name was `/dice chat shortcuts` — the implemented form is broader than just dice (it covers `/init` + `/help` too) but the same mental model: a single keystroke → a small input → a focused action. Skipped the full chat-panel framing because there's no in-app chat persistence model to attach messages to; a focused command palette delivers the productivity benefit without the scope of a chat surface.
 
 ---
 

@@ -79,6 +79,10 @@ const GM_SECTIONS: ShortcutSection[] = [
     title: 'Other',
     entries: [
       { keys: '?', desc: 'Open this help overlay' },
+      {
+        keys: '/',
+        desc: 'Slash command (/r 1d20+5, /d20, /init, /help)',
+      },
       { keys: 'Escape', desc: 'Close modal / menu / editor' },
       { keys: 'Right-click empty', desc: 'Reveal/Hide 5×5, Place/Paste, Fit, Reset' },
     ],
@@ -109,6 +113,10 @@ const SPECTATOR_SECTIONS: ShortcutSection[] = [
     title: 'Other',
     entries: [
       { keys: '?', desc: 'Open this help overlay' },
+      {
+        keys: '/',
+        desc: 'Slash command (/r 1d20+5, /d20, /help)',
+      },
       { keys: 'Escape', desc: 'Close modal / exit ruler' },
     ],
   },
