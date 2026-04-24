@@ -297,7 +297,11 @@ store.subscribe((patch) => {
   }
 });
 
-const channel = createSyncChannel();
+// Phase 66 — `createSyncChannel` takes the tab's player id so every
+// outgoing envelope is stamped + the channel can drop self-echoes.
+// `playerId` was declared further down in Phase 63; hoist it here.
+const playerId = nid();
+const channel = createSyncChannel(playerId);
 
 // Phase 62 — Remote Play modal (Spectator side). Populate the
 // late-bound ref the session menu uses so the button works.
@@ -357,7 +361,8 @@ function broadcastViewport() {
 const broadcastViewportThrottled = rafThrottle(broadcastViewport);
 
 // ─── Phase 63 — Player identity (Spectator) ─────────────────────
-const playerId = nid();
+// `playerId` declared earlier (Phase 66 — needed for the channel
+// envelope sender id); the rest of the identity wiring follows here.
 const identityRegistry = createIdentityRegistry();
 
 function ownIdentity(): PlayerIdentity {

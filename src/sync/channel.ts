@@ -1,4 +1,4 @@
-import type { SyncMessage } from './messages.js';
+import type { SyncEnvelope, SyncMessage } from './messages.js';
 import { BROADCAST_CHANNEL_NAME as CHANNEL_NAME } from '../util/constants.js';
 
 export { CHANNEL_NAME };
@@ -9,29 +9,34 @@ export { CHANNEL_NAME };
  * public surface of the `RemotePeer` type in `remote-peer.ts`, but
  * narrower so tests can attach stubs.
  *
- * Why no dedicated `RemotePeer` dependency here: keeps `channel.ts`
- * free of WebRTC-specific imports for environments that don't have
- * a peer connection API (tests, headless build tooling).
+ * Phase 66 — every message on the wire is an `SyncEnvelope`
+ * (`{senderId, timestamp, payload}`). Remote transports forward the
+ * envelope verbatim; only the channel layer wraps + unwraps.
  */
 export interface AttachableRemote {
-  send(msg: SyncMessage): void;
-  onMessage(fn: (msg: SyncMessage) => void): () => void;
+  send(env: SyncEnvelope): void;
+  onMessage(fn: (env: SyncEnvelope) => void): () => void;
 }
 
 export interface SyncChannel {
   send(msg: SyncMessage): void;
-  onMessage(fn: (msg: SyncMessage) => void): () => void;
+  /**
+   * Phase 66 — listeners receive both the unwrapped `payload` AND
+   * the full envelope. Most existing callsites only care about
+   * `msg`; the second arg is there for future features that need
+   * attribution (per-Spectator permissions, latency, conflict UI).
+   */
+  onMessage(fn: (msg: SyncMessage, env: SyncEnvelope) => void): () => void;
   /**
    * Phase 62 — attach a remote transport (WebRTC peer, etc.) so that
    * outbound `send()` calls fan out to BroadcastChannel PLUS every
    * attached remote, and the remote's inbound messages get routed to
    * the channel's `onMessage` listeners just like local BC messages.
    *
-   * No loop worry even though both directions are wired: BroadcastChannel
-   * doesn't echo to the sending tab, and we operate a STAR topology
-   * (GM is always the hub — Spectators connect to the GM, Spectators
-   * don't re-broadcast to each other), so a message never comes back
-   * to its origin via a different transport.
+   * Self-echo guard (Phase 66): inbound envelopes whose
+   * `senderId` matches our own are silently dropped. BC doesn't
+   * echo on its own; the guard exists so a WebRTC peer forwarding
+   * our message back over the star topology can't deliver it twice.
    *
    * Returns a detach function — use when the peer disconnects.
    */
@@ -39,23 +44,53 @@ export interface SyncChannel {
   close(): void;
 }
 
-export function createSyncChannel(): SyncChannel | null {
+/**
+ * Construct a sync channel scoped to this tab.
+ *
+ * @param senderId  This tab's `PlayerIdentity.id` — stamped on every
+ *                  outgoing envelope so peers can attribute messages
+ *                  to a specific player + so the channel can drop
+ *                  self-echoes from forwarded WebRTC traffic.
+ */
+export function createSyncChannel(senderId: string): SyncChannel | null {
   if (typeof BroadcastChannel === 'undefined') return null;
   const bc = new BroadcastChannel(CHANNEL_NAME);
-  const listeners = new Set<(msg: SyncMessage) => void>();
+  const listeners = new Set<(msg: SyncMessage, env: SyncEnvelope) => void>();
   const attachedRemotes = new Set<AttachableRemote>();
   const remoteUnsubscribes = new Map<AttachableRemote, () => void>();
 
-  bc.onmessage = (ev: MessageEvent<SyncMessage>) => {
-    for (const l of listeners) l(ev.data);
+  function deliver(env: SyncEnvelope): void {
+    // Self-echo guard — see the JSDoc on `attachRemote`.
+    if (env.senderId === senderId) return;
+    for (const l of listeners) l(env.payload, env);
+  }
+
+  function looksLikeEnvelope(value: unknown): value is SyncEnvelope {
+    return (
+      !!value &&
+      typeof value === 'object' &&
+      'senderId' in (value as object) &&
+      'payload' in (value as object) &&
+      'timestamp' in (value as object)
+    );
+  }
+
+  bc.onmessage = (ev: MessageEvent<unknown>) => {
+    if (!looksLikeEnvelope(ev.data)) return;
+    deliver(ev.data);
   };
 
   return {
     send(msg) {
-      bc.postMessage(msg);
+      const env: SyncEnvelope = {
+        senderId,
+        timestamp: Date.now(),
+        payload: msg,
+      };
+      bc.postMessage(env);
       for (const r of attachedRemotes) {
         try {
-          r.send(msg);
+          r.send(env);
         } catch (err) {
           console.warn('[sync-channel] remote send failed', err);
         }
@@ -70,8 +105,9 @@ export function createSyncChannel(): SyncChannel | null {
         return remoteUnsubscribes.get(remote) ?? (() => {});
       }
       attachedRemotes.add(remote);
-      const off = remote.onMessage((msg) => {
-        for (const l of listeners) l(msg);
+      const off = remote.onMessage((env) => {
+        if (!looksLikeEnvelope(env)) return;
+        deliver(env);
       });
       const detach = () => {
         off();

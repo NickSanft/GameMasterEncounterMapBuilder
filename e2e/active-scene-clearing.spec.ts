@@ -68,10 +68,16 @@ test.describe('Active scene survives a GM reload with a Spectator open', () => {
       // post-load broadcastInitial() that ships the LOADED state.
       await gm.waitForTimeout(1000);
 
+      // Phase 66 reshaped the wire format: every BroadcastChannel
+      // message is now an envelope `{senderId, timestamp, payload}`
+      // wrapping the original SyncMessage. Unwrap before asserting.
+      type Wire = {
+        senderId?: string;
+        payload?: { type: string; state?: { tokens?: unknown[] } };
+      };
       const messages = await gm.evaluate(
         () =>
-          (window as unknown as { __bcMessages: { type: string; state?: { tokens?: unknown[] } }[] })
-            .__bcMessages,
+          (window as unknown as { __bcMessages: Wire[] }).__bcMessages,
       );
 
       // Pin the failure mode: zero `full-state` messages should have
@@ -79,10 +85,12 @@ test.describe('Active scene survives a GM reload with a Spectator open', () => {
       // sync `channel.send` at module init satisfied this exact
       // condition (state had been serialized from the default empty
       // store before loadPersistedState resolved).
-      const fullStates = messages.filter((m) => m.type === 'full-state');
+      const fullStates = messages
+        .map((m) => m.payload)
+        .filter((p): p is NonNullable<Wire['payload']> => p?.type === 'full-state');
       expect(fullStates.length).toBeGreaterThan(0); // At least one (post-load) was sent.
-      for (const m of fullStates) {
-        expect(m.state?.tokens?.length ?? 0).toBeGreaterThan(0);
+      for (const p of fullStates) {
+        expect(p.state?.tokens?.length ?? 0).toBeGreaterThan(0);
       }
     } finally {
       await context.close();

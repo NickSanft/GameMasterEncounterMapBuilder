@@ -43,6 +43,41 @@ chat history for the full breakdown:
 
 ---
 
+## [0.66.0] — 2026-04-23 — SyncMessage envelope ({senderId, timestamp, payload})
+
+### Changed
+- **Every message on the sync wire is now an envelope.** New `SyncEnvelope` type in `src/sync/messages.ts`:
+  ```ts
+  interface SyncEnvelope {
+    senderId: string;   // sending tab's PlayerIdentity.id
+    timestamp: number;  // Date.now() at send-time
+    payload: SyncMessage;
+  }
+  ```
+  Wrapping happens transparently inside `SyncChannel.send`; receivers see `(payload, envelope)` from `onMessage` listeners. Most existing call sites only need `payload` and ignore the second arg, but future features (per-Spectator permissions, latency indicator, conflict-merge UI) all need attribution + timing — getting them via the envelope is dramatically cheaper than threading them through every message variant.
+- **`createSyncChannel(senderId)`** now requires the sender id. Both entries (`gm.ts` + `spectator.ts`) hoist their `playerId` generation a few lines so the channel can stamp every outgoing envelope.
+- **`AttachableRemote.send` + `RemotePeer.send`** now take an `SyncEnvelope` instead of a bare `SyncMessage`. The data-channel JSON-stringify pipeline is unchanged — just the type.
+- **Self-echo guard added.** Inbound envelopes whose `senderId` matches the local tab's id are silently dropped at the channel boundary. BroadcastChannel doesn't echo on its own (browsers explicitly skip the sender), but a WebRTC peer forwarding our own message back over the star topology could in principle deliver it twice. The guard makes the channel robust to that without callers having to think about it.
+- **Wire-format guard added.** Inbound BC + remote messages are validated against `looksLikeEnvelope` before delivery; legacy or malformed shapes are silently dropped (with a console warning on the remote-peer JSON path). Future protocol-version bumps can use the same shape check to reject older peers cleanly.
+
+### Why
+Phase 63 added `senderName` ad-hoc to ping + dice-roll. Phase 64 added a `tabId` to gm-heartbeat. Phase 82 will need `senderId` for permission enforcement; Phase 83 needs `timestamp` for RTT measurement; Phase 84 needs both for conflict-merge attribution. Rather than sprinkle the same fields across every message variant, every message now travels inside an envelope that carries them once.
+
+### Tests
+- **Updated `src/sync/channel.test.ts`** to use the envelope shape. Added two new specs:
+  - "onMessage receives the full envelope as a 2nd arg" — pins the new listener signature.
+  - "drops self-echoes (envelope.senderId === own id)" — pins the dedup guard.
+  - "drops malformed wire data (no envelope shape)" — pins the looksLikeEnvelope guard.
+- **Updated `src/sync/remote-peer.test.ts`** to wrap test fixtures in envelopes.
+- **Updated `src/sync/remote-session.test.ts`** signature for `RemotePeer.send` stub.
+- **Updated 2 e2e specs** (`active-scene-clearing.spec.ts` + `conflict-recovery.spec.ts`) that touched the BC wire format directly.
+- All 632 unit tests + 166 Playwright specs pass (+3 new envelope-specific units).
+
+### No payload-shape changes
+- `SyncMessage` itself is unchanged. The existing `senderName` on ping/dice-roll + `tabId` on gm-heartbeat stay where they are for now — the envelope doesn't override them, and pruning them is a separate cleanup phase. Receivers can already prefer envelope.senderId over the legacy fields where they want the tab id, and look up the display name via the IdentityRegistry.
+
+---
+
 ## [0.65.0] — 2026-04-23 — Bundle profiling + lazy-load 3 modals (−18% initial JS)
 
 ### Added

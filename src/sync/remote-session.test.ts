@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { createRemoteSession } from './remote-session.js';
 import type { PeerState, RemotePeer } from './remote-peer.js';
-import type { SyncMessage } from './messages.js';
+import type { SyncEnvelope } from './messages.js';
 
 /**
  * Stub `RemotePeer` implementation. Tracks `close()` calls + lets
@@ -22,7 +22,7 @@ function createStubPeer(role: 'host' | 'guest' = 'host'): RemotePeer & {
       return () => stateListeners.delete(listener);
     },
     onMessage() { return () => {}; },
-    send(_msg: SyncMessage) { /* noop */ },
+    send(_env: SyncEnvelope) { /* noop */ },
     close() {
       closeCount++;
       state = 'closed';

@@ -1155,7 +1155,14 @@ canvas.addEventListener('contextmenu', (e) => {
   });
 });
 
-const channel = createSyncChannel();
+// Phase 66 — `createSyncChannel` now takes the tab's player id so
+// every outgoing envelope is stamped with the sender. We hoist the
+// `playerId` generation here (was just below) so it's available
+// when the channel is constructed; the rest of the identity wiring
+// (registry, `ownIdentity()`, `broadcastIdentity()`) stays where it
+// was, just referencing this earlier-declared id.
+const playerId = nid();
+const channel = createSyncChannel(playerId);
 
 // Phase 62 — Remote Play modal. Only mounted when BroadcastChannel
 // is available (same prereq as the channel itself); `onRemotePlay`
@@ -1194,8 +1201,8 @@ remoteSession.subscribe(({ state }) => {
 });
 
 // ─── Phase 63 — Player identity ────────────────────────────────────
-// Stable per-tab id (regenerated each boot — reload = new session).
-const playerId = nid();
+// `playerId` is declared earlier (Phase 66 — needed for the channel
+// envelope sender id); the rest of the identity wiring follows here.
 const identityRegistry = createIdentityRegistry();
 
 function ownIdentity(): PlayerIdentity {

@@ -5,7 +5,17 @@ import {
   isWebRtcSupported,
   DATA_CHANNEL_LABEL,
 } from './remote-peer.js';
-import type { SyncMessage } from './messages.js';
+import type { SyncEnvelope, SyncMessage } from './messages.js';
+
+/**
+ * Phase 66 helper — wrap a `SyncMessage` in an envelope the way
+ * `SyncChannel.send` would. Remote-peer tests now exercise the
+ * envelope shape since `RemotePeer.send` / `onMessage` moved to
+ * the wire-format type.
+ */
+function envelope(payload: SyncMessage, senderId = 'test'): SyncEnvelope {
+  return { senderId, timestamp: 1, payload };
+}
 
 /**
  * Mock WebRTC plumbing. Enough to exercise the host / guest flows
@@ -157,32 +167,31 @@ describe('createHostPeer', () => {
     await peer.offer();
     lastPc!.hostDc!.readyState = 'open';
     lastPc!.hostDc!.onopen?.();
-    const msg: SyncMessage = { type: 'hello', from: 'gm' };
-    peer.send(msg);
-    expect(lastPc!.hostDc!.sent).toEqual([JSON.stringify(msg)]);
+    const env = envelope({ type: 'hello', from: 'gm' });
+    peer.send(env);
+    expect(lastPc!.hostDc!.sent).toEqual([JSON.stringify(env)]);
   });
 
   it('send() silently drops when the data channel is not open', () => {
     const peer = createHostPeer({ pcFactory });
-    const msg: SyncMessage = { type: 'hello', from: 'gm' };
-    peer.send(msg);
+    peer.send(envelope({ type: 'hello', from: 'gm' }));
     expect(lastPc!.hostDc!.sent).toEqual([]);
   });
 
-  it('onMessage fires with parsed SyncMessage from datachannel onmessage', async () => {
+  it('onMessage fires with parsed SyncEnvelope from datachannel onmessage', async () => {
     const peer = createHostPeer({ pcFactory });
-    const received: SyncMessage[] = [];
+    const received: SyncEnvelope[] = [];
     peer.onMessage((m) => received.push(m));
     await peer.offer();
-    const msg: SyncMessage = { type: 'ping', x: 1, y: 2 };
-    lastPc!.hostDc!.onmessage?.({ data: JSON.stringify(msg) } as MessageEvent<string>);
-    expect(received).toEqual([msg]);
+    const env = envelope({ type: 'ping', x: 1, y: 2 });
+    lastPc!.hostDc!.onmessage?.({ data: JSON.stringify(env) } as MessageEvent<string>);
+    expect(received).toEqual([env]);
   });
 
   it('onMessage silently drops malformed JSON', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => { });
     const peer = createHostPeer({ pcFactory });
-    const received: SyncMessage[] = [];
+    const received: SyncEnvelope[] = [];
     peer.onMessage((m) => received.push(m));
     await peer.offer();
     lastPc!.hostDc!.onmessage?.({ data: 'not json' } as MessageEvent<string>);
@@ -268,12 +277,12 @@ describe('createGuestPeer', () => {
 
   it('routes incoming datachannel messages to onMessage', async () => {
     const peer = createGuestPeer(OFFER_STR, { pcFactory });
-    const received: SyncMessage[] = [];
+    const received: SyncEnvelope[] = [];
     peer.onMessage((m) => received.push(m));
     await peer.answer();
-    const msg: SyncMessage = { type: 'ping', x: 5, y: 5 };
-    lastPc!.hostDc!.onmessage?.({ data: JSON.stringify(msg) } as MessageEvent<string>);
-    expect(received).toEqual([msg]);
+    const env = envelope({ type: 'ping', x: 5, y: 5 });
+    lastPc!.hostDc!.onmessage?.({ data: JSON.stringify(env) } as MessageEvent<string>);
+    expect(received).toEqual([env]);
   });
 
   it('send() after datachannel opens serializes to the channel', async () => {
@@ -281,15 +290,17 @@ describe('createGuestPeer', () => {
     await peer.answer();
     lastPc!.hostDc!.readyState = 'open';
     lastPc!.hostDc!.onopen?.();
-    const msg: SyncMessage = { type: 'hello', from: 'spectator' };
-    peer.send(msg);
-    expect(lastPc!.hostDc!.sent).toEqual([JSON.stringify(msg)]);
+    const env = envelope({ type: 'hello', from: 'spectator' });
+    peer.send(env);
+    expect(lastPc!.hostDc!.sent).toEqual([JSON.stringify(env)]);
   });
 
   it('send() before datachannel exists is a no-op (no crash)', () => {
     const peer = createGuestPeer(OFFER_STR, { pcFactory });
     // No answer() yet, so ondatachannel never fired — dc is null.
-    expect(() => peer.send({ type: 'hello', from: 'spectator' })).not.toThrow();
+    expect(() =>
+      peer.send(envelope({ type: 'hello', from: 'spectator' })),
+    ).not.toThrow();
   });
 
   it('close() tears down the peer connection', async () => {

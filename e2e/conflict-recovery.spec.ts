@@ -45,14 +45,22 @@ test.describe('Conflict + recovery banners', () => {
     // Simulate a second GM tab by posting a gm-heartbeat directly onto the
     // shared BroadcastChannel. The real GM code listens on the same channel
     // and will note a new peer tab id.
+    //
+    // Phase 66 — channel layer expects an envelope `{senderId, timestamp,
+    // payload}` wrapping the original SyncMessage; raw messages are dropped
+    // by the `looksLikeEnvelope` guard. Stamp the envelope ourselves with
+    // a synthetic sender id (anything other than the real tab's id is fine
+    // — the conflict detector only cares about distinct ids).
     await page.evaluate(() => {
       const ch = new BroadcastChannel('gm-encounter-maps-session');
-      ch.postMessage({ type: 'gm-heartbeat', tabId: 'synthetic-other-tab' });
+      const wrap = () => ({
+        senderId: 'synthetic-other-tab',
+        timestamp: Date.now(),
+        payload: { type: 'gm-heartbeat', tabId: 'synthetic-other-tab' },
+      });
+      ch.postMessage(wrap());
       // Keep the channel open for a bit so the GM keeps receiving pings.
-      const iv = setInterval(
-        () => ch.postMessage({ type: 'gm-heartbeat', tabId: 'synthetic-other-tab' }),
-        500,
-      );
+      const iv = setInterval(() => ch.postMessage(wrap()), 500);
       (window as unknown as { __otherTabIv?: number }).__otherTabIv = iv as unknown as number;
     });
 

@@ -99,6 +99,39 @@ export interface DiceRollBroadcast {
   senderName?: string;
 }
 
+/**
+ * Phase 66 — wire-format envelope wrapping every `SyncMessage`.
+ *
+ * Why: Phase 63 added `senderName` to ping + dice-roll as ad-hoc
+ * attribution. Phase 64 added the GM heartbeat with its own
+ * `tabId`. Future phases (per-Spectator permissions, latency,
+ * conflict-merge) all need attribution + timing too. Rather than
+ * sprinkle the same fields across every message variant, every
+ * message now travels inside an envelope that carries them once.
+ *
+ * Receivers see `(payload, envelope)` from `channel.onMessage`;
+ * the payload is the original `SyncMessage`, the envelope adds:
+ *
+ *   - `senderId` — the sending tab's `PlayerIdentity.id`. Stable
+ *     per tab session, regenerated on reload (matches the
+ *     conflict-detector "reload = new session" model).
+ *   - `timestamp` — `Date.now()` at the moment of `send()` on the
+ *     sending tab. Monotonically meaningful within one tab; can be
+ *     used for ordering within a session, RTT measurement, etc.
+ *
+ * Self-echo guard: the channel drops any incoming envelope whose
+ * `senderId` matches the local tab's id. BroadcastChannel doesn't
+ * echo (browsers explicitly skip the sender), but a WebRTC peer
+ * forwarding our message back over a star topology could in
+ * principle deliver it twice — the guard makes the channel robust
+ * to that without callers having to think about it.
+ */
+export interface SyncEnvelope {
+  senderId: string;
+  timestamp: number;
+  payload: SyncMessage;
+}
+
 export type SyncMessage =
   | { type: 'hello'; from: 'gm' | 'spectator' }
   | { type: 'full-state'; state: SerializedSessionState }

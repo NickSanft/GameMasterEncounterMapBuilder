@@ -30,7 +30,7 @@
  * "connection failed" state rather than pretending).
  */
 
-import type { SyncMessage } from './messages.js';
+import type { SyncEnvelope } from './messages.js';
 
 /** Default ICE server list. Google's public STUN is effectively universal. */
 const DEFAULT_ICE_SERVERS: RTCIceServer[] = [
@@ -68,9 +68,9 @@ export interface RemotePeer {
    * data channel isn't `open` — the caller retries at the
    * `send(msg)` shape above this layer if needed.
    */
-  send(msg: SyncMessage): void;
+  send(msg: SyncEnvelope): void;
   /** Subscribe to inbound sync messages. Returns unsubscribe fn. */
-  onMessage(listener: (msg: SyncMessage) => void): () => void;
+  onMessage(listener: (msg: SyncEnvelope) => void): () => void;
   /** Tear down + release the RTCPeerConnection. */
   close(): void;
 }
@@ -111,14 +111,14 @@ function wireDataChannel(
   pc: RTCPeerConnection,
   dc: RTCDataChannel,
   setState: (s: PeerState) => void,
-  messageListeners: Set<(msg: SyncMessage) => void>,
+  messageListeners: Set<(msg: SyncEnvelope) => void>,
 ): void {
   dc.onopen = () => setState('connected');
   dc.onclose = () => setState('closed');
   dc.onerror = () => setState('failed');
   dc.onmessage = (ev: MessageEvent<string>) => {
     try {
-      const parsed = JSON.parse(ev.data) as SyncMessage;
+      const parsed = JSON.parse(ev.data) as SyncEnvelope;
       for (const l of messageListeners) l(parsed);
     } catch (err) {
       // Malformed frames come from a peer on an older wire-format
@@ -227,7 +227,7 @@ export function createHostPeer(opts: PeerOptions = {}): HostPeer {
   const pc = createPeerConnection(opts);
   const dc = pc.createDataChannel(DATA_CHANNEL_LABEL);
   let state: PeerState = 'new';
-  const messageListeners = new Set<(msg: SyncMessage) => void>();
+  const messageListeners = new Set<(msg: SyncEnvelope) => void>();
   const stateListeners = new Set<(s: PeerState) => void>();
 
   function setState(next: PeerState): void {
@@ -251,7 +251,7 @@ export function createHostPeer(opts: PeerOptions = {}): HostPeer {
     // `connected` fires via the data channel's onopen handler.
   }
 
-  function send(msg: SyncMessage): void {
+  function send(msg: SyncEnvelope): void {
     if (dc.readyState !== 'open') return;
     try {
       dc.send(JSON.stringify(msg));
@@ -297,7 +297,7 @@ export function createGuestPeer(
 ): GuestPeer {
   const pc = createPeerConnection(opts);
   let state: PeerState = 'new';
-  const messageListeners = new Set<(msg: SyncMessage) => void>();
+  const messageListeners = new Set<(msg: SyncEnvelope) => void>();
   const stateListeners = new Set<(s: PeerState) => void>();
   let dc: RTCDataChannel | null = null;
 
@@ -321,7 +321,7 @@ export function createGuestPeer(
     return waitForIceGathering(pc);
   }
 
-  function send(msg: SyncMessage): void {
+  function send(msg: SyncEnvelope): void {
     if (!dc || dc.readyState !== 'open') return;
     try {
       dc.send(JSON.stringify(msg));
