@@ -28,7 +28,7 @@ chat history for the full breakdown:
 - **0.70.0** — Round-counted conditions ✅
 - **0.71.0** — Concentration tracking + auto-prompt ✅
 - **0.72.0** — Death saves UI ✅
-- **0.73.0** — 3D dice animation + multi-dice rolling
+- **0.73.0** — 3D dice animation + multi-dice rolling ✅
 - **0.74.0** — `/dice` chat shortcuts
 - **0.75.0** — Recent-scenes quick-switch (Ctrl+1..9)
 - **0.76.0** — Auto-save indicator pill
@@ -41,6 +41,48 @@ chat history for the full breakdown:
 - **0.83.0** — Latency indicator on the status chip
 - **0.84.0** — Conflict-merge UI
 - **0.85.0** — Wall editing revamp (in-place edit of endpoints, blocksSight / blocksMovement, thickness; live drag-out preview while drawing; chain merging so a corridor edits as one shape; per-wall `visibility: 'shared' | 'gm'` for secret features)
+
+---
+
+## [0.73.0] — 2026-04-24 — Animated dice tray + multi-dice rolling
+
+### Added
+- **Animated dice tray** appears on every roll — a bottom-centered overlay panel that renders one polygon silhouette per die, tumbles them for ~700ms while face values cycle through random values, then settles each die onto its real rolled value with a brief scale + glow pop. Total time on screen: ~3.3s (or dismissed early by clicking the tray or pressing Escape).
+- **Distinctive per-die silhouettes** so multi-die rolls read at a glance:
+  - **d4** — upward triangle (red)
+  - **d6** — rounded square (orange)
+  - **d8** — diamond / rotated square (yellow)
+  - **d10** — kite-pentagon (green)
+  - **d12** — regular pentagon (teal)
+  - **d20** — hexagon (blue)
+  - **d100** — octagon (purple), face shown zero-padded (`"05"`, `"99"`, `"00"` for the max face)
+  - Non-standard sides (e.g. `1d30`) fall back to a neutral hexagon so homebrew dice still animate.
+- **Multi-die support.** A roll of `4d6+2d8+3` renders 6 silhouettes side-by-side (4 × d6, then 2 × d8) plus the `+3` baked into the total. Each die gets a deterministic-but-staggered start rotation so a batch doesn't tumble in lockstep.
+- **Keep-highest / keep-lowest flagging.** `4d6kh3` renders all 4 dice; the dropped die gets a `dice-tray-die-dropped` class (reduced opacity + line-through on the face number) so the GM can see WHICH die was dropped, not just the total.
+- **Negative-group styling.** `1d20-1d4` dims the subtracted d4 with a hue shift so the arithmetic reads visually, not just numerically.
+- **Remote-roll replay.** The Spectator's tray plays with the GM's actual rolled values (and vice-versa). Phase 63 added the wire-level dice-roll broadcast; Phase 73 extends `DiceRollBroadcast` with an optional `groups` field (per-die rolls + kept flags) + `modifier` so remote peers can replay the animation with the same numbers instead of re-rolling.
+
+### How the animation is implemented
+- **No 3D library, no physics.** three.js + cannon-es together run 400-600 KB tree-shaken — way over the project's 68 KB initial-load brotli budget. Instead the tray uses SVG polygon silhouettes + a 700ms CSS keyframe for rotation/scale + a 60ms `setInterval` that rapid-fires random face values during the tumble. D&D Beyond-esque "tumble-and-settle" feel for under 2 KB brotli.
+- **Lazy-loaded.** The animation code lives in `src/ui/dice-animation.ts`, which `src/ui/dice-panel.ts` pulls in via `import()` on the first roll. Users who never open the dice panel never download the chunk. First roll has a tiny (~30 ms on fast connections, sub-second on cold 3G) delay while the chunk fetches; subsequent rolls use the cached module.
+- **Pure shape + face helpers** live in `src/ui/dice-animation-shapes.ts` so they unit-test without a DOM (20 tests covering `shapeForSides`, `faceValues`, `randomFace`, `faceLabel`, `flattenGroups`, `buildTumbleFrames`).
+- **Reduced-motion support.** Users with `prefers-reduced-motion` (or the in-app "Reduced motion" preference) get a stripped-down variant: the tray appears with the final result already shown, holds for ~1.5s, and fades. Same code path, fewer keyframes. Wired from both `gm.ts` and `spectator.ts` via the new `getReducedMotion` option on `mountDicePanel`.
+- **Early-dismiss.** Clicking the tray or pressing Escape skips to the fade-out. Useful for rapid-fire rolls where you don't want to wait through the full animation.
+- **Replacement semantics.** Rolling a second time mid-animation removes the first tray instantly and starts a fresh one — no overlapping stacks.
+
+### Wire format
+- **`DiceRollBroadcast.groups?`** (new) — optional `Array<{ count, sides, sign, rolls, kept }>`. Pre-73 receivers ignore it; new receivers use it to render the animation. When absent, the history entry still appears but the tray is skipped (the remote tab has no per-die data to animate).
+- **`DiceRollBroadcast.modifier?`** (new) — flat modifier (the `+5` in `1d20+5`). Optional; the receiver falls back to `total - sum(groups)` when absent.
+
+### Tests
+- **+20 unit tests** in `src/ui/dice-animation-shapes.test.ts` covering the shape registry, face-value enumeration, random-face injection, d100 label formatting, group-flattening for keep-highest / negative-group edge cases, and the tumble-frame builder's guarantee that it never lands on the final value as its second-to-last frame.
+- **+5 Playwright specs** in `e2e/dice-roller.spec.ts` — tray appears and lands on the result for a simple d20, 4d6 renders four silhouettes, mixed-group `2d20+1d4+3` renders each die in order with the right `data-sides`, Escape dismisses the tray early, and `4d6kh3` flags exactly one dropped die.
+- All 719 unit tests + 171 Playwright specs pass.
+
+### Bundle
+- **Initial-load JS:** 67.06 / 68 KB brotli (was 66.72 pre-phase; Phase 73 adds a ~340 byte `import()` stub + the wire-format extension).
+- **Lazy chunks:** 18.38 / 20 KB brotli (adds the ~1.5 KB brotli dice-animation chunk alongside the existing help / settings / remote-play lazy modules).
+- **CSS:** 8.63 / 9 KB brotli (adds the tray styling + keyframes).
 
 ---
 

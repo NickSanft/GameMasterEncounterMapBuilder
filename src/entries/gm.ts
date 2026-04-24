@@ -863,6 +863,10 @@ void loadPersistedState().then(async (persisted) => {
 
 const dicePanel = mountDicePanel({
   viewMode: 'gm',
+  // Phase 73 — wire the reduced-motion pref into the dice tray so
+  // users who opted out of animations get a quick "flash the result"
+  // variant instead of the full tumble.
+  getReducedMotion: () => preferences.get().reducedMotion,
   onLocalRoll: (roll) => {
     // Phase 63 — stamp the roll with our display name so remote
     // panels can render "Alice rolled 1d20" instead of generic

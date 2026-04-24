@@ -213,6 +213,8 @@ mountInitiativeBar(store, 'spectator');
 mountHelpOverlay('spectator');
 const dicePanel = mountDicePanel({
   viewMode: 'spectator',
+  // Phase 73 — same reduced-motion wiring as the GM side.
+  getReducedMotion: () => preferences.get().reducedMotion,
   onLocalRoll: (roll) => {
     // Phase 63 — stamp the roll with our display name so the GM's
     // panel + announcer say "Alice rolled 1d20" instead of just

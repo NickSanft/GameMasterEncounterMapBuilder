@@ -1,7 +1,7 @@
 {
   "name": "gm-encounter-maps",
   "private": true,
-  "version": "0.72.3",
+  "version": "0.73.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -24,7 +24,8 @@
         "dist/assets/*.js",
         "!dist/assets/help-overlay-content-*.js",
         "!dist/assets/settings-modal-content-*.js",
-        "!dist/assets/remote-play-modal-content-*.js"
+        "!dist/assets/remote-play-modal-content-*.js",
+        "!dist/assets/dice-animation-*.js"
       ],
       "limit": "68 KB"
     },
@@ -33,7 +34,8 @@
       "path": [
         "dist/assets/help-overlay-content-*.js",
         "dist/assets/settings-modal-content-*.js",
-        "dist/assets/remote-play-modal-content-*.js"
+        "dist/assets/remote-play-modal-content-*.js",
+        "dist/assets/dice-animation-*.js"
       ],
       "limit": "20 KB"
     },

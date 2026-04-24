@@ -136,6 +136,28 @@ export interface DiceRollBroadcast {
    * "Spectator rolled 1d20".
    */
   senderName?: string;
+  /**
+   * Phase 73 — per-group per-die breakdown so remote peers can replay
+   * the dice-tray animation with the actual values. Optional +
+   * back-compat: pre-73 broadcasts omit this, and pre-73 receivers
+   * ignore it. New receivers fall back to "no animation, just a
+   * history entry" when it's absent.
+   *
+   * Shape mirrors `DiceRollResult.groups` minus `subtotal` (which
+   * the receiver can recompute from `rolls + kept + sign`).
+   */
+  groups?: Array<{
+    count: number;
+    sides: number;
+    sign: 1 | -1;
+    rolls: number[];
+    kept: boolean[];
+  }>;
+  /**
+   * Phase 73 — flat modifier (the `+5` in `1d20+5`). Optional; the
+   * receiver falls back to `total - sum(groups)` when absent.
+   */
+  modifier?: number;
 }
 
 /**

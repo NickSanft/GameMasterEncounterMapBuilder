@@ -2698,6 +2698,191 @@ body.notes-open .mini-map {
   right: calc(320px + 0.75rem);
 }
 
+/* ───── Phase 73 — animated dice tray ────────────────────────────────
+   Rendered by `src/ui/dice-animation.ts` (lazy-loaded on first roll).
+   Overlay panel floats center-bottom above the canvas; dice render
+   as SVG polygon silhouettes with face numbers cycling during the
+   tumble phase and locking on settle. */
+
+.dice-tray {
+  position: fixed;
+  left: 50%;
+  bottom: 1.2rem;
+  transform: translate(-50%, 1rem);
+  min-width: 18rem;
+  max-width: min(42rem, 92vw);
+  padding: 0.85rem 1.1rem 1rem;
+  background: rgba(20, 22, 26, 0.88);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.5);
+  color: #f5f5f5;
+  z-index: 60;
+  opacity: 0;
+  transition: opacity 160ms ease-out, transform 200ms ease-out;
+  pointer-events: auto;
+  cursor: pointer;
+  user-select: none;
+}
+
+.dice-tray.dice-tray-in {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+.dice-tray.dice-tray-out {
+  opacity: 0;
+  transform: translate(-50%, 0.4rem);
+}
+
+.dice-tray-caption {
+  display: flex;
+  gap: 0.5rem;
+  align-items: baseline;
+  justify-content: center;
+  font-size: 0.82rem;
+  margin-bottom: 0.55rem;
+}
+
+.dice-tray-who {
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.dice-tray-source {
+  font-weight: 600;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color: #ffd54a;
+}
+
+.dice-tray-dice {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  justify-content: center;
+  align-items: center;
+  margin-bottom: 0.55rem;
+}
+
+.dice-tray-die {
+  --dice-seed-rot: 0deg;
+  width: 3.4rem;
+  height: 3.4rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+  transform-origin: center 45%;
+}
+
+.dice-tray-svg {
+  width: 100%;
+  height: 100%;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.45));
+}
+
+.dice-tray-face {
+  font-size: 0.85px;
+  font-weight: 800;
+  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif;
+  fill: #ffffff;
+  paint-order: stroke;
+  stroke: rgba(0, 0, 0, 0.35);
+  stroke-width: 0.04px;
+}
+
+.dice-tray-die-sub {
+  position: absolute;
+  bottom: -1rem;
+  font-size: 0.65rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.55);
+  letter-spacing: 0.02em;
+}
+
+.dice-tray-die-dropped .dice-tray-svg {
+  opacity: 0.35;
+}
+
+.dice-tray-die-dropped .dice-tray-face {
+  text-decoration: line-through;
+}
+
+.dice-tray-die-negative .dice-tray-svg {
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.45)) hue-rotate(10deg)
+    brightness(0.85);
+}
+
+/* Tumble: rapid rotation across the polygon's normal axis (visually
+   2D, but the per-die face cycling + stagger makes it read as a
+   real die landing). Starts from the seeded rotation so a row of
+   dice doesn't move in lockstep. */
+@keyframes dice-tumble {
+  0% {
+    transform: rotate(var(--dice-seed-rot)) scale(0.88);
+  }
+  50% {
+    transform: rotate(calc(var(--dice-seed-rot) + 540deg)) scale(1.06);
+  }
+  100% {
+    transform: rotate(calc(var(--dice-seed-rot) + 900deg)) scale(1);
+  }
+}
+
+.dice-tray-die-tumbling {
+  animation: dice-tumble 700ms cubic-bezier(0.22, 0.8, 0.32, 1) forwards;
+}
+
+/* Settle: pop + glow on the final value. */
+@keyframes dice-settle-pop {
+  0% {
+    transform: scale(1);
+    filter: none;
+  }
+  40% {
+    transform: scale(1.18);
+    filter: drop-shadow(0 0 6px rgba(255, 213, 74, 0.7));
+  }
+  100% {
+    transform: scale(1);
+    filter: none;
+  }
+}
+
+.dice-tray-die-settled {
+  animation: dice-settle-pop 220ms ease-out;
+}
+
+.dice-tray-total {
+  display: flex;
+  justify-content: center;
+  align-items: baseline;
+  gap: 0.45rem;
+  margin-top: 0.2rem;
+  padding-top: 0.45rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.dice-tray-total-label {
+  font-size: 0.72rem;
+  color: rgba(255, 255, 255, 0.55);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.dice-tray-total-value {
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: #ffd54a;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Reduced-motion override: kill the tumble + settle animations so the
+   tray appears, holds the result statically, and fades. */
+body.reduced-motion .dice-tray-die-tumbling,
+body.reduced-motion .dice-tray-die-settled {
+  animation: none;
+}
+
 /* Floating 🎲 dice button (bottom-left, above help button) */
 .dice-button {
   position: fixed;

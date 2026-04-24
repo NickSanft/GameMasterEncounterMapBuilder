@@ -9,6 +9,22 @@ import {
 import type { DiceRollBroadcast } from '../sync/messages.js';
 import { attachFocusTrap, rememberFocus, restoreFocus } from '../util/focus.js';
 
+/**
+ * Phase 73 — animation module is lazy-loaded on the first roll so
+ * the tray code doesn't count against the initial-load bundle budget.
+ * Cached once fetched; subsequent rolls reuse the same promise.
+ */
+let animationModulePromise:
+  | Promise<typeof import('./dice-animation.js')>
+  | null = null;
+
+function loadAnimationModule(): Promise<typeof import('./dice-animation.js')> {
+  if (!animationModulePromise) {
+    animationModulePromise = import('./dice-animation.js');
+  }
+  return animationModulePromise;
+}
+
 export interface DicePanelHandle {
   open(): void;
   close(): void;
@@ -27,6 +43,14 @@ export interface DicePanelOptions {
    * without sync (it just won't share).
    */
   onLocalRoll?(roll: DiceRollBroadcast): void;
+  /**
+   * Phase 73 — optional accessor for the user's "Reduced motion"
+   * preference. When it returns true, the dice-tray animation skips
+   * the tumble and just briefly flashes the result. Defaults to
+   * `false` (full animation) when not supplied — which also matches
+   * headless / test contexts.
+   */
+  getReducedMotion?(): boolean;
 }
 
 interface HistoryEntry {
@@ -198,13 +222,51 @@ export function mountDicePanel(opts: DicePanelOptions): DicePanelHandle {
       ...(crit ? { crit } : {}),
     };
     pushHistoryEntry(entry);
+    // Phase 73 — kick off the animated dice tray. Fire-and-forget;
+    // the tray manages its own lifetime + dismiss. A failure in the
+    // lazy import shouldn't break the roll history, so we swallow
+    // any errors and just log.
+    void playAnimation(result, 'local');
     opts.onLocalRoll?.({
       source: result.source,
       from: opts.viewMode,
       total: result.total,
       breakdown,
       id,
+      // Phase 73 — per-die values so the remote tab can replay the
+      // SAME animation with the SAME numbers (critical for trust).
+      groups: result.groups.map((g) => ({
+        count: g.count,
+        sides: g.sides,
+        sign: g.sign,
+        rolls: g.rolls.slice(),
+        kept: g.kept.slice(),
+      })),
+      modifier: result.modifier,
     });
+  }
+
+  /**
+   * Phase 73 — lazy-load the animation module, then play the tray.
+   * Errors (e.g. chunk-load failure on a flaky network) fall back
+   * silently; the roll history still reflects the result.
+   */
+  async function playAnimation(
+    result: DiceRollResult,
+    who: 'local' | 'gm' | 'spectator',
+    senderName?: string,
+  ): Promise<void> {
+    try {
+      const mod = await loadAnimationModule();
+      await mod.playDiceAnimation(result, {
+        who,
+        senderName,
+        reducedMotion: opts.getReducedMotion?.() ?? false,
+      });
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.warn('[dice] animation failed to load', err);
+    }
   }
 
   function pushRemoteRoll(roll: DiceRollBroadcast) {
@@ -221,6 +283,51 @@ export function mountDicePanel(opts: DicePanelOptions): DicePanelHandle {
       who: roll.from,
     };
     pushHistoryEntry(entry);
+
+    // Phase 73 — replay the dice-tray animation with the remote
+    // peer's per-die values so local + remote viewers see the SAME
+    // rolls land. Pre-73 broadcasts omit `groups`; in that case we
+    // skip the animation (the history entry still appears).
+    if (roll.groups && roll.groups.length > 0) {
+      const modifier =
+        typeof roll.modifier === 'number'
+          ? roll.modifier
+          : computeModifierFromGroups(roll);
+      const pseudoResult: DiceRollResult = {
+        source: roll.source,
+        modifier,
+        total: roll.total,
+        groups: roll.groups.map((g) => ({
+          count: g.count,
+          sides: g.sides,
+          sign: g.sign,
+          rolls: g.rolls.slice(),
+          kept: g.kept.slice(),
+          // Recompute subtotal from rolls + kept + sign.
+          subtotal:
+            g.sign *
+            g.rolls.reduce(
+              (sum, r, i) => sum + (g.kept[i] ?? true ? r : 0),
+              0,
+            ),
+        })),
+      };
+      void playAnimation(pseudoResult, roll.from, roll.senderName);
+    }
+  }
+
+  function computeModifierFromGroups(roll: DiceRollBroadcast): number {
+    if (!roll.groups) return 0;
+    // total = sum(group subtotals) + modifier  →  modifier = total - groupsSum.
+    let groupsSum = 0;
+    for (const g of roll.groups) {
+      const kept = g.rolls.reduce(
+        (s, r, i) => s + (g.kept[i] ?? true ? r : 0),
+        0,
+      );
+      groupsSum += g.sign * kept;
+    }
+    return roll.total - groupsSum;
   }
 
   // Wiring — quick buttons, Roll button, Enter-in-expr.
