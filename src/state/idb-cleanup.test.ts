@@ -27,6 +27,7 @@ function tok(imageId: string | null, x = 0, y = 0): Token {
     losRadius: null,
     light: null,
     initiativeMod: 0,
+    conditionExpirations: {},
   };
 }
 
@@ -90,6 +91,7 @@ describe('idb-cleanup', () => {
       losRadius: null,
       light: null,
       initiativeMod: 0,
+      conditionExpirations: {},
     });
 
     const state = createDefaultState();

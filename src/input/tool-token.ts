@@ -36,6 +36,7 @@ export function createTokenTool(ctx: InputContext): Tool {
         losRadius: null,
         light: null,
         initiativeMod: 0,
+        conditionExpirations: {},
       };
     }
     store.applyPatch({ kind: 'token-add', token: newToken });

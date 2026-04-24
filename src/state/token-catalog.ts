@@ -83,5 +83,9 @@ export function tokenFromCatalogEntry(
     losRadius: null,
     light: null,
     initiativeMod: entry.initiativeMod ?? 0,
+    // Library tokens intentionally don't carry round timers — those
+    // are transient per-combat state, not a property of the creature
+    // template. Fresh placements start with no active expirations.
+    conditionExpirations: {},
   };
 }

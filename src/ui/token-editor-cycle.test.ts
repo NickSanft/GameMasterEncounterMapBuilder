@@ -22,6 +22,7 @@ function tok(id: string, x = 0, y = 0): Token {
     losRadius: null,
     light: null,
     initiativeMod: 0,
+    conditionExpirations: {},
   };
 }
 

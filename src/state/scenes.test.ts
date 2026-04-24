@@ -104,6 +104,7 @@ describe('duplicateScene', () => {
       losRadius: null,
       light: null,
       initiativeMod: 0,
+      conditionExpirations: {},
     });
     await saveScene(original.id, state);
 
@@ -185,6 +186,7 @@ describe('ensureActiveScene', () => {
       losRadius: null,
       light: null,
       initiativeMod: 0,
+      conditionExpirations: {},
     });
     await runTx(SESSIONS_STORE, 'readwrite', (s) =>
       s.put({

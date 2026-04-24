@@ -26,6 +26,7 @@ function tok(overrides: Partial<Token> = {}): Token {
     losRadius: overrides.losRadius ?? null,
     light: overrides.light ?? null,
     initiativeMod: overrides.initiativeMod ?? 0,
+    conditionExpirations: overrides.conditionExpirations ?? {},
   };
 }
 

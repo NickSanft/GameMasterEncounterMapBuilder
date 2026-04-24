@@ -5,7 +5,14 @@ import { putImage, getImageURL } from '../images/store.js';
 import type { ImageLoader } from '../images/loader.js';
 import { TEAM_PRESETS } from '../state/team-colors.js';
 import { saveTokenToLibrary } from '../state/token-catalog.js';
-import { CONDITION_PRESETS, toggleCondition, hasCondition } from '../state/conditions.js';
+import {
+  CONDITION_PRESETS,
+  toggleCondition,
+  hasCondition,
+  getConditionPreset,
+  setConditionExpiration,
+  clearConditionExpiration,
+} from '../state/conditions.js';
 import { normalizeHp } from '../state/token-hp.js';
 import {
   rotateBy,
@@ -218,6 +225,9 @@ export function mountTokenEditor(opts: TokenEditorOptions): TokenEditorHandle {
               </button>`,
           ).join('')}
         </div>
+        <!-- Phase 70 — per-active-condition round-timer editor. Hidden
+             until at least one condition is active on the token. -->
+        <div class="condition-timers" data-field="condition-timers" hidden></div>
       </fieldset>
 
       <hr />
@@ -274,6 +284,9 @@ export function mountTokenEditor(opts: TokenEditorOptions): TokenEditorHandle {
   const conditionChips = Array.from(
     modal.querySelectorAll<HTMLButtonElement>('.condition-chip'),
   );
+  const conditionTimersEl = modal.querySelector<HTMLDivElement>(
+    '[data-field="condition-timers"]',
+  )!;
   const initiativeModInput = modal.querySelector<HTMLInputElement>('[data-field="initiativeMod"]')!;
   const rotationInput = modal.querySelector<HTMLInputElement>('[data-field="rotation"]')!;
   const rotationCompass = modal.querySelector<HTMLSpanElement>('[data-field="rotation-compass"]')!;
@@ -365,7 +378,7 @@ export function mountTokenEditor(opts: TokenEditorOptions): TokenEditorHandle {
     syncHpUI(token.hp);
     syncSightUI(token.losRadius);
     syncLightUI(token.light);
-    syncConditionUI(token.conditions);
+    syncConditionUI(token.conditions, token.conditionExpirations);
     syncRotationUI(token.rotation);
     syncInitiativeModUI(token.initiativeMod);
     syncCounter();
@@ -440,12 +453,160 @@ export function mountTokenEditor(opts: TokenEditorOptions): TokenEditorHandle {
     for (const r of hpVisibilityRadios) r.checked = r.value === visibility;
   }
 
-  function syncConditionUI(conditions: readonly string[]) {
+  function syncConditionUI(
+    conditions: readonly string[],
+    expirations: Readonly<Record<string, number>>,
+  ) {
     for (const chip of conditionChips) {
       const id = chip.dataset.condition ?? '';
       const on = hasCondition(conditions, id);
       chip.classList.toggle('active', on);
       chip.setAttribute('aria-pressed', on ? 'true' : 'false');
+    }
+    renderConditionTimers(conditions, expirations);
+  }
+
+  /**
+   * Phase 70 — render one row per active condition with a duration
+   * control. Rows show a preset <select> (Permanent / 1 / 3 / 10 /
+   * Custom) plus a number input that appears only when "Custom" is
+   * picked. Setting a duration stores
+   * `expiresAtRound = max(1, currentRound) + duration` on the token.
+   */
+  function renderConditionTimers(
+    conditions: readonly string[],
+    expirations: Readonly<Record<string, number>>,
+  ) {
+    conditionTimersEl.innerHTML = '';
+    if (conditions.length === 0) {
+      conditionTimersEl.hidden = true;
+      return;
+    }
+    conditionTimersEl.hidden = false;
+    for (const id of conditions) {
+      const preset = getConditionPreset(id);
+      const label = preset?.label ?? id;
+      const currentRound = Math.max(1, store.getState().initiative.round);
+      const expiresAt = expirations[id];
+      const roundsLeft =
+        typeof expiresAt === 'number'
+          ? Math.max(0, expiresAt - currentRound)
+          : null;
+
+      const row = document.createElement('div');
+      row.className = 'condition-timer-row';
+      row.dataset.timerFor = id;
+
+      const labelEl = document.createElement('span');
+      labelEl.className = 'condition-timer-label';
+      labelEl.textContent = label;
+      if (preset) labelEl.style.setProperty('--condition-color', preset.color);
+
+      const select = document.createElement('select');
+      select.className = 'condition-timer-select';
+      select.setAttribute('aria-label', `${label} duration`);
+      const options: Array<[string, string]> = [
+        ['permanent', 'Permanent'],
+        ['1', '1 round'],
+        ['3', '3 rounds'],
+        ['10', '10 rounds (1 min)'],
+        ['custom', 'Custom…'],
+      ];
+      for (const [v, t] of options) {
+        const o = document.createElement('option');
+        o.value = v;
+        o.textContent = t;
+        select.appendChild(o);
+      }
+
+      const custom = document.createElement('input');
+      custom.type = 'number';
+      custom.className = 'condition-timer-custom';
+      custom.min = '1';
+      custom.max = '99';
+      custom.step = '1';
+      custom.placeholder = 'Rounds';
+      custom.setAttribute('aria-label', `${label} custom duration in rounds`);
+
+      // Badge showing the live countdown ("3 rounds left" / "∞").
+      const badge = document.createElement('span');
+      badge.className = 'condition-timer-badge';
+
+      // Pick the starting state of this row from the current expiration.
+      if (roundsLeft === null) {
+        select.value = 'permanent';
+        custom.hidden = true;
+        badge.textContent = '∞';
+      } else if (roundsLeft === 1) {
+        select.value = '1';
+        custom.hidden = true;
+        badge.textContent = '1 left';
+      } else if (roundsLeft === 3) {
+        select.value = '3';
+        custom.hidden = true;
+        badge.textContent = '3 left';
+      } else if (roundsLeft === 10) {
+        select.value = '10';
+        custom.hidden = true;
+        badge.textContent = '10 left';
+      } else {
+        select.value = 'custom';
+        custom.hidden = false;
+        custom.value = String(roundsLeft);
+        badge.textContent = `${roundsLeft} left`;
+      }
+
+      function applyDuration(durationRounds: number | null) {
+        const tok = currentToken();
+        if (!tok) return;
+        // Base the expiry on the live round counter. If combat hasn't
+        // started (round 0), pin to 1 so the condition doesn't vanish
+        // the moment initiative-set-active first fires with round=1.
+        const nextExpirations = durationRounds === null
+          ? clearConditionExpiration(tok.conditionExpirations, id)
+          : setConditionExpiration(
+              tok.conditionExpirations,
+              id,
+              currentRound + Math.max(1, Math.floor(durationRounds)),
+            );
+        update({ conditionExpirations: nextExpirations });
+      }
+
+      select.addEventListener('change', () => {
+        if (select.value === 'permanent') {
+          custom.hidden = true;
+          applyDuration(null);
+        } else if (select.value === 'custom') {
+          custom.hidden = false;
+          const v = parseInt(custom.value, 10);
+          if (Number.isFinite(v) && v > 0) applyDuration(v);
+          else custom.focus();
+        } else {
+          custom.hidden = true;
+          const n = parseInt(select.value, 10);
+          if (Number.isFinite(n)) applyDuration(n);
+        }
+      });
+
+      custom.addEventListener('change', () => {
+        if (select.value !== 'custom') return;
+        const v = parseInt(custom.value, 10);
+        if (!Number.isFinite(v) || v <= 0) return;
+        applyDuration(v);
+      });
+      custom.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          const v = parseInt(custom.value, 10);
+          if (Number.isFinite(v) && v > 0) applyDuration(v);
+          e.preventDefault();
+        }
+      });
+
+      row.appendChild(labelEl);
+      row.appendChild(select);
+      row.appendChild(custom);
+      row.appendChild(badge);
+      conditionTimersEl.appendChild(row);
     }
   }
 
@@ -806,8 +967,14 @@ export function mountTokenEditor(opts: TokenEditorOptions): TokenEditorHandle {
       const id = chip.dataset.condition;
       if (!id) return;
       const next = toggleCondition(tok.conditions, id);
-      update({ conditions: next });
-      syncConditionUI(next);
+      // Phase 70 — if we just REMOVED a condition, also strip any
+      // round timer it may have carried, so a stale expiry doesn't
+      // survive into the next time the GM re-applies the condition.
+      const nextExpirations = next.includes(id)
+        ? tok.conditionExpirations
+        : clearConditionExpiration(tok.conditionExpirations, id);
+      update({ conditions: next, conditionExpirations: nextExpirations });
+      syncConditionUI(next, nextExpirations);
     });
   }
 
@@ -1007,7 +1174,22 @@ export function mountTokenEditor(opts: TokenEditorOptions): TokenEditorHandle {
         if (t) {
           if (document.activeElement !== xInput) xInput.value = String(t.x);
           if (document.activeElement !== yInput) yInput.value = String(t.y);
+          // Phase 70 — condition timers list stays in sync with
+          // external condition edits (e.g. another tab toggled a
+          // chip). Skip if the user is typing in one of the timer
+          // inputs, to avoid stomping their in-progress edit.
+          if (!conditionTimersEl.contains(document.activeElement)) {
+            syncConditionUI(t.conditions, t.conditionExpirations);
+          }
         }
+      }
+    } else if (patch.kind === 'initiative-set-active') {
+      // Phase 70 — advancing the round may have stripped expired
+      // conditions off the currently-open token. The store mutated
+      // tokens in-place during the reducer; re-render the timer list.
+      const t = currentToken();
+      if (t && !conditionTimersEl.contains(document.activeElement)) {
+        syncConditionUI(t.conditions, t.conditionExpirations);
       }
     }
   });

@@ -20,6 +20,7 @@ function token(partial: Partial<Token> & { id: string }): Token {
     losRadius: partial.losRadius ?? null,
     light: partial.light ?? null,
     initiativeMod: partial.initiativeMod ?? 0,
+    conditionExpirations: partial.conditionExpirations ?? {},
   };
 }
 

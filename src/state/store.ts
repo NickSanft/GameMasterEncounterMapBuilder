@@ -2,8 +2,10 @@ import {
   createDefaultState,
   type SessionState,
   type StatePatch,
+  type Token,
 } from './types.js';
 import { sortByValue } from './initiative.js';
+import { tickConditions } from './conditions.js';
 
 export type StoreListener = (patch: StatePatch | null) => void;
 
@@ -241,12 +243,43 @@ export function createStore(initial?: SessionState): Store {
         break;
       }
       case 'initiative-set-active': {
+        // Phase 70 — when the round counter ADVANCES, scan every token
+        // and strip any condition whose timer is <= the new round. A
+        // condition applied at round 3 with duration 3 has
+        // expiresAtRound=6; entering round 6 removes it. Only advancing
+        // the round triggers the tick — retreating (or staying on the
+        // same round) leaves timers untouched so undo / "oops, wrong
+        // button" doesn't lose information.
+        const prevRound = state.initiative.round;
+        const nextRound = patch.round;
+        let tokens: Token[] = state.tokens;
+        if (nextRound > prevRound) {
+          let mutated = false;
+          const updated = state.tokens.map((t) => {
+            if (t.conditions.length === 0) return t;
+            if (Object.keys(t.conditionExpirations).length === 0) return t;
+            const result = tickConditions(
+              t.conditions,
+              t.conditionExpirations,
+              nextRound,
+            );
+            if (result.removed.length === 0) return t;
+            mutated = true;
+            return {
+              ...t,
+              conditions: result.conditions,
+              conditionExpirations: result.conditionExpirations,
+            };
+          });
+          if (mutated) tokens = updated;
+        }
         state = {
           ...state,
+          tokens,
           initiative: {
             ...state.initiative,
             activeId: patch.activeId,
-            round: patch.round,
+            round: nextRound,
           },
         };
         break;

@@ -80,6 +80,9 @@ export function placeTemplate(
     losRadius: null,
     light: null,
     initiativeMod: tt.initiativeMod ?? 0,
+    // Templates don't carry round timers — those are transient per-
+    // combat state, not part of the layout definition.
+    conditionExpirations: {},
   }));
 }
 

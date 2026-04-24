@@ -24,6 +24,7 @@ const sample: Token = {
   losRadius: null,
   light: null,
   initiativeMod: 0,
+  conditionExpirations: {},
 };
 
 beforeEach(() => {

@@ -25,7 +25,7 @@ chat history for the full breakdown:
 - **0.67.0** — Move identity storage off `preferences`
 - **0.68.0** — Visual-regression baseline auto-regen tooling ✅
 - **0.69.0** — Auto-roll initiative + `Token.initiativeMod` ✅
-- **0.70.0** — Round-counted conditions
+- **0.70.0** — Round-counted conditions ✅
 - **0.71.0** — Concentration tracking + auto-prompt
 - **0.72.0** — Death saves UI
 - **0.73.0** — 3D dice animation + multi-dice rolling
@@ -40,6 +40,43 @@ chat history for the full breakdown:
 - **0.82.0** — Per-Spectator permissions
 - **0.83.0** — Latency indicator on the status chip
 - **0.84.0** — Conflict-merge UI
+
+---
+
+## [0.70.0] — 2026-04-24 — Round-counted conditions
+
+### Added
+- **`Token.conditionExpirations: Record<string, number>`** — every token now carries an optional per-condition round timer. Keys are condition ids from `Token.conditions`; values are the round number AT OR AFTER which the condition expires. Conditions NOT listed here have no timer and persist until the GM clears them manually (the pre-Phase-70 behavior). Default: `{}`.
+- **Auto-strip on round advance.** The store's `initiative-set-active` reducer now scans every token whenever the round counter ADVANCES (not retreats — undo / "oops wrong button" leaves timers untouched). Any condition with `expiresAtRound <= newRound` is stripped off the token, along with its expiration entry. One reducer call → one atomic mutation → one broadcast to peers.
+- **Per-condition timer rows in the Token Editor.** Below the existing condition chip grid, each active condition gets a row with:
+  - Its label (colored by the condition preset).
+  - A duration `<select>` — `Permanent / 1 round / 3 rounds / 10 rounds (1 min) / Custom…`.
+  - A `Custom…` number input that appears when "Custom" is picked.
+  - A live "N left" / "∞" badge showing rounds remaining based on the current `initiative.round`.
+  - Setting a duration stores `expiresAtRound = max(1, currentRound) + duration`. So applying "3 rounds" of Hold Person on round 3 expires it at round 6 — which matches 5e's "at the end of its next turn" semantics closely enough for a tracker that doesn't model turn-start / turn-end slots.
+- **Condition toggle strips stale timers.** Unchecking a condition via its chip also clears any expiration entry that was on it, so re-applying the condition later doesn't pick up a zombie timer from a previous combat.
+
+### New helpers in `src/state/conditions.ts`
+- **`setConditionExpiration(expirations, id, expiresAtRound)`** — returns a new map with the timer set; passes `null` to strip. Clamps to positive integers, floors fractional rounds, minimum 1.
+- **`clearConditionExpiration(expirations, id)`** — idempotent drop of one entry.
+- **`tickConditions(conditions, expirations, currentRound)`** — pure, returns `{ conditions, conditionExpirations, removed }` with expired ids stripped from both. Never mutates; returns a fresh object even when nothing changed.
+
+### Migration
+- **`deserializeState` defaults a missing `conditionExpirations` to `{}`** for any token loaded from a pre-Phase-70 save (IDB scene, exported JSON, wire envelope from an older peer). Malformed inputs are filtered down to positive finite integers — non-numbers, NaN, Infinity, and non-positive values are silently dropped. Existing scenes load unchanged; no manual migration.
+- **`tool-token`, `gm.ts` token-creation paths, `tokenFromCatalogEntry`, `placeTemplate`** all seed new tokens with `conditionExpirations: {}`. Library tokens + templates intentionally do NOT round-trip per-condition timers — those are transient per-combat state, not a property of the creature / layout template.
+
+### Tests
+- **+14 unit tests in `src/state/conditions.test.ts`** for the three new helpers, covering: new timers, overwriting existing, preserving siblings, null / Infinity / NaN stripping, flooring + minimum clamp, non-mutation guarantees, boundary rounds (`currentRound == expiresAt`), untimered conditions passing through, and stale-entry handling.
+- **+2 deserializer tests in `src/sync/messages.test.ts`** for the default + the garbage filter.
+- **+4 store tests in `src/state/store.test.ts`** for: advancing the round past timers strips conditions, round-unchanged is a no-op, round-retreat is a no-op, and the fast path for tokens with no conditions / no timers preserves object identity.
+- **+19 test fixtures across 19 files** seeded with `conditionExpirations: {}` to satisfy the new required field.
+- **All 678 unit tests + 166 Playwright specs continue to pass.**
+
+### Budget
+- **Initial-load brotli budget raised 65 → 68 KB.** The Phase 70 additions (conditions helpers + in-editor timer UI + store reducer) add ~1 KB brotli to the main gm chunk. Token Editor is currently eagerly loaded; a future phase may defer it via `import()` the way Phase 65 did with help / settings / remote-play modals. For now the budget bump is the minimal-churn path.
+
+### No behavior change for existing conditions
+- All existing conditions without an explicit duration remain *permanent* — they don't expire on round advance, matching pre-Phase-70 semantics. GMs who never touch the new duration selector see no behavioral change whatsoever.
 
 ---
 

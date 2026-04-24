@@ -15,6 +15,23 @@ import type {
 } from '../state/types.js';
 import type { PlayerIdentity } from '../state/player-identity.js';
 
+/**
+ * Phase 70 — filter a (possibly-untrusted) conditionExpirations map
+ * down to positive-integer round numbers. Non-objects and non-finite
+ * values are dropped silently so a malformed peer can't blow up the
+ * renderer. Keys are preserved as strings.
+ */
+function normalizeConditionExpirations(raw: unknown): Record<string, number> {
+  if (!raw || typeof raw !== 'object') return {};
+  const out: Record<string, number> = {};
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    if (typeof v === 'number' && Number.isFinite(v) && v > 0) {
+      out[k] = Math.floor(v);
+    }
+  }
+  return out;
+}
+
 function normalizeHp(hp: unknown): TokenHp | null {
   if (!hp || typeof hp !== 'object') return null;
   const h = hp as Partial<TokenHp>;
@@ -232,6 +249,11 @@ export function deserializeState(s: SerializedSessionState): SessionState {
         typeof t.initiativeMod === 'number' && Number.isFinite(t.initiativeMod)
           ? Math.max(-20, Math.min(20, Math.round(t.initiativeMod)))
           : 0,
+      // Phase 70 — per-condition round expirations. Pre-70 sessions
+      // don't carry this field; default to `{}`. Keep only numeric
+      // finite values to shrug off malformed wire payloads (strings,
+      // NaN, etc.).
+      conditionExpirations: normalizeConditionExpirations(t.conditionExpirations),
     })),
     fog: Uint8Array.from(s.fog),
     annotations: (s.annotations ?? []).map((a) => ({

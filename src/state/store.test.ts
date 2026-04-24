@@ -18,6 +18,7 @@ function newToken(id: string, overrides: Partial<Token> = {}): Token {
     losRadius: null,
     light: null,
     initiativeMod: 0,
+    conditionExpirations: {},
     ...overrides,
   };
 }
@@ -346,5 +347,71 @@ describe('resetSession / loadState', () => {
     store.loadState(fresh);
     expect(listener).toHaveBeenCalledWith(null);
     expect(store.getState()).toBe(fresh);
+  });
+});
+
+describe('applyPatch — Phase 70 round-based condition expiry', () => {
+  function makeStoreWithTimered() {
+    const initial = createDefaultState();
+    initial.tokens.push(
+      newToken('tok-a', {
+        conditions: ['poisoned', 'prone', 'charmed'],
+        conditionExpirations: { poisoned: 5, prone: 7 },
+      }),
+      newToken('tok-b', {
+        conditions: ['blinded'],
+        conditionExpirations: { blinded: 4 },
+      }),
+    );
+    initial.initiative.round = 3;
+    return createStore(initial);
+  }
+
+  it('advancing the round past a timer strips the condition from affected tokens', () => {
+    const store = makeStoreWithTimered();
+    // round 3 → round 5: poisoned on tok-a expires (expiresAt 5 <= 5),
+    // blinded on tok-b expires (4 <= 5). prone on tok-a (7) stays.
+    store.applyPatch({ kind: 'initiative-set-active', activeId: null, round: 5 });
+    const state = store.getState();
+    const a = state.tokens.find((t) => t.id === 'tok-a')!;
+    const b = state.tokens.find((t) => t.id === 'tok-b')!;
+    expect(a.conditions).toEqual(['prone', 'charmed']);
+    expect(a.conditionExpirations).toEqual({ prone: 7 });
+    expect(b.conditions).toEqual([]);
+    expect(b.conditionExpirations).toEqual({});
+  });
+
+  it('does not strip anything when the round is unchanged', () => {
+    const store = makeStoreWithTimered();
+    store.applyPatch({ kind: 'initiative-set-active', activeId: 'anything', round: 3 });
+    const a = store.getState().tokens.find((t) => t.id === 'tok-a')!;
+    expect(a.conditions).toEqual(['poisoned', 'prone', 'charmed']);
+    expect(a.conditionExpirations).toEqual({ poisoned: 5, prone: 7 });
+  });
+
+  it('does not strip anything when the round RETREATS (undo / prev-turn wrap)', () => {
+    const store = makeStoreWithTimered();
+    // Retreat from round 3 to round 2 — timers at 5 and 7 shouldn't fire.
+    store.applyPatch({ kind: 'initiative-set-active', activeId: null, round: 2 });
+    const a = store.getState().tokens.find((t) => t.id === 'tok-a')!;
+    expect(a.conditions).toEqual(['poisoned', 'prone', 'charmed']);
+  });
+
+  it('ignores tokens with no conditions or no timers (no-op fast-path)', () => {
+    const initial = createDefaultState();
+    initial.tokens.push(
+      newToken('no-conditions', { conditions: [] }),
+      newToken('permanent-conditions', {
+        conditions: ['prone'],
+        conditionExpirations: {},
+      }),
+    );
+    const store = createStore(initial);
+    const tokensBefore = store.getState().tokens;
+    store.applyPatch({ kind: 'initiative-set-active', activeId: null, round: 100 });
+    const tokensAfter = store.getState().tokens;
+    // Same object identities → no reallocation for untouched tokens.
+    expect(tokensAfter[0]).toBe(tokensBefore[0]);
+    expect(tokensAfter[1]).toBe(tokensBefore[1]);
   });
 });

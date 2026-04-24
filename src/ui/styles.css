@@ -1064,6 +1064,57 @@ body.view {
   font-weight: 500;
 }
 
+/* Phase 70 — per-active-condition round-timer editor. Renders one
+   row per currently-active condition with a duration <select> + a
+   custom-rounds number input. */
+.condition-timers {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  margin-top: 0.6rem;
+}
+
+.condition-timer-row {
+  --condition-color: #888;
+  display: grid;
+  grid-template-columns: 1fr auto auto auto;
+  gap: 0.4rem;
+  align-items: center;
+  padding: 0.3rem 0.45rem;
+  background: color-mix(in srgb, var(--condition-color) 12%, var(--bg));
+  border: 1px solid color-mix(in srgb, var(--condition-color) 40%, var(--border));
+  border-radius: 4px;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.condition-timer-label {
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.condition-timer-select,
+.condition-timer-custom {
+  padding: 0.2rem 0.4rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--fg);
+  border-radius: 3px;
+  font-family: inherit;
+  font-size: 0.8rem;
+}
+
+.condition-timer-custom {
+  width: 4rem;
+}
+
+.condition-timer-badge {
+  font-size: 0.75rem;
+  color: var(--fg-muted);
+  min-width: 2.5rem;
+  text-align: right;
+}
+
 /* Damage/Heal dialog */
 .damage-heal-dialog {
   min-width: 340px;

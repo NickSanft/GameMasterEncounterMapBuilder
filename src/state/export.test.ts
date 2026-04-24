@@ -23,6 +23,7 @@ function token(id: string, imageId: string | null = null, borderColor: string | 
     losRadius: null,
     light: null,
     initiativeMod: 0,
+    conditionExpirations: {},
   };
 }
 

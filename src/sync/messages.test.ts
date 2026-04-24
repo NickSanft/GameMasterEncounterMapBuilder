@@ -26,6 +26,7 @@ describe('serializeState / deserializeState', () => {
       losRadius: null,
       light: null,
       initiativeMod: 0,
+      conditionExpirations: {},
     });
     const serialized = serializeState(state);
     const restored = deserializeState(serialized);
@@ -109,6 +110,56 @@ describe('serializeState / deserializeState', () => {
     } as unknown as SerializedSessionState;
     const restored = deserializeState(legacy);
     expect(restored.tokens[0]!.initiativeMod).toBe(0);
+  });
+
+  it('defaults conditionExpirations to {} for legacy tokens (Phase 69 and earlier)', () => {
+    const legacy = {
+      ...serializeState(createDefaultState()),
+      tokens: [
+        {
+          id: 't1',
+          x: 0,
+          y: 0,
+          label: 'A',
+          color: '#ff0000',
+          imageId: null,
+          size: 1,
+          // conditionExpirations missing entirely — pre-Phase 70 sessions
+        },
+      ],
+    } as unknown as SerializedSessionState;
+    const restored = deserializeState(legacy);
+    expect(restored.tokens[0]!.conditionExpirations).toEqual({});
+  });
+
+  it('filters garbage conditionExpirations entries down to positive integers', () => {
+    const malformed = {
+      ...serializeState(createDefaultState()),
+      tokens: [
+        {
+          id: 'a',
+          x: 0,
+          y: 0,
+          label: 'A',
+          color: '#fff',
+          imageId: null,
+          size: 1,
+          conditionExpirations: {
+            good: 5,
+            zero: 0,          // dropped: not > 0
+            negative: -3,     // dropped: not > 0
+            notANumber: 'six',// dropped: not a number
+            infinite: Infinity,// dropped: not finite
+            fractional: 4.9,  // kept and floored
+          },
+        },
+      ],
+    } as unknown as SerializedSessionState;
+    const restored = deserializeState(malformed);
+    expect(restored.tokens[0]!.conditionExpirations).toEqual({
+      good: 5,
+      fractional: 4,
+    });
   });
 
   it('clamps initiativeMod to [-20, 20] and rounds non-integers', () => {

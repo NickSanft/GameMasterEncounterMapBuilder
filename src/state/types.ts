@@ -92,6 +92,25 @@ export interface Token {
    * existing saves load unchanged.
    */
   initiativeMod: number;
+  /**
+   * Phase 70 — optional per-condition round timers. Keys are condition
+   * ids present in `conditions`; values are the round number AT OR
+   * AFTER which the condition expires (the store strips it when
+   * `initiative.round >= value`). Conditions NOT listed here have no
+   * timer and persist until the GM clears them manually (the legacy
+   * Phase 50 behavior).
+   *
+   * Concretely: if it's round 3 and the GM applies Hold Person for 3
+   * rounds, the expiration is `6` (ending at the START of round 6
+   * — i.e. after the target gets its turn in round 5). This matches
+   * 5e's "at the end of its next turn" semantics closely enough for
+   * a tracker that doesn't model turn-start / turn-end slots.
+   *
+   * Default: `{}`. Pre-Phase-70 serialized sessions don't carry this
+   * field — `deserializeState` defaults missing values to `{}`, so
+   * existing saves load unchanged.
+   */
+  conditionExpirations: Record<string, number>;
 }
 
 export interface Background {

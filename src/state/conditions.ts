@@ -73,3 +73,88 @@ export function toggleCondition(
     ? removeCondition(conditions, id)
     : addCondition(conditions, id);
 }
+
+/**
+ * Phase 70 — set (or replace) a round-based expiration on a condition.
+ * Returns a new `conditionExpirations` record; never mutates. If
+ * `expiresAtRound` is `null`, the condition becomes permanent (any
+ * existing timer is stripped).
+ */
+export function setConditionExpiration(
+  expirations: Readonly<Record<string, number>>,
+  id: string,
+  expiresAtRound: number | null,
+): Record<string, number> {
+  const next = { ...expirations };
+  if (expiresAtRound === null || !Number.isFinite(expiresAtRound)) {
+    delete next[id];
+  } else {
+    next[id] = Math.max(1, Math.floor(expiresAtRound));
+  }
+  return next;
+}
+
+/**
+ * Phase 70 — remove the expiration entry for `id` if present. Used
+ * when a condition is manually cleared so the timer doesn't outlive
+ * its condition. Idempotent: returns the same shape even if the id
+ * wasn't in the map.
+ */
+export function clearConditionExpiration(
+  expirations: Readonly<Record<string, number>>,
+  id: string,
+): Record<string, number> {
+  if (!(id in expirations)) return { ...expirations };
+  const next = { ...expirations };
+  delete next[id];
+  return next;
+}
+
+/**
+ * Phase 70 — scan a (conditions, conditionExpirations) pair and strip
+ * any condition whose timer is <= `currentRound`. Returns both the
+ * filtered conditions list AND the cleaned expirations map (so a
+ * stripped condition doesn't leave a stale timer behind for when
+ * the GM re-applies it later).
+ *
+ * Never mutates the inputs. Returns the SAME shape identity-wise
+ * when nothing changed, so store reducers can bail on a no-op.
+ */
+export interface TickConditionsResult {
+  conditions: string[];
+  conditionExpirations: Record<string, number>;
+  /** Ids of the conditions that were stripped this tick. Empty if no-op. */
+  removed: string[];
+}
+
+export function tickConditions(
+  conditions: readonly string[],
+  expirations: Readonly<Record<string, number>>,
+  currentRound: number,
+): TickConditionsResult {
+  const removed: string[] = [];
+  for (const id of conditions) {
+    const expiresAt = expirations[id];
+    if (typeof expiresAt === 'number' && currentRound >= expiresAt) {
+      removed.push(id);
+    }
+  }
+  if (removed.length === 0) {
+    return {
+      conditions: conditions.slice(),
+      conditionExpirations: { ...expirations },
+      removed,
+    };
+  }
+  const removedSet = new Set(removed);
+  const nextConditions = conditions.filter((id) => !removedSet.has(id));
+  const nextExpirations: Record<string, number> = {};
+  for (const [id, round] of Object.entries(expirations)) {
+    if (!removedSet.has(id)) nextExpirations[id] = round;
+  }
+  return {
+    conditions: nextConditions,
+    conditionExpirations: nextExpirations,
+    removed,
+  };
+}
