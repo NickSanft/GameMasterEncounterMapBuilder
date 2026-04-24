@@ -18,7 +18,7 @@ Every release is an annotated git tag (`vX.Y.Z`) on the commit that introduced t
 
 ## [Unreleased]
 
-Second post-1.0 phase plan (Phases 65 → 84) — see PLAN.md / the
+Second post-1.0 phase plan (Phases 65 → 85) — see PLAN.md / the
 chat history for the full breakdown:
 
 - **0.66.0** — SyncMessage envelope with `senderId` + `timestamp`
@@ -40,6 +40,7 @@ chat history for the full breakdown:
 - **0.82.0** — Per-Spectator permissions
 - **0.83.0** — Latency indicator on the status chip
 - **0.84.0** — Conflict-merge UI
+- **0.85.0** — Wall editing revamp (in-place edit of endpoints, blocksSight / blocksMovement, thickness; live drag-out preview while drawing; chain merging so a corridor edits as one shape; per-wall `visibility: 'shared' | 'gm'` for secret features)
 
 ---
 
