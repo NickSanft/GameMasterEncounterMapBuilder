@@ -25,7 +25,9 @@ function tok(imageId: string | null, x = 0, y = 0): Token {
     conditions: [],
     rotation: 0,
     losRadius: null,
-    light: null,  };
+    light: null,
+    initiativeMod: 0,
+  };
 }
 
 beforeEach(() => {
@@ -86,7 +88,9 @@ describe('idb-cleanup', () => {
       conditions: [],
       rotation: 0,
       losRadius: null,
-      light: null,    });
+      light: null,
+      initiativeMod: 0,
+    });
 
     const state = createDefaultState();
     const report = await scanUnusedImages(state);

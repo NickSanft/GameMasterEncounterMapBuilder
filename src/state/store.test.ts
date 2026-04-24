@@ -16,7 +16,9 @@ function newToken(id: string, overrides: Partial<Token> = {}): Token {
     conditions: [],
     rotation: 0,
     losRadius: null,
-    light: null,    ...overrides,
+    light: null,
+    initiativeMod: 0,
+    ...overrides,
   };
 }
 

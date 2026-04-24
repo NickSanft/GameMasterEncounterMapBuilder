@@ -102,7 +102,9 @@ describe('duplicateScene', () => {
       conditions: [],
       rotation: 0,
       losRadius: null,
-      light: null,    });
+      light: null,
+      initiativeMod: 0,
+    });
     await saveScene(original.id, state);
 
     const copy = await duplicateScene(original.id);
@@ -181,7 +183,9 @@ describe('ensureActiveScene', () => {
       conditions: [],
       rotation: 0,
       losRadius: null,
-      light: null,    });
+      light: null,
+      initiativeMod: 0,
+    });
     await runTx(SESSIONS_STORE, 'readwrite', (s) =>
       s.put({
         id: LEGACY_ACTIVE_SESSION_ID,

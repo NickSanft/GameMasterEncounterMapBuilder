@@ -10,6 +10,12 @@ export interface TokenCatalogEntry {
   borderColor: string | null;
   imageId: ID | null;
   createdAt: number;
+  /**
+   * Phase 69 — initiative bonus, copied from the token at save-time.
+   * Optional + back-compat: catalog entries written before Phase 69
+   * don't have this field; consumers default missing values to 0.
+   */
+  initiativeMod?: number;
 }
 
 function run<T>(
@@ -29,6 +35,7 @@ export async function saveTokenToLibrary(token: Token): Promise<ID> {
     borderColor: token.borderColor,
     imageId: token.imageId,
     createdAt: Date.now(),
+    initiativeMod: token.initiativeMod,
   };
   await run('readwrite', (s) => s.put(entry));
   return entry.id;
@@ -74,5 +81,7 @@ export function tokenFromCatalogEntry(
     conditions: [],
     rotation: 0,
     losRadius: null,
-    light: null,  };
+    light: null,
+    initiativeMod: entry.initiativeMod ?? 0,
+  };
 }

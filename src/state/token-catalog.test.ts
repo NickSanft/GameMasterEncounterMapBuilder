@@ -22,7 +22,9 @@ const sample: Token = {
   conditions: [],
   rotation: 0,
   losRadius: null,
-  light: null,};
+  light: null,
+  initiativeMod: 0,
+};
 
 beforeEach(() => {
   _resetDBForTests();

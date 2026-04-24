@@ -14,6 +14,12 @@ export interface TemplateToken {
   size: number;
   borderColor: string | null;
   imageId: ID | null;
+  /**
+   * Phase 69 — initiative bonus carried into placed tokens. Optional +
+   * back-compat: pre-Phase-69 templates don't have this field; placed
+   * tokens default to `0` when it's absent.
+   */
+  initiativeMod?: number;
 }
 
 export interface TemplateCatalogEntry {
@@ -46,6 +52,7 @@ export function normalizeTokensForTemplate(tokens: Token[]): TemplateToken[] {
     size: t.size,
     borderColor: t.borderColor,
     imageId: t.imageId,
+    initiativeMod: t.initiativeMod,
   }));
 }
 
@@ -71,7 +78,9 @@ export function placeTemplate(
     conditions: [],
     rotation: 0,
     losRadius: null,
-    light: null,  }));
+    light: null,
+    initiativeMod: tt.initiativeMod ?? 0,
+  }));
 }
 
 export async function saveTemplateToLibrary(

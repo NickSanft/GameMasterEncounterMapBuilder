@@ -225,6 +225,13 @@ export function deserializeState(s: SerializedSessionState): SessionState {
           ? t.losRadius
           : null,
       light: normalizeLight(t.light),
+      // Phase 69 — pre-69 sessions don't have `initiativeMod`; default
+      // to 0 (no bonus). Clamp to integer + a sane range so a malformed
+      // wire payload can't make a token roll initiative as `+1e308`.
+      initiativeMod:
+        typeof t.initiativeMod === 'number' && Number.isFinite(t.initiativeMod)
+          ? Math.max(-20, Math.min(20, Math.round(t.initiativeMod)))
+          : 0,
     })),
     fog: Uint8Array.from(s.fog),
     annotations: (s.annotations ?? []).map((a) => ({

@@ -1671,7 +1671,9 @@ function placeTokenAt(gx: number, gy: number) {
     conditions: [],
     rotation: 0,
     losRadius: null,
-    light: null,  };
+    light: null,
+    initiativeMod: 0,
+  };
   store.applyPatch({ kind: 'token-add', token });
   lastPlacedRef.current = token;
   announcer.announce(`${token.label} placed.`);

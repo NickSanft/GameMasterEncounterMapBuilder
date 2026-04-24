@@ -78,6 +78,20 @@ export interface Token {
    * viewer AND lit by some light source.
    */
   light: TokenLight | null;
+  /**
+   * Phase 69 — initiative bonus added to a 1d20 roll when this token is
+   * auto-rolled into the initiative tracker. In D&D 5e this is the
+   * Dexterity modifier plus any class / feat / magic-item bonuses (a
+   * lvl-3 Rogue with 16 Dex has a `+5`, a lvl-1 Wizard with 12 Dex has
+   * a `+1`, a sluggish ogre might have a `-2`). The "Roll all" button
+   * in the initiative tracker reads this when generating an entry; the
+   * value can also be edited inline before adding.
+   *
+   * Default: `0`. Pre-Phase-69 serialized sessions don't carry this
+   * field — `deserializeState` defaults missing values to `0`, so
+   * existing saves load unchanged.
+   */
+  initiativeMod: number;
 }
 
 export interface Background {

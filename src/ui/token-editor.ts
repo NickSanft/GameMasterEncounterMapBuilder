@@ -173,6 +173,18 @@ export function mountTokenEditor(opts: TokenEditorOptions): TokenEditorHandle {
         </div>
       </fieldset>
 
+      <fieldset class="initiative-mod-block">
+        <legend>Initiative</legend>
+        <label>Bonus
+          <input type="number" data-field="initiativeMod" step="1" min="-20" max="20" />
+        </label>
+        <p class="settings-hint">
+          Added to a 1d20 when the initiative tracker's "Roll all" button
+          rolls for this token. D&amp;D 5e: usually your Dexterity modifier
+          (+ extras like Alert / Jack of All Trades).
+        </p>
+      </fieldset>
+
       <fieldset class="hp-block">
         <legend>Hit points</legend>
         <label class="check">
@@ -262,6 +274,7 @@ export function mountTokenEditor(opts: TokenEditorOptions): TokenEditorHandle {
   const conditionChips = Array.from(
     modal.querySelectorAll<HTMLButtonElement>('.condition-chip'),
   );
+  const initiativeModInput = modal.querySelector<HTMLInputElement>('[data-field="initiativeMod"]')!;
   const rotationInput = modal.querySelector<HTMLInputElement>('[data-field="rotation"]')!;
   const rotationCompass = modal.querySelector<HTMLSpanElement>('[data-field="rotation-compass"]')!;
   const rotationQuickBtns = Array.from(
@@ -354,7 +367,12 @@ export function mountTokenEditor(opts: TokenEditorOptions): TokenEditorHandle {
     syncLightUI(token.light);
     syncConditionUI(token.conditions);
     syncRotationUI(token.rotation);
+    syncInitiativeModUI(token.initiativeMod);
     syncCounter();
+  }
+
+  function syncInitiativeModUI(mod: number) {
+    initiativeModInput.value = String(mod);
   }
 
   function currentFeetPerSquare(): number {
@@ -800,6 +818,27 @@ export function mountTokenEditor(opts: TokenEditorOptions): TokenEditorHandle {
     update({ rotation });
     syncRotationUI(rotation);
   }
+
+  function commitInitiativeMod() {
+    const tok = currentToken();
+    if (!tok) return;
+    const n = parseInt(initiativeModInput.value, 10);
+    if (!Number.isFinite(n)) {
+      syncInitiativeModUI(tok.initiativeMod);
+      return;
+    }
+    const clamped = Math.max(-20, Math.min(20, n));
+    if (clamped !== tok.initiativeMod) update({ initiativeMod: clamped });
+    syncInitiativeModUI(clamped);
+  }
+
+  initiativeModInput.addEventListener('change', commitInitiativeMod);
+  initiativeModInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      commitInitiativeMod();
+      e.preventDefault();
+    }
+  });
 
   rotationInput.addEventListener('change', () => {
     const deg = parseFloat(rotationInput.value);

@@ -1944,6 +1944,41 @@ body.reduced-motion *::after {
   gap: 0.4rem;
 }
 
+/* Phase 69 — when the row contains the inline 🎲 (roll-one) button it
+   has 4 cells, not 3. Bump the grid template so the dice button gets
+   its own slot rather than overflowing the Add column. */
+.initiative-add-row:has([data-action="roll-one"]) {
+  grid-template-columns: 1fr 5.5rem auto auto;
+}
+
+.initiative-roll-all-row {
+  margin-bottom: 0.6rem;
+}
+
+.initiative-roll-all-row button {
+  appearance: none;
+  background: var(--accent);
+  color: white;
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  padding: 0.45rem 0.9rem;
+  font-family: inherit;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  width: 100%;
+}
+
+.initiative-roll-all-row button:hover:not(:disabled) {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+
+.initiative-roll-all-row button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 .initiative-add-row input[type='text'],
 .initiative-add-row input[type='number'],
 .initiative-add-row select {

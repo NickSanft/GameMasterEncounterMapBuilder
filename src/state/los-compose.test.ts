@@ -22,7 +22,9 @@ function token(overrides: Partial<Token> & { id: string }): Token {
     conditions: overrides.conditions ?? [],
     rotation: overrides.rotation ?? 0,
     losRadius: overrides.losRadius ?? null,
-    light: overrides.light ?? null,  };
+    light: overrides.light ?? null,
+    initiativeMod: overrides.initiativeMod ?? 0,
+  };
 }
 
 function wall(overrides: Partial<Wall> & { id: string }): Wall {

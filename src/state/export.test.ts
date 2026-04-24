@@ -21,7 +21,9 @@ function token(id: string, imageId: string | null = null, borderColor: string | 
     conditions: [],
     rotation: 0,
     losRadius: null,
-    light: null,  };
+    light: null,
+    initiativeMod: 0,
+  };
 }
 
 describe('exportSession / importSession', () => {

@@ -1,6 +1,11 @@
 import type { Store } from '../state/store.js';
 import type { InitiativeEntry, Token } from '../state/types.js';
-import { advanceInitiative, retreatInitiative } from '../state/initiative.js';
+import {
+  advanceInitiative,
+  retreatInitiative,
+  rollInitiativeForToken,
+  rollInitiativeForUnlinkedTokens,
+} from '../state/initiative.js';
 import {
   attachFocusTrap,
   rememberFocus,
@@ -43,10 +48,16 @@ export function mountInitiativeModal(
       </div>
       <ul class="initiative-list" data-field="list" aria-label="Turn order"></ul>
       <div class="initiative-add">
+        <div class="initiative-roll-all-row">
+          <button type="button" data-action="roll-all" title="Roll 1d20 + each token's initiative bonus and add the missing ones to the order">
+            🎲 Roll all unlinked tokens
+          </button>
+        </div>
         <label class="initiative-add-label">Add from token</label>
         <div class="initiative-add-row">
           <select data-field="token-select"></select>
           <input type="number" data-field="token-value" placeholder="Roll" min="-20" max="50" step="1" />
+          <button type="button" data-action="roll-one" title="Roll 1d20 + this token's initiative bonus" aria-label="Roll for selected token">🎲</button>
           <button type="button" data-action="add-token">Add</button>
         </div>
         <label class="initiative-add-label">Add custom</label>
@@ -77,6 +88,8 @@ export function mountInitiativeModal(
   const customValue = modal.querySelector<HTMLInputElement>('[data-field="custom-value"]')!;
   const addTokenBtn = modal.querySelector<HTMLButtonElement>('[data-action="add-token"]')!;
   const addCustomBtn = modal.querySelector<HTMLButtonElement>('[data-action="add-custom"]')!;
+  const rollAllBtn = modal.querySelector<HTMLButtonElement>('[data-action="roll-all"]')!;
+  const rollOneBtn = modal.querySelector<HTMLButtonElement>('[data-action="roll-one"]')!;
   const prevBtn = modal.querySelector<HTMLButtonElement>('[data-action="prev"]')!;
   const nextBtn = modal.querySelector<HTMLButtonElement>('[data-action="next"]')!;
   const endBtn = modal.querySelector<HTMLButtonElement>('[data-action="end"]')!;
@@ -115,15 +128,24 @@ export function mountInitiativeModal(
       tokenSelect.appendChild(opt);
       tokenSelect.disabled = true;
       addTokenBtn.disabled = true;
+      rollOneBtn.disabled = true;
+      // "Roll all" is only useful when at least one token is unlinked.
+      rollAllBtn.disabled = true;
     } else {
       for (const t of availableTokens) {
         const opt = document.createElement('option');
         opt.value = t.id;
-        opt.textContent = t.label;
+        // Show "Goblin (+2)" so the GM can see the modifier they're
+        // rolling against without opening the token editor.
+        const mod = t.initiativeMod ?? 0;
+        const modSuffix = mod === 0 ? '' : mod > 0 ? ` (+${mod})` : ` (${mod})`;
+        opt.textContent = `${t.label}${modSuffix}`;
         tokenSelect.appendChild(opt);
       }
       tokenSelect.disabled = false;
       addTokenBtn.disabled = false;
+      rollOneBtn.disabled = false;
+      rollAllBtn.disabled = false;
     }
   }
 
@@ -226,6 +248,35 @@ export function mountInitiativeModal(
     };
     store.applyPatch({ kind: 'initiative-add', entry });
     tokenValue.value = '';
+  });
+
+  // 🎲 button next to the value input — rolls 1d20 + the token's
+  // initiativeMod and pre-fills the input. The GM still has to click
+  // "Add" to commit it to the order, so a misclick is recoverable.
+  rollOneBtn.addEventListener('click', () => {
+    const state = store.getState();
+    const tokenId = tokenSelect.value;
+    if (!tokenId) return;
+    const token = state.tokens.find((t) => t.id === tokenId);
+    if (!token) return;
+    const entry = rollInitiativeForToken(token);
+    tokenValue.value = String(entry.value);
+    tokenValue.focus();
+    tokenValue.select();
+  });
+
+  // "Roll all" button — rolls 1d20 + initiativeMod for every token NOT
+  // already in the order, dispatching one initiative-add per result.
+  // Tokens already in the order are LEFT ALONE so the GM can manually
+  // set values for NPCs (e.g. monster blocks that don't roll) or
+  // players who announced their own roll without losing them.
+  rollAllBtn.addEventListener('click', () => {
+    const state = store.getState();
+    const fresh = rollInitiativeForUnlinkedTokens(state.tokens, state.initiative);
+    if (fresh.length === 0) return;
+    for (const entry of fresh) {
+      store.applyPatch({ kind: 'initiative-add', entry });
+    }
   });
 
   addCustomBtn.addEventListener('click', () => {

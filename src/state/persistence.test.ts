@@ -45,7 +45,9 @@ describe('saveState / loadPersistedState', () => {
       conditions: [],
       rotation: 0,
       losRadius: null,
-      light: null,    });
+      light: null,
+      initiativeMod: 0,
+    });
     state.fog[0] = 1;
     state.fog[99] = 1;
 
@@ -89,7 +91,9 @@ describe('saveState / loadPersistedState', () => {
       conditions: [],
       rotation: 0,
       losRadius: null,
-      light: null,    });
+      light: null,
+      initiativeMod: 0,
+    });
     await saveState(state);
     expect(localStorage.getItem(STORAGE_KEY)).not.toBeNull();
     await clearPersistedState();
@@ -121,7 +125,9 @@ describe('saveState / loadPersistedState', () => {
       conditions: [],
       rotation: 0,
       losRadius: null,
-      light: null,    });
+      light: null,
+      initiativeMod: 0,
+    });
     // Seed LS with an old value so we can detect that the oversized
     // save removed it rather than overwriting.
     localStorage.setItem(STORAGE_KEY, '"stale"');

@@ -24,7 +24,7 @@ chat history for the full breakdown:
 - **0.66.0** — SyncMessage envelope with `senderId` + `timestamp`
 - **0.67.0** — Move identity storage off `preferences`
 - **0.68.0** — Visual-regression baseline auto-regen tooling ✅
-- **0.69.0** — Auto-roll initiative + `Token.initiativeMod`
+- **0.69.0** — Auto-roll initiative + `Token.initiativeMod` ✅
 - **0.70.0** — Round-counted conditions
 - **0.71.0** — Concentration tracking + auto-prompt
 - **0.72.0** — Death saves UI
@@ -40,6 +40,37 @@ chat history for the full breakdown:
 - **0.82.0** — Per-Spectator permissions
 - **0.83.0** — Latency indicator on the status chip
 - **0.84.0** — Conflict-merge UI
+
+---
+
+## [0.69.0] — 2026-04-24 — Auto-roll initiative + `Token.initiativeMod`
+
+### Added
+- **`Token.initiativeMod: number`** — every token now carries an integer initiative bonus (default `0`). Conceptually the D&D 5e Dexterity modifier plus any Alert / Jack-of-All-Trades / magic-item extras. Editable via a new "Initiative" fieldset in the Token Editor (clamped to `[-20, 20]`, persisted, round-tripped through scenes / library / templates / wire envelopes).
+- **"🎲 Roll all unlinked tokens" button** in the initiative tracker. Walks every token NOT already in the order, rolls 1d20 + that token's `initiativeMod`, and adds an `initiative-add` patch per result. Tokens *already* in the order are deliberately left alone — keeps manually-set monster blocks and player-announced rolls from getting clobbered.
+- **Per-token "🎲" button** next to the value input on the "Add from token" row. Rolls 1d20 + the selected token's bonus and pre-fills the value field; the GM still has to click "Add" so a misclick is recoverable.
+- **Token labels in the dropdown now show the modifier** as a suffix (e.g. `Goblin (+2)`, `Ogre (-1)`). The GM can sanity-check what they're rolling against without opening the editor.
+
+### State / migration
+- **`deserializeState` defaults missing `initiativeMod` to `0`** for any token loaded from a pre-Phase-69 save (IDB scene, exported JSON, wire envelope from an older peer). Malformed inputs (`NaN`, strings, out-of-range numbers) are clamped + rounded silently. Existing scenes load unchanged; no manual migration step.
+- **`TokenCatalogEntry.initiativeMod` + `TemplateToken.initiativeMod`** added as optional fields. Library tokens / templates saved before this phase load with the bonus defaulted to `0`; new saves carry the value forward so re-placing a library entry produces a token with the same bonus.
+- **`tool-token` + `gm.ts` token-creation paths** seed new tokens with `initiativeMod: 0`. Stamping (Alt-click) preserves the source token's bonus along with the rest of its appearance.
+
+### New helpers
+- **`rollInitiativeForToken(token, rng?)`** in `src/state/initiative.ts` — pure 1d20 + `initiativeMod` calculation that returns an `InitiativeEntry` linked to the token. Inject `rng` for tests.
+- **`rollInitiativeForUnlinkedTokens(tokens, state, rng?)`** — bulk variant powering the "Roll all" button. Skips tokens whose id appears in `state.order` so re-clicking the button doesn't duplicate entries.
+
+### Tests
+- **+11 unit tests in `src/state/initiative.test.ts`** covering: positive / negative / zero modifiers, missing-field defaulting, fresh-id generation per call, label / tokenId linkage, the unlinked-only filter (including the "custom Lair-action entry doesn't count as linking a token" edge case), empty-input safety.
+- **+2 unit tests in `src/sync/messages.test.ts`** for the deserializer: defaults a missing `initiativeMod` to `0` (Phase-68-and-earlier saves) and clamps malformed values (`999` → `20`, `-50` → `-20`, `2.7` → `3`, `'bogus'` / `NaN` → `0`).
+- **All 655 unit tests + 166 Playwright specs continue to pass.** Test fixtures across 14 files were updated to satisfy the new required `initiativeMod` field.
+
+### Why
+Auto-rolling initiative is the single most common request in the post-1.0 backlog (item #1 on the curated list). Every D&D session starts with the GM typing or clicking 1d20+mod for every monster + NPC; this collapses that into one button. The `initiativeMod` field also unblocks Phase 73's 3D dice animation (rolls need to know the modifier for the breakdown display) and Phase 74's `/dice` chat shortcuts (`/init` will roll for the selected tokens).
+
+### No behavior change for existing rolls
+- Manually-typed initiative values still work exactly as before. The "Roll all" button skips already-linked tokens, so a GM partway through setting up combat by hand can finish with one click without losing prior work.
+- The wire format is unchanged — the new field rides inside the existing `Token` shape, no new SyncMessage variants.
 
 ---
 

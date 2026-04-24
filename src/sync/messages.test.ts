@@ -24,7 +24,9 @@ describe('serializeState / deserializeState', () => {
       conditions: [],
       rotation: 0,
       losRadius: null,
-      light: null,    });
+      light: null,
+      initiativeMod: 0,
+    });
     const serialized = serializeState(state);
     const restored = deserializeState(serialized);
     expect(restored.version).toBe(1);
@@ -87,6 +89,45 @@ describe('serializeState / deserializeState', () => {
     } as unknown as SerializedSessionState;
     const restored = deserializeState(legacy);
     expect(restored.tokens[0]!.light).toBeNull();
+  });
+
+  it('defaults initiativeMod to 0 for legacy tokens (Phase 68 and earlier)', () => {
+    const legacy = {
+      ...serializeState(createDefaultState()),
+      tokens: [
+        {
+          id: 't1',
+          x: 0,
+          y: 0,
+          label: 'A',
+          color: '#ff0000',
+          imageId: null,
+          size: 1,
+          // initiativeMod field missing entirely — pre-Phase 69 sessions
+        },
+      ],
+    } as unknown as SerializedSessionState;
+    const restored = deserializeState(legacy);
+    expect(restored.tokens[0]!.initiativeMod).toBe(0);
+  });
+
+  it('clamps initiativeMod to [-20, 20] and rounds non-integers', () => {
+    const malformed = {
+      ...serializeState(createDefaultState()),
+      tokens: [
+        { id: 'a', x: 0, y: 0, label: 'A', color: '#fff', imageId: null, size: 1, initiativeMod: 999 },
+        { id: 'b', x: 0, y: 0, label: 'B', color: '#fff', imageId: null, size: 1, initiativeMod: -50 },
+        { id: 'c', x: 0, y: 0, label: 'C', color: '#fff', imageId: null, size: 1, initiativeMod: 2.7 },
+        { id: 'd', x: 0, y: 0, label: 'D', color: '#fff', imageId: null, size: 1, initiativeMod: 'bogus' },
+        { id: 'e', x: 0, y: 0, label: 'E', color: '#fff', imageId: null, size: 1, initiativeMod: NaN },
+      ],
+    } as unknown as SerializedSessionState;
+    const restored = deserializeState(malformed);
+    expect(restored.tokens[0]!.initiativeMod).toBe(20);
+    expect(restored.tokens[1]!.initiativeMod).toBe(-20);
+    expect(restored.tokens[2]!.initiativeMod).toBe(3);
+    expect(restored.tokens[3]!.initiativeMod).toBe(0);
+    expect(restored.tokens[4]!.initiativeMod).toBe(0);
   });
 
   it('clamps a serialized light: dim raised to bright when smaller', () => {
