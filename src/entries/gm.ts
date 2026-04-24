@@ -1674,6 +1674,7 @@ function placeTokenAt(gx: number, gy: number) {
     light: null,
     initiativeMod: 0,
     conditionExpirations: {},
+    deathSaves: { successes: 0, failures: 0 },
   };
   store.applyPatch({ kind: 'token-add', token });
   lastPlacedRef.current = token;

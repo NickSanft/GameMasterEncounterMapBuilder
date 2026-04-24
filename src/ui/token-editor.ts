@@ -1,6 +1,11 @@
 import type { Store } from '../state/store.js';
 import type { SelectionState } from '../input/context.js';
 import type { ID, Token, TokenHp, TokenLight } from '../state/types.js';
+import {
+  isStable,
+  isDead,
+  type DeathSaves,
+} from '../state/token-hp.js';
 import { putImage, getImageURL } from '../images/store.js';
 import type { ImageLoader } from '../images/loader.js';
 import { TEAM_PRESETS } from '../state/team-colors.js';
@@ -212,6 +217,31 @@ export function mountTokenEditor(opts: TokenEditorOptions): TokenEditorHandle {
             </div>
           </label>
         </div>
+        <!-- Phase 72 — death-save tracker. Visible only when HP is
+             tracked AND current is 0. Auto-resets on heal. -->
+        <div class="death-saves" data-field="death-saves" hidden>
+          <div class="death-saves-header">
+            <span class="death-saves-title">Death saves</span>
+            <span class="death-saves-status" data-field="death-saves-status" aria-live="polite"></span>
+          </div>
+          <div class="death-saves-row">
+            <span class="death-saves-label">Successes</span>
+            <div class="death-saves-dots" data-field="death-success-dots" role="group" aria-label="Death save successes">
+              <button type="button" class="dot success" data-success="1" aria-label="1 success"></button>
+              <button type="button" class="dot success" data-success="2" aria-label="2 successes"></button>
+              <button type="button" class="dot success" data-success="3" aria-label="3 successes"></button>
+            </div>
+          </div>
+          <div class="death-saves-row">
+            <span class="death-saves-label">Failures</span>
+            <div class="death-saves-dots" data-field="death-failure-dots" role="group" aria-label="Death save failures">
+              <button type="button" class="dot failure" data-failure="1" aria-label="1 failure"></button>
+              <button type="button" class="dot failure" data-failure="2" aria-label="2 failures"></button>
+              <button type="button" class="dot failure" data-failure="3" aria-label="3 failures"></button>
+            </div>
+          </div>
+          <button type="button" class="death-saves-reset" data-action="reset-death-saves">Reset saves</button>
+        </div>
       </fieldset>
 
       <fieldset class="conditions-block">
@@ -281,6 +311,17 @@ export function mountTokenEditor(opts: TokenEditorOptions): TokenEditorHandle {
   const hpVisibilityRadios = Array.from(
     modal.querySelectorAll<HTMLInputElement>('input[name="te-hp-visibility"]'),
   );
+  const deathSavesEl = modal.querySelector<HTMLDivElement>('[data-field="death-saves"]')!;
+  const deathStatusEl = modal.querySelector<HTMLSpanElement>('[data-field="death-saves-status"]')!;
+  const successDots = Array.from(
+    modal.querySelectorAll<HTMLButtonElement>('[data-success]'),
+  );
+  const failureDots = Array.from(
+    modal.querySelectorAll<HTMLButtonElement>('[data-failure]'),
+  );
+  const resetDeathBtn = modal.querySelector<HTMLButtonElement>(
+    '[data-action="reset-death-saves"]',
+  )!;
   const conditionChips = Array.from(
     modal.querySelectorAll<HTMLButtonElement>('.condition-chip'),
   );
@@ -376,6 +417,7 @@ export function mountTokenEditor(opts: TokenEditorOptions): TokenEditorHandle {
     updatePreview(token.imageId);
     syncBorderUI(token.borderColor);
     syncHpUI(token.hp);
+    syncDeathSavesUI(token.hp, token.deathSaves);
     syncSightUI(token.losRadius);
     syncLightUI(token.light);
     syncConditionUI(token.conditions, token.conditionExpirations);
@@ -451,6 +493,33 @@ export function mountTokenEditor(opts: TokenEditorOptions): TokenEditorHandle {
     hpMaxInput.value = hp ? String(hp.max) : '';
     const visibility = hp?.visibility ?? 'shared';
     for (const r of hpVisibilityRadios) r.checked = r.value === visibility;
+  }
+
+  function syncDeathSavesUI(hp: TokenHp | null, saves: DeathSaves) {
+    // Show only for HP-tracked tokens that are currently at 0.
+    const visible = hp !== null && hp.current === 0;
+    deathSavesEl.hidden = !visible;
+    if (!visible) return;
+    for (const d of successDots) {
+      const idx = Number(d.dataset.success ?? 0);
+      d.classList.toggle('filled', idx <= saves.successes);
+      d.setAttribute('aria-pressed', idx <= saves.successes ? 'true' : 'false');
+    }
+    for (const d of failureDots) {
+      const idx = Number(d.dataset.failure ?? 0);
+      d.classList.toggle('filled', idx <= saves.failures);
+      d.setAttribute('aria-pressed', idx <= saves.failures ? 'true' : 'false');
+    }
+    if (isDead(saves)) {
+      deathStatusEl.textContent = 'Dead';
+      deathStatusEl.className = 'death-saves-status dead';
+    } else if (isStable(saves)) {
+      deathStatusEl.textContent = 'Stable';
+      deathStatusEl.className = 'death-saves-status stable';
+    } else {
+      deathStatusEl.textContent = `${saves.successes}/${saves.failures}`;
+      deathStatusEl.className = 'death-saves-status';
+    }
   }
 
   function syncConditionUI(
@@ -960,6 +1029,49 @@ export function mountTokenEditor(opts: TokenEditorOptions): TokenEditorHandle {
     });
   }
 
+  // Phase 72 — death-save dot toggles. Clicking dot N sets the count
+  // to N if it isn't already, OR to N-1 if it equals N (so clicking
+  // a filled dot un-fills it). This is the standard "click to fill,
+  // click again to unfill" pattern from D&D Beyond / Roll20.
+  function setDeathSaves(next: DeathSaves) {
+    const tok = currentToken();
+    if (!tok) return;
+    update({ deathSaves: next });
+    syncDeathSavesUI(tok.hp, next);
+  }
+
+  for (const dot of successDots) {
+    dot.addEventListener('click', () => {
+      const tok = currentToken();
+      if (!tok || !tok.hp) return;
+      const idx = Number(dot.dataset.success ?? 0);
+      const nextSuccesses =
+        tok.deathSaves.successes === idx ? idx - 1 : idx;
+      setDeathSaves({
+        successes: Math.max(0, Math.min(3, nextSuccesses)),
+        failures: tok.deathSaves.failures,
+      });
+    });
+  }
+
+  for (const dot of failureDots) {
+    dot.addEventListener('click', () => {
+      const tok = currentToken();
+      if (!tok || !tok.hp) return;
+      const idx = Number(dot.dataset.failure ?? 0);
+      const nextFailures =
+        tok.deathSaves.failures === idx ? idx - 1 : idx;
+      setDeathSaves({
+        successes: tok.deathSaves.successes,
+        failures: Math.max(0, Math.min(3, nextFailures)),
+      });
+    });
+  }
+
+  resetDeathBtn.addEventListener('click', () => {
+    setDeathSaves({ successes: 0, failures: 0 });
+  });
+
   for (const chip of conditionChips) {
     chip.addEventListener('click', () => {
       const tok = currentToken();
@@ -1180,6 +1292,19 @@ export function mountTokenEditor(opts: TokenEditorOptions): TokenEditorHandle {
           // inputs, to avoid stomping their in-progress edit.
           if (!conditionTimersEl.contains(document.activeElement)) {
             syncConditionUI(t.conditions, t.conditionExpirations);
+          }
+          // Phase 72 — HP / death-save tracker mirror externally-
+          // applied damage (auto +failure on a 0-HP token, auto-
+          // reset on heal-from-0). Skip when the GM is mid-edit on
+          // the HP fields to avoid clobbering an in-progress value.
+          if (
+            document.activeElement !== hpCurrentInput &&
+            document.activeElement !== hpMaxInput
+          ) {
+            syncHpUI(t.hp);
+          }
+          if (!deathSavesEl.contains(document.activeElement)) {
+            syncDeathSavesUI(t.hp, t.deathSaves);
           }
         }
       }

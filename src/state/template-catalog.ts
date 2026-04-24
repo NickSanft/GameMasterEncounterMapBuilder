@@ -83,6 +83,8 @@ export function placeTemplate(
     // Templates don't carry round timers — those are transient per-
     // combat state, not part of the layout definition.
     conditionExpirations: {},
+    // Phase 72 — death saves: same rationale, transient per combat.
+    deathSaves: { successes: 0, failures: 0 },
   }));
 }
 

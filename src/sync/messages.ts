@@ -16,6 +16,28 @@ import type {
 import type { PlayerIdentity } from '../state/player-identity.js';
 
 /**
+ * Phase 72 — clamp the (possibly-untrusted) death-save counts to
+ * `[0, 3]`. Missing field, non-objects, non-numbers, or any other
+ * malformed shape collapses to a fresh `{0, 0}`. Both terminal
+ * states (3/x stable, x/3 dead) are valid persisted values.
+ */
+function normalizeDeathSaves(
+  raw: unknown,
+): { successes: number; failures: number } {
+  if (!raw || typeof raw !== 'object') return { successes: 0, failures: 0 };
+  const r = raw as Partial<{ successes: number; failures: number }>;
+  const successes =
+    typeof r.successes === 'number' && Number.isFinite(r.successes)
+      ? Math.max(0, Math.min(3, Math.floor(r.successes)))
+      : 0;
+  const failures =
+    typeof r.failures === 'number' && Number.isFinite(r.failures)
+      ? Math.max(0, Math.min(3, Math.floor(r.failures)))
+      : 0;
+  return { successes, failures };
+}
+
+/**
  * Phase 70 — filter a (possibly-untrusted) conditionExpirations map
  * down to positive-integer round numbers. Non-objects and non-finite
  * values are dropped silently so a malformed peer can't blow up the
@@ -254,6 +276,11 @@ export function deserializeState(s: SerializedSessionState): SessionState {
       // finite values to shrug off malformed wire payloads (strings,
       // NaN, etc.).
       conditionExpirations: normalizeConditionExpirations(t.conditionExpirations),
+      // Phase 72 — death-save tracker. Pre-72 sessions don't carry
+      // this field; default to {0, 0}. Counts are clamped to [0, 3]
+      // since both states (3 successes = stable, 3 failures = dead)
+      // are terminal in the SRD rules.
+      deathSaves: normalizeDeathSaves(t.deathSaves),
     })),
     fog: Uint8Array.from(s.fog),
     annotations: (s.annotations ?? []).map((a) => ({

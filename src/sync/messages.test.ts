@@ -27,6 +27,7 @@ describe('serializeState / deserializeState', () => {
       light: null,
       initiativeMod: 0,
       conditionExpirations: {},
+      deathSaves: { successes: 0, failures: 0 },
     });
     const serialized = serializeState(state);
     const restored = deserializeState(serialized);
@@ -160,6 +161,46 @@ describe('serializeState / deserializeState', () => {
       good: 5,
       fractional: 4,
     });
+  });
+
+  it('defaults deathSaves to {0, 0} for legacy tokens (Phase 71 and earlier)', () => {
+    const legacy = {
+      ...serializeState(createDefaultState()),
+      tokens: [
+        {
+          id: 't1',
+          x: 0,
+          y: 0,
+          label: 'A',
+          color: '#ff0000',
+          imageId: null,
+          size: 1,
+          // deathSaves missing entirely — pre-Phase 72 sessions
+        },
+      ],
+    } as unknown as SerializedSessionState;
+    const restored = deserializeState(legacy);
+    expect(restored.tokens[0]!.deathSaves).toEqual({ successes: 0, failures: 0 });
+  });
+
+  it('clamps deathSaves counts to [0, 3] and floors fractions', () => {
+    const malformed = {
+      ...serializeState(createDefaultState()),
+      tokens: [
+        {
+          id: 'a', x: 0, y: 0, label: 'A', color: '#fff', imageId: null, size: 1,
+          deathSaves: { successes: 99, failures: -5 },
+        },
+        {
+          id: 'b', x: 0, y: 0, label: 'B', color: '#fff', imageId: null, size: 1,
+          deathSaves: { successes: 1.7, failures: 'three' },
+        },
+      ],
+    } as unknown as SerializedSessionState;
+    const restored = deserializeState(malformed);
+    expect(restored.tokens[0]!.deathSaves).toEqual({ successes: 3, failures: 0 });
+    // 1.7 floors to 1; non-numeric failures collapses to 0.
+    expect(restored.tokens[1]!.deathSaves).toEqual({ successes: 1, failures: 0 });
   });
 
   it('clamps initiativeMod to [-20, 20] and rounds non-integers', () => {

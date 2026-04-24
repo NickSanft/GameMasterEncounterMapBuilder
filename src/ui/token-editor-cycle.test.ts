@@ -23,6 +23,7 @@ function tok(id: string, x = 0, y = 0): Token {
     light: null,
     initiativeMod: 0,
     conditionExpirations: {},
+    deathSaves: { successes: 0, failures: 0 },
   };
 }
 

@@ -1,6 +1,10 @@
 import type { Store } from '../state/store.js';
 import type { ID, Token } from '../state/types.js';
-import { applyDamage } from '../state/token-hp.js';
+import {
+  applyDamage,
+  addDeathSaveFailures,
+  DEFAULT_DEATH_SAVES,
+} from '../state/token-hp.js';
 import { attachFocusTrap, rememberFocus, restoreFocus } from '../util/focus.js';
 import {
   CONCENTRATING_CONDITION_ID,
@@ -288,10 +292,22 @@ export function mountDamageHealDialog(
         const nextHp = applyDamage(t.hp, amount);
         const taken = Math.max(0, t.hp.current - nextHp.current);
         damagePerToken.set(t.id, taken);
+        const changes: Partial<Token> = { hp: nextHp };
+        // Phase 72 — death-save automation:
+        //   - HP transitions from 0 → positive (healing wakes you):
+        //     reset the save tracker to {0, 0}.
+        //   - Damage applied to a 0-HP token (still 0 after):
+        //     +1 failure (a crit would be +2; the dialog doesn't
+        //     model crits — GMs adjust by hand).
+        if (t.hp.current === 0 && nextHp.current > 0) {
+          changes.deathSaves = { ...DEFAULT_DEATH_SAVES };
+        } else if (t.hp.current === 0 && nextHp.current === 0 && amount > 0) {
+          changes.deathSaves = addDeathSaveFailures(t.deathSaves, 1);
+        }
         store.applyPatch({
           kind: 'token-update',
           id: t.id,
-          changes: { hp: nextHp },
+          changes,
         });
       }
     });

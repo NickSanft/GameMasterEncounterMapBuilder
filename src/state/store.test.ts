@@ -19,6 +19,7 @@ function newToken(id: string, overrides: Partial<Token> = {}): Token {
     light: null,
     initiativeMod: 0,
     conditionExpirations: {},
+    deathSaves: { successes: 0, failures: 0 },
     ...overrides,
   };
 }
@@ -413,5 +414,47 @@ describe('applyPatch — Phase 70 round-based condition expiry', () => {
     // Same object identities → no reallocation for untouched tokens.
     expect(tokensAfter[0]).toBe(tokensBefore[0]);
     expect(tokensAfter[1]).toBe(tokensBefore[1]);
+  });
+});
+
+describe('Phase 72 — death-save round-trip', () => {
+  it('preserves deathSaves through token-update', () => {
+    const initial = createDefaultState();
+    initial.tokens.push(
+      newToken('hero', {
+        hp: { current: 0, max: 12, visibility: 'shared' },
+        deathSaves: { successes: 1, failures: 2 },
+      }),
+    );
+    const store = createStore(initial);
+    // Bumping a non-deathSaves field doesn't lose the count.
+    store.applyPatch({
+      kind: 'token-update',
+      id: 'hero',
+      changes: { x: 5 },
+    });
+    expect(store.getState().tokens[0]!.deathSaves).toEqual({
+      successes: 1,
+      failures: 2,
+    });
+  });
+
+  it('overwrites deathSaves when included in changes', () => {
+    const initial = createDefaultState();
+    initial.tokens.push(
+      newToken('hero', {
+        deathSaves: { successes: 1, failures: 1 },
+      }),
+    );
+    const store = createStore(initial);
+    store.applyPatch({
+      kind: 'token-update',
+      id: 'hero',
+      changes: { deathSaves: { successes: 3, failures: 0 } },
+    });
+    expect(store.getState().tokens[0]!.deathSaves).toEqual({
+      successes: 3,
+      failures: 0,
+    });
   });
 });

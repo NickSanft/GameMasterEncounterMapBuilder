@@ -87,5 +87,9 @@ export function tokenFromCatalogEntry(
     // are transient per-combat state, not a property of the creature
     // template. Fresh placements start with no active expirations.
     conditionExpirations: {},
+    // Phase 72 — death saves are also transient. A fresh placement
+    // is alive at full HP; saves only matter if the token gets
+    // dropped during combat.
+    deathSaves: { successes: 0, failures: 0 },
   };
 }

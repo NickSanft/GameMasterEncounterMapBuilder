@@ -25,6 +25,7 @@ function token(overrides: Partial<Token> & { id: string }): Token {
     light: overrides.light ?? null,
     initiativeMod: overrides.initiativeMod ?? 0,
     conditionExpirations: overrides.conditionExpirations ?? {},
+    deathSaves: overrides.deathSaves ?? { successes: 0, failures: 0 },
   };
 }
 

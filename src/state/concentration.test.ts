@@ -23,6 +23,7 @@ function token(partial: Partial<Token> & { id: string }): Token {
     light: partial.light ?? null,
     initiativeMod: partial.initiativeMod ?? 0,
     conditionExpirations: partial.conditionExpirations ?? {},
+    deathSaves: partial.deathSaves ?? { successes: 0, failures: 0 },
   };
 }
 

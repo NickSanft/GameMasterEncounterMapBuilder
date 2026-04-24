@@ -24,6 +24,7 @@ function token(id: string, imageId: string | null = null, borderColor: string | 
     light: null,
     initiativeMod: 0,
     conditionExpirations: {},
+    deathSaves: { successes: 0, failures: 0 },
   };
 }
 

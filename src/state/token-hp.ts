@@ -69,3 +69,73 @@ export function isBloodied(hp: TokenHp): boolean {
 export function isDown(hp: TokenHp): boolean {
   return hp.current <= 0;
 }
+
+/**
+ * Phase 72 — D&D 5e death-save tracker helpers. The save state is
+ * a `{successes, failures}` pair, both clamped to `[0, 3]`.
+ *
+ * Stable: 3 successes (the creature stops rolling, still at 0 HP).
+ * Dead:   3 failures.
+ *
+ * The store applies these automatically:
+ *   - When HP transitions from 0 → positive (healing wakes you up),
+ *     reset to {0, 0}.
+ *   - When damage is applied to a 0-HP token, +1 failure.
+ *
+ * GMs can also click the tracker dots in the Token Editor to set
+ * the count by hand (a player makes their own roll + announces it).
+ */
+export interface DeathSaves {
+  successes: number;
+  failures: number;
+}
+
+export const DEFAULT_DEATH_SAVES: DeathSaves = { successes: 0, failures: 0 };
+
+export function clampDeathSaves(saves: DeathSaves): DeathSaves {
+  const successes = Math.max(0, Math.min(3, Math.floor(saves.successes)));
+  const failures = Math.max(0, Math.min(3, Math.floor(saves.failures)));
+  return { successes, failures };
+}
+
+/** True if the tracker has reached "stable" (3 successes). */
+export function isStable(saves: DeathSaves): boolean {
+  return saves.successes >= 3;
+}
+
+/** True if the tracker has reached "dead" (3 failures). */
+export function isDead(saves: DeathSaves): boolean {
+  return saves.failures >= 3;
+}
+
+/** Internal: clamp `n` to a non-negative integer; non-finite → 0. */
+function safePositiveInt(n: number): number {
+  if (!Number.isFinite(n)) return 0;
+  return Math.max(0, Math.floor(n));
+}
+
+/**
+ * Add `n` failures (default 1). Clamped to 3. Used by the store
+ * when damage is applied to a 0-HP token. Returns a new object;
+ * never mutates.
+ */
+export function addDeathSaveFailures(
+  saves: DeathSaves,
+  n = 1,
+): DeathSaves {
+  return clampDeathSaves({
+    successes: saves.successes,
+    failures: saves.failures + safePositiveInt(n),
+  });
+}
+
+/** Add successes (default 1). Used when a player rolls 10+ on a save. */
+export function addDeathSaveSuccesses(
+  saves: DeathSaves,
+  n = 1,
+): DeathSaves {
+  return clampDeathSaves({
+    successes: saves.successes + safePositiveInt(n),
+    failures: saves.failures,
+  });
+}

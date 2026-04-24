@@ -27,7 +27,7 @@ chat history for the full breakdown:
 - **0.69.0** — Auto-roll initiative + `Token.initiativeMod` ✅
 - **0.70.0** — Round-counted conditions ✅
 - **0.71.0** — Concentration tracking + auto-prompt ✅
-- **0.72.0** — Death saves UI
+- **0.72.0** — Death saves UI ✅
 - **0.73.0** — 3D dice animation + multi-dice rolling
 - **0.74.0** — `/dice` chat shortcuts
 - **0.75.0** — Recent-scenes quick-switch (Ctrl+1..9)
@@ -40,6 +40,42 @@ chat history for the full breakdown:
 - **0.82.0** — Per-Spectator permissions
 - **0.83.0** — Latency indicator on the status chip
 - **0.84.0** — Conflict-merge UI
+
+---
+
+## [0.72.0] — 2026-04-24 — Death saves UI
+
+### Added
+- **`Token.deathSaves: { successes: number; failures: number }`** — every token now carries the D&D 5e death-save tracker. Default `{0, 0}`. Counts clamp to `[0, 3]`; reaching 3 successes is "stable", 3 failures is "dead".
+- **In-editor tracker UI** — visible in the Token Editor only when HP is tracked AND `current === 0`. Renders three success dots (green when filled) and three failure dots (red), each clickable to set the count to that index (or back down by 1 if already filled — the standard D&D Beyond / Roll20 pattern). A live status badge reads `1/2`, `Stable`, or `Dead`. A "Reset saves" button clears both back to 0.
+- **Auto-failure on damage to a 0-HP token.** Each Apply in the Damage / Heal dialog that lands non-zero damage on a token already at 0 HP bumps `failures` by 1 (clamped). This catches the easily-forgotten part of the rule that's the whole point of the tracker. Crits aren't auto-doubled (the GM still adjudicates the +2 case).
+- **Auto-reset on healing back above 0.** When a damage / heal apply transitions a token's HP from 0 → positive (any healing wakes you up), the save tracker collapses back to `{0, 0}`. Re-dropping the same token starts a fresh count.
+
+### New helpers in `src/state/token-hp.ts`
+- `DEFAULT_DEATH_SAVES`, `DeathSaves` type — the canonical zero state.
+- `clampDeathSaves(saves)` — both fields clamped to `[0, 3]`, fractional counts floored.
+- `isStable(saves)` / `isDead(saves)` — boolean predicates for the terminal states.
+- `addDeathSaveFailures(saves, n=1)` / `addDeathSaveSuccesses(saves, n=1)` — non-mutating bumps that ignore negative / non-finite increments and clamp to 3.
+
+### Migration
+- **`deserializeState` defaults missing `deathSaves` to `{0, 0}`** for any token loaded from a pre-Phase-72 save (IDB scene, exported JSON, wire envelope from an older peer). Malformed inputs (NaN, Infinity, non-objects, non-numeric counts) collapse to `{0, 0}`; out-of-range numbers clamp to `[0, 3]`. Existing scenes load unchanged.
+- **`tool-token`, `gm.ts` token-creation paths, `tokenFromCatalogEntry`, `placeTemplate`** all seed new tokens with `deathSaves: {0, 0}`. Library tokens + templates intentionally don't round-trip the count — death saves are transient per-combat state.
+
+### Tests
+- **+8 unit tests in `src/state/token-hp.test.ts`** covering: `DEFAULT_DEATH_SAVES`, `clampDeathSaves` clamping + flooring, `isStable` / `isDead` boundary cases, `addDeathSaveFailures` / `addDeathSaveSuccesses` bump-and-clamp, non-mutation guarantees, defensive handling of negative / NaN / Infinity increments.
+- **+2 deserializer tests in `src/sync/messages.test.ts`** for the default + the clamp-and-floor.
+- **+2 store tests in `src/state/store.test.ts`** for `token-update` round-tripping `deathSaves` and overwriting it when included in changes.
+- **+19 test fixtures across 19 files** seeded with `deathSaves: { successes: 0, failures: 0 }` to satisfy the new required field.
+- **All 699 unit tests + 166 Playwright specs continue to pass.**
+
+### Why
+Tracking death saves on a paper d6 / scratched-out tally is the second-most-forgotten rule at the table after concentration. The combo of Phase 71 + 72 means:
+- A wizard takes 14 dmg → concentration prompt fires → GM clicks Failed → spell ends.
+- The wizard hits 0 HP → death-save tracker appears in the editor → cleric heals them → tracker auto-clears.
+- The wizard takes 5 more dmg while down → +1 failure auto-applied → if it's the third, the badge says "Dead".
+
+### Bundle
+- 66.62 KB / 68 KB initial-load brotli — comfortably within the ceiling Phase 70 raised. The new UI is HTML + a few helpers; most of the cost stays in CSS (which has its own 8 KB budget — currently 7.86 KB).
 
 ---
 

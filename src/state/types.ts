@@ -111,6 +111,24 @@ export interface Token {
    * existing saves load unchanged.
    */
   conditionExpirations: Record<string, number>;
+  /**
+   * Phase 71 — death-save tracker for the D&D 5e "Saving against
+   * death" rules. A token at 0 HP rolls a d20 each turn; 10+ is a
+   * success, < 10 is a failure (with 1 = 2 failures and 20 = back
+   * to 1 HP). 3 successes → stable. 3 failures → dead.
+   *
+   * The store auto-resets `{successes: 0, failures: 0}` whenever HP
+   * transitions from 0 → positive (healing wakes you up + clears
+   * the count). Damage applied to a 0-HP token bumps `failures` by
+   * 1 — that's the easily-forgotten part of the rule that the
+   * tracker addresses. Crits / max-HP-from-one-hit instant-death
+   * aren't auto-applied (the GM still adjudicates those).
+   *
+   * Default: `{successes: 0, failures: 0}`. Always present so
+   * consumers don't need null-checks; the count just stays 0/0
+   * until a token actually drops.
+   */
+  deathSaves: { successes: number; failures: number };
 }
 
 export interface Background {

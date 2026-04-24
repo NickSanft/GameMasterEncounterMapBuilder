@@ -9,6 +9,12 @@ import {
   hpFraction,
   isBloodied,
   isDown,
+  clampDeathSaves,
+  isStable,
+  isDead,
+  addDeathSaveFailures,
+  addDeathSaveSuccesses,
+  DEFAULT_DEATH_SAVES,
 } from './token-hp.js';
 import type { TokenHp } from './types.js';
 
@@ -109,5 +115,66 @@ describe('hpFraction + hpBarColor + isBloodied + isDown', () => {
   it('isDown returns true only when current <= 0', () => {
     expect(isDown(hp(0, 10))).toBe(true);
     expect(isDown(hp(1, 10))).toBe(false);
+  });
+});
+
+describe('death-save helpers (Phase 72)', () => {
+  it('DEFAULT_DEATH_SAVES is {0, 0}', () => {
+    expect(DEFAULT_DEATH_SAVES).toEqual({ successes: 0, failures: 0 });
+  });
+
+  it('clampDeathSaves clamps to [0, 3] and floors fractions', () => {
+    expect(clampDeathSaves({ successes: -2, failures: 5 })).toEqual({
+      successes: 0,
+      failures: 3,
+    });
+    expect(clampDeathSaves({ successes: 1.7, failures: 2.4 })).toEqual({
+      successes: 1,
+      failures: 2,
+    });
+  });
+
+  it('isStable / isDead recognize the terminal states', () => {
+    expect(isStable({ successes: 3, failures: 0 })).toBe(true);
+    expect(isStable({ successes: 2, failures: 0 })).toBe(false);
+    expect(isDead({ successes: 0, failures: 3 })).toBe(true);
+    expect(isDead({ successes: 0, failures: 2 })).toBe(false);
+    // Both cap at 3 so reaching either side is final per the SRD;
+    // the GM is welcome to override by clicking dots in the editor.
+  });
+
+  it('addDeathSaveFailures bumps failures, clamps to 3', () => {
+    expect(addDeathSaveFailures({ successes: 1, failures: 0 })).toEqual({
+      successes: 1,
+      failures: 1,
+    });
+    expect(addDeathSaveFailures({ successes: 0, failures: 2 }, 5)).toEqual({
+      successes: 0,
+      failures: 3,
+    });
+  });
+
+  it('addDeathSaveSuccesses bumps successes, clamps to 3', () => {
+    expect(addDeathSaveSuccesses({ successes: 0, failures: 1 })).toEqual({
+      successes: 1,
+      failures: 1,
+    });
+    expect(addDeathSaveSuccesses({ successes: 2, failures: 0 }, 10)).toEqual({
+      successes: 3,
+      failures: 0,
+    });
+  });
+
+  it('add helpers do not mutate the input', () => {
+    const src = { successes: 1, failures: 1 };
+    addDeathSaveFailures(src, 1);
+    addDeathSaveSuccesses(src, 1);
+    expect(src).toEqual({ successes: 1, failures: 1 });
+  });
+
+  it('add helpers ignore negative / non-finite amounts', () => {
+    const src = { successes: 1, failures: 1 };
+    expect(addDeathSaveFailures(src, -5)).toEqual(src);
+    expect(addDeathSaveSuccesses(src, NaN)).toEqual(src);
   });
 });

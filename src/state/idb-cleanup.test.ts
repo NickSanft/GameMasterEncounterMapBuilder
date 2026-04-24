@@ -28,6 +28,7 @@ function tok(imageId: string | null, x = 0, y = 0): Token {
     light: null,
     initiativeMod: 0,
     conditionExpirations: {},
+    deathSaves: { successes: 0, failures: 0 },
   };
 }
 
@@ -92,6 +93,7 @@ describe('idb-cleanup', () => {
       light: null,
       initiativeMod: 0,
       conditionExpirations: {},
+      deathSaves: { successes: 0, failures: 0 },
     });
 
     const state = createDefaultState();
