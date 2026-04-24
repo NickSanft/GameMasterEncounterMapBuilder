@@ -106,6 +106,7 @@ import {
   resolveName,
   type PlayerIdentity,
 } from '../state/player-identity.js';
+import { createIdentityPrefs } from '../state/identity-prefs.js';
 import { mountConnectedPlayersPanel } from '../ui/connected-players-panel.js';
 import { mountShortcutOverlay } from '../ui/shortcut-overlay.js';
 import { mountInitiativeBar } from '../ui/initiative-bar.js';
@@ -151,6 +152,12 @@ if (!(canvasEl instanceof HTMLCanvasElement)) {
 const canvas: HTMLCanvasElement = canvasEl;
 
 const preferences = createPreferences();
+// Phase 67 — per-role identity store, hoisted up here so the
+// settings modal + the channel/identity wiring lower in the file
+// all share the same instance (in-tab updates propagate via the
+// store's subscribe method; the cross-tab `storage` event would
+// only catch OTHER tabs).
+const identityPrefs = createIdentityPrefs('gm');
 applyPrefsToBody(preferences.get());
 
 const announcer = createAnnouncer();
@@ -467,6 +474,7 @@ mountZoomControls(document.body, {
 const settingsModal = mountSettingsModal({
   viewMode: 'gm',
   preferences,
+  identityPrefs,
   store,
 });
 
@@ -1205,10 +1213,14 @@ remoteSession.subscribe(({ state }) => {
 // envelope sender id); the rest of the identity wiring follows here.
 const identityRegistry = createIdentityRegistry();
 
+// Phase 67 — `identityPrefs` is declared earlier (right after
+// `preferences`); `ownIdentity()` reads from it instead of the
+// prefs blob; `broadcastIdentity()` re-fires when the user edits
+// name / color via Settings.
 function ownIdentity(): PlayerIdentity {
-  const prefs = preferences.get();
-  const displayName = resolveName(prefs.playerNameGm, 'gm');
-  const color = prefs.playerColorGm || colorForName(displayName);
+  const id = identityPrefs.get();
+  const displayName = resolveName(id.name, 'gm');
+  const color = id.color || colorForName(displayName);
   return { id: playerId, name: displayName, color, role: 'gm' };
 }
 
@@ -1232,9 +1244,12 @@ void mountConnectedPlayersPanel({
   selfId: playerId,
 });
 
-// Re-broadcast identity when the user edits name / color in Settings.
+// Re-broadcast identity when the user edits name / color. Phase 67
+// switched the source from `preferences` to `identityPrefs`; the
+// signature-cache guard (`lastBroadcastIdentity`) still ensures
+// no-op edits don't fire empty broadcasts.
 let lastBroadcastIdentity = '';
-preferences.subscribe(() => {
+identityPrefs.subscribe(() => {
   const id = ownIdentity();
   const sig = `${id.name}|${id.color}`;
   if (sig === lastBroadcastIdentity) return;

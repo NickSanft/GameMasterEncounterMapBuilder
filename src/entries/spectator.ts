@@ -12,6 +12,7 @@ import {
   resolveName,
   type PlayerIdentity,
 } from '../state/player-identity.js';
+import { createIdentityPrefs } from '../state/identity-prefs.js';
 import { nid } from '../util/id.js';
 import { deserializeState, fromSerializablePatch } from '../sync/messages.js';
 import {
@@ -65,6 +66,10 @@ if (!(canvasEl instanceof HTMLCanvasElement)) {
 const canvas: HTMLCanvasElement = canvasEl;
 
 const preferences = createPreferences();
+// Phase 67 — per-role identity store, hoisted up here so the
+// settings modal + the channel/identity wiring lower in the file
+// share the same instance.
+const identityPrefs = createIdentityPrefs('spectator');
 applyPrefsToBody(preferences.get());
 
 const announcer = createAnnouncer();
@@ -199,6 +204,7 @@ function applyRemoteCamera(camera: { x: number; y: number; zoom: number }) {
 const settingsModal = mountSettingsModal({
   viewMode: 'spectator',
   preferences,
+  identityPrefs,
   store,
 });
 
@@ -365,10 +371,12 @@ const broadcastViewportThrottled = rafThrottle(broadcastViewport);
 // envelope sender id); the rest of the identity wiring follows here.
 const identityRegistry = createIdentityRegistry();
 
+// Phase 67 — `identityPrefs` is declared earlier (right after
+// `preferences`); same per-role store on both views.
 function ownIdentity(): PlayerIdentity {
-  const prefs = preferences.get();
-  const displayName = resolveName(prefs.playerNameSpectator, 'spectator');
-  const color = prefs.playerColorSpectator || colorForName(displayName);
+  const id = identityPrefs.get();
+  const displayName = resolveName(id.name, 'spectator');
+  const color = id.color || colorForName(displayName);
   return { id: playerId, name: displayName, color, role: 'spectator' };
 }
 
@@ -379,8 +387,10 @@ function broadcastIdentity(): void {
   channel.send({ type: 'identity', identity: id });
 }
 
+// Phase 67 — identity edits arrive via the dedicated identityPrefs
+// store now, not the shared preferences blob.
 let lastBroadcastIdentity = '';
-preferences.subscribe(() => {
+identityPrefs.subscribe(() => {
   const id = ownIdentity();
   const sig = `${id.name}|${id.color}`;
   if (sig === lastBroadcastIdentity) return;

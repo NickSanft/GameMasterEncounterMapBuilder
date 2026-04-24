@@ -43,6 +43,27 @@ chat history for the full breakdown:
 
 ---
 
+## [0.67.0] — 2026-04-24 — Move identity storage off `preferences`
+
+### Changed
+- **Per-view player identity now lives in its own dedicated store** (`src/state/identity-prefs.ts`) instead of riding inside the global `Preferences` blob. The 0.63.1 hotfix that scoped `playerNameGm` / `playerNameSpectator` / `playerColorGm` / `playerColorSpectator` was a workaround for the cross-tab `storage` event leaking identity edits between views; this phase puts the data where it conceptually belongs.
+- **Two new localStorage keys** — `gm-encounter-maps-identity-gm` + `gm-encounter-maps-identity-spectator`. Each view reads / writes only its own scoped key. The cross-tab `storage` event still fires for OTHER tabs of the same role (rare but possible) without touching the other role's identity.
+- **`Preferences` shrinks back to "settings that should be the same across both views in one browser."** No more `playerName*` / `playerColor*` fields polluting the shared blob.
+- **`SettingsModalOptions` gains `identityPrefs`**. The entry constructs `createIdentityPrefs(viewMode)` once and passes the same instance to both the Settings modal + the `ownIdentity()` / broadcast wiring lower in the file. In-tab updates propagate via the store's `subscribe()` method (the cross-tab `storage` event would only catch other tabs).
+
+### Migration
+- **One-time auto-migration on first read**. If `playerNameGm` / `playerColorGm` / `playerNameSpectator` / `playerColorSpectator` are still present in the legacy preferences blob (users coming from 0.63.1 → 0.67.0), `createIdentityPrefs(role)` copies them into the new role-scoped key, then strips them from the prefs blob. After this phase, subsequent boots use the new store directly + the migration is a no-op.
+- **Idempotent**: legacy fields absent → no-op. New store wins when both legacy + new are present (handles "user upgraded, then renamed via Settings, then a stale legacy field somehow stuck around" without clobber).
+
+### Tests
+- **+12 unit tests** in `src/state/identity-prefs.test.ts` covering: defaults, role-scoped persistence, GM/Spectator isolation, partial updates, malformed-JSON fallback, subscribe + unsubscribe, plus 5 migration-specific specs (GM-side migration, Spectator-side migration, no-op when legacy absent, idempotent on subsequent constructions, new store wins over leftover legacy fields).
+- **All 644 unit tests + 166 Playwright specs pass.** No e2e changes needed — the Settings UI's `data-field="playerName"` / `playerColor` attributes are unchanged, so existing identity specs continue to drive the same DOM.
+
+### No behavior change for users
+- Setting / changing / displaying name + color works identically. The migration runs silently. Visible difference: the next time you inspect localStorage you'll see two new `gm-encounter-maps-identity-*` keys + four fewer fields in the prefs blob.
+
+---
+
 ## [0.66.0] — 2026-04-23 — SyncMessage envelope ({senderId, timestamp, payload})
 
 ### Changed

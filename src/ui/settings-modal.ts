@@ -14,6 +14,7 @@
  */
 
 import type { PreferencesStore } from '../state/preferences.js';
+import type { IdentityPrefsStore } from '../state/identity-prefs.js';
 import type { Store } from '../state/store.js';
 import type { ViewMode } from '../state/types.js';
 
@@ -25,6 +26,8 @@ export interface SettingsModalHandle {
 export interface SettingsModalOptions {
   viewMode: ViewMode;
   preferences: PreferencesStore;
+  /** Phase 67 — per-role identity store, shared with the entry. */
+  identityPrefs: IdentityPrefsStore;
   store: Store;
 }
 

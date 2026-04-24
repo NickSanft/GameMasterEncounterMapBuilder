@@ -6,3 +6,13 @@ export const NOTES_OPEN_KEY = 'gm-encounter-maps-notes-open';
 export const BROADCAST_CHANNEL_NAME = 'gm-encounter-maps-session';
 export const IDB_DB_NAME = 'gm-encounter-maps';
 export const EXPORT_FILENAME_PREFIX = 'gm-encounter-maps';
+/**
+ * Phase 67 — per-role identity stores. The GM tab and the Spectator
+ * tab read independent keys so a single browser running both views
+ * can give each its own name + color (the original Phase 63
+ * implementation conflated them via a shared preferences blob,
+ * fixed in 0.63.1 with per-role fields, and properly extracted
+ * here in 0.67.0).
+ */
+export const IDENTITY_PREFS_GM_KEY = 'gm-encounter-maps-identity-gm';
+export const IDENTITY_PREFS_SPECTATOR_KEY = 'gm-encounter-maps-identity-spectator';

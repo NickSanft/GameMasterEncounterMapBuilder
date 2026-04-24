@@ -6,6 +6,7 @@ import type {
   DiagonalRule,
 } from '../state/preferences.js';
 import { ALL_THEMES, THEME_LABELS } from '../state/preferences.js';
+import type { IdentityPrefsStore } from '../state/identity-prefs.js';
 import type { Store } from '../state/store.js';
 import type { ViewMode } from '../state/types.js';
 import { attachFocusTrap, rememberFocus, restoreFocus, getFocusables } from '../util/focus.js';
@@ -19,6 +20,12 @@ export interface SettingsModalHandle {
 export interface SettingsModalOptions {
   viewMode: ViewMode;
   preferences: PreferencesStore;
+  /**
+   * Phase 67 — per-role identity store (created in the entry once
+   * + passed both to the modal and to `ownIdentity()` + the
+   * broadcast subscriber, so all three observe the same write).
+   */
+  identityPrefs: IdentityPrefsStore;
   store: Store;
 }
 
@@ -41,7 +48,7 @@ const TAB_LABELS: Record<TabId, string> = {
 export function buildSettingsModal(
   opts: SettingsModalOptions,
 ): SettingsModalHandle {
-  const { viewMode, preferences, store } = opts;
+  const { viewMode, preferences, store, identityPrefs } = opts;
 
   const backdrop = document.createElement('div');
   backdrop.className = 'modal-backdrop';
@@ -161,17 +168,14 @@ export function buildSettingsModal(
     highContrastInput.checked = prefs.highContrast;
     colorblindInput.checked = prefs.colorblindMarkers;
     voiceTranscriptionInput.checked = prefs.voiceTranscription;
-    // 0.63.1 — identity fields are now scoped per view role so a
-    // user with both a GM tab and a Spectator tab in the same
-    // browser can give each a different name. The Settings modal
-    // reads / writes the pair matching its own `viewMode`.
-    playerNameInput.value =
-      opts.viewMode === 'gm' ? prefs.playerNameGm : prefs.playerNameSpectator;
+    // Phase 67 — identity now lives in its own per-role store; the
+    // Settings modal reads it from `identityPrefs.get()` instead of
+    // peeling out scoped fields from `preferences`.
+    const identity = identityPrefs.get();
+    playerNameInput.value = identity.name;
     // Color input needs a concrete hex; fall back to a placeholder
     // gray when the user hasn't picked a custom color.
-    const scopedColor =
-      opts.viewMode === 'gm' ? prefs.playerColorGm : prefs.playerColorSpectator;
-    playerColorInput.value = scopedColor || '#9e9e9e';
+    playerColorInput.value = identity.color || '#9e9e9e';
     for (const r of labelSizeRadios) r.checked = r.value === prefs.labelSize;
     for (const r of themeRadios) r.checked = r.value === prefs.theme;
     if (gmFogColorInput) gmFogColorInput.value = prefs.gmFogColor;
@@ -290,21 +294,15 @@ export function buildSettingsModal(
     preferences.update({ voiceTranscription: voiceTranscriptionInput.checked });
   });
 
+  // Phase 67 — writes go through the per-role identity store. The
+  // GM and Spectator views each construct their own
+  // `createIdentityPrefs(viewMode)` so cross-tab `storage` events
+  // only fire other tabs of the SAME role.
   playerNameInput.addEventListener('change', () => {
-    const name = playerNameInput.value.trim();
-    preferences.update(
-      opts.viewMode === 'gm'
-        ? { playerNameGm: name }
-        : { playerNameSpectator: name },
-    );
+    identityPrefs.update({ name: playerNameInput.value.trim() });
   });
   playerColorInput.addEventListener('change', () => {
-    const color = playerColorInput.value;
-    preferences.update(
-      opts.viewMode === 'gm'
-        ? { playerColorGm: color }
-        : { playerColorSpectator: color },
-    );
+    identityPrefs.update({ color: playerColorInput.value });
   });
 
   for (const r of labelSizeRadios) {
