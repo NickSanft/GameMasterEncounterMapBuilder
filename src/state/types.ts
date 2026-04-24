@@ -208,11 +208,15 @@ export interface DrawStroke {
  * `blocksMovement` is a flag reserved for a future grid-pathing
  * feature; Phase 54 stores it but doesn't consume it yet.
  *
- * Walls are GM-only — they never render on the Spectator canvas and
- * are never included in sync messages to Spectator peers. Phase 55
- * will let the GM transmit the DERIVED line-of-sight polygons
- * instead, so Spectators still see the resulting fog mask without
- * being handed a floor plan they can inspect in devtools.
+ * Visibility (0.72.3): walls render on BOTH the GM and Spectator
+ * canvases. They're already serialized in `full-state` / patch
+ * messages (have been since Phase 54), and the spectator-side
+ * `refreshLos` reads them for the visibility polygon. The original
+ * "GM-only" rationale (hide floor plans from devtools-snooping
+ * players) was an over-correction: walls represent physical
+ * features players naturally expect to see at the table. A future
+ * phase may add a per-wall `visibility: 'shared' | 'gm'` for
+ * secret-door style hiding.
  */
 export interface Wall {
   id: ID;

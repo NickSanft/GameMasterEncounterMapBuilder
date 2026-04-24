@@ -43,6 +43,30 @@ chat history for the full breakdown:
 
 ---
 
+## [0.72.3] — 2026-04-24 — Walls render on the Spectator canvas
+
+### Changed
+- **Walls now render on the Spectator view, not just the GM view.** Pre-0.72.3 `drawWalls` early-returned for `mode !== 'gm'`, so any wall the GM drew was invisible to players. Reported by a user mid-Phase-72 — they expected players to see the dungeon walls / corridors / partitions they had laid out, and discovered the walls only appeared on the GM canvas.
+- Walls were already serialized in `full-state` / patch messages (since Phase 54) and the Spectator's `refreshLos` already reads them for the visibility polygon — only the visual render was suppressed. The fix is a one-line change in `src/render/layer-walls.ts`.
+
+### Why the original "GM-only" design was an over-correction
+The Phase 54 docblock cited devtools-snooping prevention: "Walls are GM-only — they never render on the Spectator canvas... so Spectators still see the resulting fog mask without being handed a floor plan they can inspect in devtools." But:
+- The walls are already in the Spectator's localStorage / IDB / WebRTC peer state regardless of whether they render — a player who's actively snooping devtools can read them either way.
+- In normal play, walls represent physical features (dungeon walls, stalagmites, partitions, columns) that players naturally expect to see. Hiding them gives the Spectator a confusingly-empty map.
+- For genuinely-secret features (a hidden tunnel, a one-way door), a future per-wall `visibility: 'shared' | 'gm'` field — matching the existing convention on `Annotation`, `DrawStroke`, and `AoeTemplate` — gives the GM precise opt-out control. Documented as a follow-up in the updated `Wall` interface docblock.
+
+### Spectator render details
+- Same teal lines + endpoint dots as the GM view.
+- Selection highlights, drag-overlay previews, and the in-progress chain rubber-band are GM-only — they're authoring affordances and the Spectator can't edit walls. The render code collapses those inputs to empty / null when `mode !== 'gm'`.
+
+### About line-of-sight (LoS) on the Spectator
+- For walls to BLOCK what a player sees through fog (not just appear visually), Settings → Grid → "Dynamic line of sight" must be on AND at least one token must have a sight radius configured (Token Editor → Sight). Otherwise the Spectator's fog stays driven entirely by what the GM has manually revealed — walls are visual decor only. This is unchanged by this patch.
+
+### No schema migration
+- Wall serialization is unchanged. Existing scenes with walls light up on the Spectator immediately on the next reload — no manual action needed.
+
+---
+
 ## [0.72.2] — 2026-04-24 — Fix: active scene wiped by a fast reload during pre-load
 
 ### Fixed
