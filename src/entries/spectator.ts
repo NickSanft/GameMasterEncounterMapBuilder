@@ -53,6 +53,7 @@ import { registerPwa } from '../util/pwa.js';
 import { mountStatusBanners } from '../ui/status-banners.js';
 import { mountSaveStatusPill } from '../ui/save-status-pill.js';
 import { mountWeatherOverlay } from '../ui/weather-overlay.js';
+import { mountAnimatedTokenOverlay } from '../ui/animated-token-overlay.js';
 import { applyTheme } from '../util/theme.js';
 import { createFogWorkerClient } from '../render/fog-worker-client.js';
 import FogWorker from '../render/fog-worker.js?worker';
@@ -128,7 +129,10 @@ const renderer = createRenderer({
   mode: 'spectator',
   camera: initialCamera,
   getState: () => store.getState(),
-  getImage: (id) => imageLoader.get(id),
+  // Phase 81 (revisit) — animated GIFs handled by the DOM overlay
+  // (mounted below); canvas falls back to the colored circle for them.
+  getImage: (id) =>
+    imageLoader.isAnimated(id) ? null : imageLoader.get(id),
   getPreferences: () => preferences.get(),
   getPings: () => pingManager.getActive(),
   getDamageFx: () => damageFxManager.getActive(),
@@ -138,6 +142,20 @@ const renderer = createRenderer({
   getRulerTargetFeet: () => rulerToolOptionsRef.current.targetFeet,
   getFogRects: () => fogWorkerClient.getLatest(),
 });
+
+// Phase 81 (revisit) — animated-token DOM overlay. Mounted AFTER
+// the renderer so we can subscribe to onFrame. Spectator also
+// hides imgs for tokens whose center cell is in un-revealed fog
+// (matches the canvas-side fog masking that the spectator sees).
+const animatedTokenOverlay = mountAnimatedTokenOverlay({
+  canvas,
+  mode: 'spectator',
+  getState: () => store.getState(),
+  getCamera: () => renderer.camera,
+  isAnimated: (id) => imageLoader.isAnimated(id),
+  getUrl: (id) => imageLoader.getUrl(id),
+});
+renderer.onFrame(() => animatedTokenOverlay.update());
 
 fogWorkerClient.onUpdate(() => renderer.requestRender());
 

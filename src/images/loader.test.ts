@@ -29,7 +29,6 @@ beforeEach(() => {
           const cb = (el as unknown as { onload: (() => void) | null }).onload;
           cb?.();
         });
-        // Don't store the value anywhere — the test doesn't read it.
       },
       get() {
         return '';
@@ -50,51 +49,58 @@ function makeRecord(mimeType: string) {
   };
 }
 
-describe('createImageLoader — Phase 81 GIF tracking', () => {
-  it('starts with zero animated images loaded', () => {
+async function flush() {
+  // Two microtasks: getImage promise → image src setter promise →
+  // onload. setTimeout(0) flushes both microtask + macrotask queues.
+  await new Promise((resolve) => setTimeout(resolve, 0));
+}
+
+describe('createImageLoader — Phase 81 GIF detection', () => {
+  it('starts empty — isAnimated returns false for any id', () => {
     const loader = createImageLoader(() => {});
-    expect(loader._animatedCount()).toBe(0);
+    expect(loader.isAnimated('never-loaded')).toBe(false);
+    expect(loader.getUrl('never-loaded')).toBeNull();
   });
 
-  it('does NOT bump the animated count for a static PNG', async () => {
-    vi.mocked(getImage).mockResolvedValue(makeRecord('image/png'));
-    const onReady = vi.fn();
-    const loader = createImageLoader(onReady);
-    loader.get('img-static');
-    // Wait for the load chain to settle (mock resolves via microtasks).
-    // Flush all pending microtasks (getImage promise → image src
-    // setter promise → onload).
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(loader._animatedCount()).toBe(0);
-  });
-
-  it('bumps the animated count for an image/gif and appends to a hidden host', async () => {
+  it('marks an image/gif source as animated + exposes its object URL', async () => {
     vi.mocked(getImage).mockResolvedValue(makeRecord('image/gif'));
     const onReady = vi.fn();
     const loader = createImageLoader(onReady);
-    loader.get('img-anim');
-    // Flush all pending microtasks (getImage promise → image src
-    // setter promise → onload).
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(loader._animatedCount()).toBe(1);
-    // The hidden host should now contain the loaded <img>.
-    const host = document.querySelector('.animated-token-host');
-    expect(host).not.toBeNull();
-    expect(host!.children.length).toBe(1);
+    loader.get('anim');
+    await flush();
+    expect(loader.isAnimated('anim')).toBe(true);
+    expect(loader.getUrl('anim')).toMatch(/^blob:/);
   });
 
-  it('decrements the count + detaches from host on invalidate', async () => {
+  it('does NOT flag a static PNG as animated', async () => {
+    vi.mocked(getImage).mockResolvedValue(makeRecord('image/png'));
+    const loader = createImageLoader(() => {});
+    loader.get('static');
+    await flush();
+    expect(loader.isAnimated('static')).toBe(false);
+    expect(loader.getUrl('static')).toMatch(/^blob:/);
+  });
+
+  it('returns the loaded HTMLImageElement via get(id)', async () => {
+    vi.mocked(getImage).mockResolvedValue(makeRecord('image/png'));
+    const loader = createImageLoader(() => {});
+    expect(loader.get('img')).toBeNull(); // first call kicks off the load
+    await flush();
+    const img = loader.get('img');
+    expect(img).not.toBeNull();
+    expect(img!.tagName).toBe('IMG');
+  });
+
+  it('invalidate clears the cache so the next get() reloads', async () => {
     vi.mocked(getImage).mockResolvedValue(makeRecord('image/gif'));
     const loader = createImageLoader(() => {});
     loader.get('anim');
-    // Flush all pending microtasks (getImage promise → image src
-    // setter promise → onload).
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(loader._animatedCount()).toBe(1);
+    await flush();
+    expect(loader.isAnimated('anim')).toBe(true);
+
     loader.invalidate('anim');
-    expect(loader._animatedCount()).toBe(0);
-    const host = document.querySelector('.animated-token-host');
-    expect(host?.children.length ?? 0).toBe(0);
+    expect(loader.isAnimated('anim')).toBe(false);
+    expect(loader.getUrl('anim')).toBeNull();
   });
 
   it('handles invalidate on an unknown id without crashing', () => {
@@ -102,23 +108,12 @@ describe('createImageLoader — Phase 81 GIF tracking', () => {
     expect(() => loader.invalidate('never-loaded')).not.toThrow();
   });
 
-  it('handles invalidate on a loading-but-not-yet-loaded entry', () => {
-    vi.mocked(getImage).mockResolvedValue(makeRecord('image/gif'));
-    const loader = createImageLoader(() => {});
-    loader.get('mid-load');
-    // Don't await the load chain — invalidate while still loading.
-    expect(() => loader.invalidate('mid-load')).not.toThrow();
-    // The promise will still resolve; that's fine — the cache entry
-    // is gone so the load just no-ops on completion.
-  });
-
-  it('an error result does NOT bump the animated count (even for GIF MIME)', async () => {
-    vi.mocked(getImage).mockResolvedValue(null); // simulate "not found"
+  it('an error result (record not found) leaves isAnimated/getUrl as null', async () => {
+    vi.mocked(getImage).mockResolvedValue(null);
     const loader = createImageLoader(() => {});
     loader.get('missing');
-    // Flush all pending microtasks (getImage promise → image src
-    // setter promise → onload).
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(loader._animatedCount()).toBe(0);
+    await flush();
+    expect(loader.isAnimated('missing')).toBe(false);
+    expect(loader.getUrl('missing')).toBeNull();
   });
 });

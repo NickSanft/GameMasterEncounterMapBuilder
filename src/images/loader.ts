@@ -5,78 +5,46 @@ interface LoadEntry {
   status: 'loading' | 'loaded' | 'error';
   img: HTMLImageElement | null;
   /**
-   * Phase 81 — true when the source MIME is `image/gif`. Drives:
-   *   - Append-to-DOM-as-hidden so the browser advances GIF frames
-   *     (an off-DOM `<img>` element doesn't animate; it has to be in
-   *     a render tree, even if visually hidden).
-   *   - Per-tab redraw ticker that calls `onReady()` ~12 fps while
-   *     any animated image is loaded, so the canvas's `drawImage`
-   *     picks up the current frame each tick.
+   * Phase 81 — true when the source MIME is `image/gif`. Used by the
+   * canvas token renderer to SKIP `drawImage` (which only ever reads
+   * frame 0 of an animated GIF in Chromium / Firefox / Safari) and
+   * by the animated-token DOM overlay (`src/ui/animated-token-overlay.ts`)
+   * to render a real, browser-animated `<img>` over the canvas instead.
    */
   isAnimated: boolean;
+  /**
+   * Cached object URL — needed by the DOM overlay to construct
+   * standalone `<img>` elements for each animated token.
+   */
+  url: string | null;
 }
 
 export interface ImageLoader {
   get(id: ID): HTMLImageElement | null;
-  invalidate(id: ID): void;
   /**
-   * Phase 81 — debug / test hook. Returns the count of currently-
-   * loaded animated images (drives the redraw ticker shutdown when
-   * the count reaches zero).
+   * Phase 81 — true when the loaded image's MIME was `image/gif`.
+   * Returns false for unknown ids (still loading, errored, or never
+   * requested) so callers can use it as a "should I draw to canvas
+   * or skip it for the overlay?" predicate without a separate guard.
    */
-  _animatedCount(): number;
+  isAnimated(id: ID): boolean;
+  /**
+   * Phase 81 — object URL for the loaded image, or null if not loaded.
+   * Used by the animated-token DOM overlay to construct independent
+   * `<img>` elements per visible animated token.
+   */
+  getUrl(id: ID): string | null;
+  invalidate(id: ID): void;
 }
-
-/**
- * Phase 81 — single document-wide hidden container that holds every
- * loaded animated `<img>` so the browser keeps advancing GIF frames.
- * Position pinned off-screen + opacity 0 + pointer-events none so
- * the elements don't paint or intercept input. Created on first need
- * so test harnesses without a DOM (Vitest jsdom envs) can construct
- * loaders without side effects.
- */
-let animatedContainer: HTMLDivElement | null = null;
-
-function getAnimatedContainer(): HTMLDivElement | null {
-  if (typeof document === 'undefined') return null;
-  if (animatedContainer && animatedContainer.isConnected) {
-    return animatedContainer;
-  }
-  const div = document.createElement('div');
-  div.className = 'animated-token-host';
-  // The CSS `.animated-token-host` rule pins these off-screen +
-  // hidden; we don't inline the styles so a future reskin can
-  // tweak without recompiling.
-  document.body.appendChild(div);
-  animatedContainer = div;
-  return div;
-}
-
-const ANIMATED_TICK_MS = 80; // ~12 fps redraw cap
 
 export function createImageLoader(onReady: () => void): ImageLoader {
   const cache = new Map<ID, LoadEntry>();
-  let animatedCount = 0;
-  let animatedTickerId = 0;
-
-  function startAnimatedTickerIfNeeded() {
-    if (animatedTickerId !== 0) return;
-    if (typeof window === 'undefined') return;
-    animatedTickerId = window.setInterval(() => {
-      if (animatedCount === 0) {
-        window.clearInterval(animatedTickerId);
-        animatedTickerId = 0;
-        return;
-      }
-      onReady();
-    }, ANIMATED_TICK_MS);
-  }
 
   function load(id: ID) {
-    cache.set(id, { status: 'loading', img: null, isAnimated: false });
+    cache.set(id, { status: 'loading', img: null, isAnimated: false, url: null });
     void getImage(id).then((record) => {
       if (!record) {
-        cache.set(id, { status: 'error', img: null, isAnimated: false });
+        cache.set(id, { status: 'error', img: null, isAnimated: false, url: null });
         onReady();
         return;
       }
@@ -84,21 +52,11 @@ export function createImageLoader(onReady: () => void): ImageLoader {
       const img = new Image();
       const isAnimated = record.mimeType === 'image/gif';
       img.onload = () => {
-        cache.set(id, { status: 'loaded', img, isAnimated });
-        if (isAnimated) {
-          // Append to the hidden host so the browser actually
-          // advances GIF frames. Off-DOM `<img>` elements do NOT
-          // animate; the browser only ticks images that exist in
-          // a render tree.
-          const host = getAnimatedContainer();
-          host?.appendChild(img);
-          animatedCount++;
-          startAnimatedTickerIfNeeded();
-        }
+        cache.set(id, { status: 'loaded', img, isAnimated, url });
         onReady();
       };
       img.onerror = () => {
-        cache.set(id, { status: 'error', img: null, isAnimated: false });
+        cache.set(id, { status: 'error', img: null, isAnimated: false, url: null });
         onReady();
       };
       img.src = url;
@@ -114,17 +72,14 @@ export function createImageLoader(onReady: () => void): ImageLoader {
       }
       return entry.img;
     },
+    isAnimated(id: ID): boolean {
+      return cache.get(id)?.isAnimated ?? false;
+    },
+    getUrl(id: ID): string | null {
+      return cache.get(id)?.url ?? null;
+    },
     invalidate(id: ID) {
-      const entry = cache.get(id);
-      if (entry?.isAnimated && entry.img && entry.img.parentElement) {
-        // Remove the hidden DOM element so the browser stops
-        // ticking it (and we don't leak nodes when the GM rapidly
-        // re-uploads a token portrait).
-        entry.img.remove();
-        animatedCount = Math.max(0, animatedCount - 1);
-      }
       cache.delete(id);
     },
-    _animatedCount: () => animatedCount,
   };
 }

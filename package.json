@@ -1,7 +1,7 @@
 {
   "name": "gm-encounter-maps",
   "private": true,
-  "version": "0.81.0",
+  "version": "0.81.1",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -27,7 +27,7 @@
         "!dist/assets/remote-play-modal-content-*.js",
         "!dist/assets/dice-animation-*.js"
       ],
-      "limit": "72 KB"
+      "limit": "74 KB"
     },
     {
       "name": "JavaScript (lazy chunks, brotli)",

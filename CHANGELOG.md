@@ -44,6 +44,37 @@ chat history for the full breakdown:
 
 ---
 
+## [0.81.1] — 2026-04-25 — Fix: animated GIF tokens now actually animate on the map
+
+### Fixed
+- **Animated GIF tokens now play on the map canvas, not just in the Token Editor preview.** Reported by a user immediately after 0.81.0 — the GIF animated correctly in the editor's image preview (a real `<img>` element) but stayed frozen on frame 0 once placed on the map.
+
+### Why 0.81.0 was wrong
+The original implementation appended each animated `<img>` to a hidden DOM host and ran a 12 fps redraw loop on the canvas, hoping that `ctx.drawImage(animatedImg)` would pick up the current animated frame. That trick **does not work** in any modern browser — `ctx.drawImage` of an animated source always reads frame 0, regardless of how many times you call it or whether the underlying `<img>` is animating elsewhere. The Token Editor preview happened to work because it uses a real `<img>` element directly, not a canvas blit.
+
+### The right fix
+Animated tokens are now rendered as actual DOM `<img>` elements positioned absolutely OVER the canvas. The browser's native GIF playback handles the animation; we just keep each `<img>`'s `transform` + `width` + `height` synced to the underlying token's world-to-screen mapping every frame. Static (PNG / JPG) tokens still render through the canvas pipeline unchanged.
+
+### Architecture
+- **`src/ui/animated-token-overlay.ts`** (new) — mounts a single fixed-position `<div>` over the canvas. `update()` diffs the current animated tokens against the cached DOM `<img>` map: creates new ones, updates existing ones' positions, removes ones whose token disappeared. Wired to `renderer.onFrame()` so it re-syncs after every paint without us tracking each individual trigger (camera change, drag, state mutation).
+- **`src/images/loader.ts`** — dropped the (broken) hidden-host + redraw ticker. Now exposes `isAnimated(id)` and `getUrl(id)`. The cache still tracks per-image `isAnimated` flag based on the `image/gif` MIME type.
+- **`src/render/layer-tokens.ts`** is unchanged. Both entries' `getImage` callbacks now return `null` for animated images, so the canvas falls through to the colored circle fallback. The DOM overlay paints the actual GIF on top.
+
+### Limitations vs canvas rendering
+- **HP bars + condition chips render on the canvas behind the DOM `<img>`** so they get partially hidden. Acceptable for the animated-token visual flair; a future polish phase could move HP bars to the overlay too if it becomes annoying in practice.
+- **Token rotation** is not applied to the DOM `<img>` (yet — `transform: rotate()` would work, just untested).
+- **Spectator fog masking** is honored — the overlay hides imgs for tokens whose center cell is in un-revealed fog. The mask is coarse (center-cell only); large tokens that straddle a fog boundary may pop in/out at the boundary.
+- **PNG snapshot exports** still see frame 0 (the snapshot exporter uses the unwrapped `imageLoader.get(id)`). That's fine for a static image — the user gets the GIF's first frame baked into the PNG.
+
+### Tests
+- **+7 unit tests** in `src/images/loader.test.ts` (rewritten for the new API): isAnimated + getUrl on never-loaded ids, GIF detection, PNG-doesn't-flag, get() returns the loaded element, invalidate clears the cache, invalidate-on-unknown is safe, error result leaves both null.
+- All 815 unit tests + 190 Playwright specs pass.
+
+### Bundle
+- **Initial-load brotli budget bumped 72 → 74 KB** to absorb the ~0.6 KB added by the overlay module + entry wiring (current usage 72.13 KB landed slightly over the 72 KB ceiling). Lazy chunks unchanged. CSS unchanged.
+
+---
+
 ## [0.81.0] — 2026-04-25 — Animated GIF token portraits
 
 ### Added

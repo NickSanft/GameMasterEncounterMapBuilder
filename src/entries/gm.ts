@@ -125,6 +125,7 @@ import { mountSaveStatusPill } from '../ui/save-status-pill.js';
 import { mountWeatherOverlay } from '../ui/weather-overlay.js';
 import { mountWeatherPicker } from '../ui/weather-picker.js';
 import { mountTimeOfDayPicker } from '../ui/time-of-day-picker.js';
+import { mountAnimatedTokenOverlay } from '../ui/animated-token-overlay.js';
 import { mountImportOptionsModal } from '../ui/import-options-modal.js';
 import { mergeImportState } from '../state/import-merge.js';
 import { mountMiniMap } from '../ui/mini-map.js';
@@ -255,7 +256,12 @@ const renderer = createRenderer({
   getHighlightIds: () => selection.ids,
   getFogPreview: () => fogPreviewRef.current,
   getFogHoverPreview: () => fogHoverRef.current,
-  getImage: (id) => imageLoader.get(id),
+  // Phase 81 (revisit) — return null for animated GIFs so the canvas
+  // draws the colored fallback circle. The animated-token-overlay
+  // handles the actual GIF render via a positioned DOM <img>, since
+  // ctx.drawImage of an animated source only ever reads frame 0.
+  getImage: (id) =>
+    imageLoader.isAnimated(id) ? null : imageLoader.get(id),
   getPreferences: () => preferences.get(),
   getDragOverlay: () => dragOverlayRef.current,
   getLassoOverlay: () => lassoOverlayRef.current,
@@ -282,6 +288,25 @@ const renderer = createRenderer({
 
 // Whenever the worker has fresh rects, request a re-paint.
 fogWorkerClient.onUpdate(() => renderer.requestRender());
+
+// Phase 81 (revisit) — animated-token DOM overlay. Each animated
+// token becomes a real `<img>` positioned over the canvas; the
+// browser's native GIF playback handles the animation. The canvas
+// renderer's `getImage` returns null for animated images (handled
+// above), so the colored fallback circle still draws underneath.
+// `update()` re-syncs positions; we wire it to `onFrame` so it
+// fires after every renderer paint without us tracking each
+// trigger (camera change, drag, state mutation) separately.
+const animatedTokenOverlay = mountAnimatedTokenOverlay({
+  canvas,
+  mode: 'gm',
+  getState: () => store.getState(),
+  getCamera: () => renderer.camera,
+  isAnimated: (id) => imageLoader.isAnimated(id),
+  getUrl: (id) => imageLoader.getUrl(id),
+  getDragOverlay: () => dragOverlayRef.current,
+});
+renderer.onFrame(() => animatedTokenOverlay.update());
 
 // Re-request compaction whenever the store changes (the worker dedupes
 // identical-fog requests, so this is cheap when fog hasn't moved).

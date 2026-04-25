@@ -2715,22 +2715,38 @@ body.notes-open .mini-map {
   right: calc(320px + 0.75rem);
 }
 
-/* ───── Phase 81 — animated GIF token host ──────────────────────────
-   Hidden container that holds every loaded animated `<img>` so the
-   browser keeps advancing GIF frames. Off-DOM <img> elements don't
-   animate; this gives them a render tree to live in without painting
-   anything visible. Pointer events disabled so it can't intercept
-   clicks even if the off-screen position fails for some reason. */
+/* ───── Phase 81 — animated GIF token DOM overlay ───────────────────
+   Pinned over the canvas. Each animated token gets a real <img>
+   element here, positioned via CSS transform to match the token's
+   world-to-screen mapping. Browser-native GIF playback handles the
+   animation — `ctx.drawImage(animatedImg)` only ever returns frame
+   0, so we can't render GIFs through the canvas pipeline.
 
-.animated-token-host {
+   The overlay sits ABOVE the canvas (so the <img> can paint) but
+   below modals + status banners. Pointer-events disabled so the
+   imgs don't steal clicks meant for the canvas. */
+
+.animated-token-overlay {
   position: fixed;
-  top: -10000px;
-  left: -10000px;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  opacity: 0;
+  inset: 0;
   pointer-events: none;
+  z-index: 5;
+  overflow: hidden;
+}
+
+.animated-token-img {
+  position: absolute;
+  top: 0;
+  left: 0;
+  /* Canvas tokens are circular — clip the <img> to match. */
+  border-radius: 50%;
+  /* Crop wide / tall portraits to fill the circle, like the canvas. */
+  object-fit: cover;
+  /* CSS transforms drive position/size each frame. translate3d hints
+     the compositor for hardware acceleration (no per-frame layout). */
+  will-change: transform;
+  user-select: none;
+  -webkit-user-drag: none;
 }
 
 /* ───── Phase 79 — weather overlay ─────────────────────────────────
