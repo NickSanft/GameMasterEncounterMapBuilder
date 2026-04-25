@@ -26,6 +26,11 @@ export interface SessionMenuActions {
    * when the caller wires a handler.
    */
   onRemotePlay?: () => void;
+  /**
+   * Phase 82 — open the per-Spectator Permissions manager. Optional;
+   * GM-only (Spectator entries pass nothing).
+   */
+  onPermissions?: () => void;
 }
 
 export function mountSessionMenu(
@@ -175,6 +180,22 @@ export function mountSessionMenu(
     });
   }
 
+  // Phase 82 — "Permissions" opens the per-Spectator permissions
+  // manager. GM-only; Spectator entries don't wire onPermissions.
+  const permissionsBtn = actions.onPermissions
+    ? createButton(
+        'Permissions…',
+        'Restrict what specific Spectators can do (pings, dice rolls)',
+      )
+    : null;
+  if (permissionsBtn && actions.onPermissions) {
+    const handler = actions.onPermissions;
+    permissionsBtn.addEventListener('click', () => {
+      permissionsBtn.blur();
+      handler();
+    });
+  }
+
   menu.appendChild(uploadBtn);
   menu.appendChild(presetBtn);
   menu.appendChild(scenesBtn);
@@ -189,6 +210,7 @@ export function mountSessionMenu(
   menu.appendChild(shortcutsBtn);
   if (replayTourBtn) menu.appendChild(replayTourBtn);
   if (remotePlayBtn) menu.appendChild(remotePlayBtn);
+  if (permissionsBtn) menu.appendChild(permissionsBtn);
   menu.appendChild(settingsBtn);
   menu.appendChild(newBtn);
   menu.appendChild(bgFileInput);

@@ -259,7 +259,27 @@ export type SyncMessage =
    *
    * Optional / back-compat: pre-77 receivers ignore the message.
    */
-  | { type: 'damage-fx'; tokenId: string; amount: number; id: number };
+  | { type: 'damage-fx'; tokenId: string; amount: number; id: number }
+  /**
+   * Phase 82 — GM broadcasts a Spectator's effective permissions to
+   * the (one) Spectator the message targets. Other peers ignore the
+   * message via the `targetId` filter. Sent on:
+   *   - Spectator identity arrival (so they get permissions before
+   *     their first ping / roll).
+   *   - Whenever the GM mutates that Spectator's entry in the
+   *     permissions modal.
+   *
+   * The Spectator stores the value in a local ref + uses it to gate
+   * UI actions. The GM ALSO drops incoming `ping` / `dice-roll`
+   * messages that violate the senderId's permissions, so a Spectator
+   * with a tampered build can't bypass the gate by sending them
+   * anyway.
+   */
+  | {
+      type: 'permissions';
+      targetId: string;
+      permissions: { canRoll: boolean };
+    };
 
 export function serializeState(s: SessionState): SerializedSessionState {
   return {

@@ -256,6 +256,17 @@ const dicePanel = mountDicePanel({
   // Phase 73 — same reduced-motion wiring as the GM side.
   getReducedMotion: () => preferences.get().reducedMotion,
   onLocalRoll: (roll) => {
+    // Phase 82 — when the GM has revoked our canRoll permission, we
+    // still let the local animation play (so the user gets visual
+    // feedback that their click did something) but skip the
+    // broadcast. The GM-side enforcement drops it anyway, so this
+    // is mostly to avoid noise in the wire + the GM's roll history.
+    if (!permissions.canRoll) {
+      announcer.announce(
+        `Roll suppressed — the GM has restricted your dice rolls.`,
+      );
+      return;
+    }
     // Phase 63 — stamp the roll with our display name so the GM's
     // panel + announcer say "Alice rolled 1d20" instead of just
     // "Spectator rolled 1d20". `ownIdentity` is declared later in
@@ -267,12 +278,23 @@ const dicePanel = mountDicePanel({
   },
 });
 
+// Phase 82 — own permissions, pushed by the GM via the `permissions`
+// SyncMessage. Default = full permissions (matches the GM-side
+// store's behavior for never-restricted Spectators); overrides
+// arrive on identity broadcast + on subsequent GM toggles.
+const permissions: { canRoll: boolean } = { canRoll: true };
+
 // Phase 74 — slash-command input (Spectator). Same `/` hotkey as
 // the GM side. `/init` is GM-only (the Spectator can't author
 // initiative entries); the dispatcher returns an inline error.
 const slashInput = mountSlashCommandInput({
   onCommand: (action) => {
     if (action.kind === 'roll') {
+      // Phase 82 — surface the restriction inline rather than letting
+      // the dice-panel quietly suppress the broadcast.
+      if (!permissions.canRoll) {
+        return 'The GM has restricted your dice rolls.';
+      }
       const ok = dicePanel.roll(action.expression);
       return ok ? undefined : `Couldn't parse: ${action.expression}`;
     }
@@ -526,6 +548,14 @@ if (channel) {
       // Phase 77 — replay the GM's damage / heal floating-number
       // animation locally. Self-echo dropped at the envelope layer.
       damageFxManager.add(msg.tokenId, msg.amount);
+    } else if (msg.type === 'permissions') {
+      // Phase 82 — only act on permissions broadcasts targeted at
+      // our own playerId; messages for other Spectators are
+      // ignored. (The GM broadcasts to all peers; the targetId
+      // filter narrows it.)
+      if (msg.targetId === playerId) {
+        permissions.canRoll = msg.permissions.canRoll;
+      }
     }
   });
   channel.send({ type: 'hello', from: 'spectator' });

@@ -2715,6 +2715,102 @@ body.notes-open .mini-map {
   right: calc(320px + 0.75rem);
 }
 
+/* ───── Phase 82 — Spectator permissions modal ──────────────────────
+   GM-only modal listing every connected Spectator with toggle
+   checkboxes for each permission. Default is full permissions; the
+   GM only opens this to RESTRICT specific players. */
+
+.permissions-modal {
+  min-width: 360px;
+  max-width: 520px;
+}
+
+.permissions-modal .permissions-hint {
+  margin: 0 0 0.8rem;
+  color: var(--fg-muted);
+  font-size: 0.82rem;
+  text-transform: none;
+  letter-spacing: 0;
+  line-height: 1.4;
+}
+
+.permissions-modal .permissions-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.permissions-modal .permissions-empty {
+  margin: 0.6rem 0 0;
+  color: var(--fg-muted);
+  font-style: italic;
+  font-size: 0.85rem;
+}
+
+.permissions-row {
+  padding: 0.55rem 0.7rem;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.permissions-row-header {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 0.4rem;
+}
+
+.permissions-row-dot {
+  width: 0.7rem;
+  height: 0.7rem;
+  border-radius: 50%;
+  border: 1px solid rgba(0, 0, 0, 0.25);
+}
+
+.permissions-row-name {
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.permissions-toggles {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin-bottom: 0.3rem;
+}
+
+.permissions-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.85rem;
+  color: var(--fg);
+  cursor: pointer;
+  user-select: none;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.permissions-reset {
+  appearance: none;
+  background: transparent;
+  border: none;
+  color: var(--fg-muted);
+  font-size: 0.75rem;
+  text-decoration: underline dotted;
+  cursor: pointer;
+  padding: 0;
+  text-align: left;
+}
+
+.permissions-reset:hover {
+  color: var(--accent);
+}
+
 /* ───── Phase 81 — animated GIF token DOM overlay ───────────────────
    Pinned over the canvas. Each animated token gets a real <img>
    element here, positioned via CSS transform to match the token's

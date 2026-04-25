@@ -37,10 +37,46 @@ chat history for the full breakdown:
 - **0.79.0** — Weather overlays ✅
 - **0.80.0** — Day / night cycle ✅
 - **0.81.0** — Animated GIF token portraits ✅
-- **0.82.0** — Per-Spectator permissions
+- **0.82.0** — Per-Spectator permissions ✅
 - **0.83.0** — Latency indicator on the status chip
 - **0.84.0** — Conflict-merge UI
 - **0.85.0** — Wall editing revamp (in-place edit of endpoints, blocksSight / blocksMovement, thickness; live drag-out preview while drawing; chain merging so a corridor edits as one shape; per-wall `visibility: 'shared' | 'gm'` for secret features)
+
+---
+
+## [0.82.0] — 2026-04-25 — Per-Spectator permissions
+
+### Added
+- **GM-side "Permissions…" entry** in the session menu opens a small modal listing every currently-connected Spectator with a checkbox per permission. Default = full permissions; the modal exists for the GM to *revoke* a specific player's capability ("this Spectator keeps spamming dice rolls in the shared history; turn that off"). Empty state when no Spectators are connected.
+- **`canRoll` permission** (MVP scope — see "Why so narrow" below). When unchecked for a Spectator:
+  - The GM's incoming-message handler drops `dice-roll` messages from that Spectator's `senderId` (server-side enforcement against tampered builds).
+  - The Spectator's local UI surfaces an inline "The GM has restricted your dice rolls" message via the slash-command input + the dice-panel announcer, instead of silently broadcasting a roll that gets dropped.
+  - A small "Reset to defaults" link appears under each row that diverges from the default, so the GM can restore the original state with one click.
+
+### Why so narrow (canRoll only)
+Considered three flags initially (`canRoll`, `canPing`, `canMeasure`) but two of them weren't actually meaningful today:
+- **canPing**: Spectators don't currently send pings — right-click ping is GM-only. Gating a feature that doesn't exist would be misleading UI.
+- **canMeasure**: the ruler is purely local — no SyncMessage to enforce. A toggle would be theater.
+The MVP ships the one flag that *is* enforced end-to-end. When ping-from-Spectator lands as a separate feature, this phase's wire format extends naturally with another field.
+
+### Architecture
+- **`src/state/spectator-permissions.ts`** — pure helpers + a localStorage-backed store. Defaults are full permissions; only entries that *diverge* from the default are persisted (so the blob stays small + a freshly-rejoined player picks up defaults rather than a stale override). Permissive-on-read defaulting for forward-compat: a future client that adds another permission field won't accidentally lock anyone out when read by an older client.
+- **`src/ui/permissions-modal.ts`** — GM-only modal subscribing to both the `IdentityRegistry` (so the row list updates as Spectators join / leave) and the permissions store (so the "Reset" affordance + checkbox state stay in sync). Calls back into the entry's `onChange` so a toggle change broadcasts the new permissions to the affected Spectator over the existing sync wire.
+- **New SyncMessage variant `permissions`** — `{type, targetId, permissions}`. Broadcast by the GM on (a) Spectator identity arrival (so they get permissions before their first action) and (b) every modal toggle. The Spectator filters by `targetId === ownPlayerId`; messages for other peers are silently ignored.
+- **GM channel handler** drops `dice-roll` messages whose `env.senderId` permissions show `canRoll: false` — the belt-and-suspenders enforcement against a Spectator with a tampered build.
+
+### Persistence
+- Stored under `gm-encounter-maps-spectator-permissions` in localStorage (per-GM-tab).
+- Keyed by `playerId`, which is regenerated per-tab-session — so a Spectator who reloads gets a fresh playerId + the default permissions. The GM has to re-revoke if the Spectator was previously restricted. Acceptable MVP tradeoff; a stable cross-session player id is a separate (much bigger) lift.
+
+### Tests
+- **+13 unit tests** in `src/state/spectator-permissions.test.ts` covering: default fallback for unknown ids, set/get round-trip, no-op same-value writes, reset-removes-and-notifies, reset-on-unknown-id no-op, snapshot returns a copy, persistence round-trip, default-equal writes are NOT persisted, reset clears the persisted entry, malformed-localStorage-blob safety, forward-compat defaulting, listener fire-on-change, unsubscribe-stops-notifications.
+- **+4 Playwright specs** in `e2e/permissions.spec.ts`: GM session menu exposes "Permissions…" entry, Spectator session menu does NOT, modal empty state with no Spectators, full GM ↔ Spectator handshake — toggle canRoll off on the GM side → Spectator's slash `/d20` shows "restricted" inline.
+- **Visual-regression baseline regenerated** for `session-menu-light.png` (the new "Permissions…" button shifted the snapshot). Both Win32 + Linux baselines updated via the Phase 68 `npm run baselines` tooling.
+- **All 828 unit tests + 194 Playwright specs pass.**
+
+### Bundle
+- 73.22 / 74 KB initial-load brotli (+1.5 KB for the store + modal + entry wiring + GM-side enforcement). Lazy chunks unchanged. CSS 9.31 / 10 KB.
 
 ---
 

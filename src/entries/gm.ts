@@ -126,6 +126,8 @@ import { mountWeatherOverlay } from '../ui/weather-overlay.js';
 import { mountWeatherPicker } from '../ui/weather-picker.js';
 import { mountTimeOfDayPicker } from '../ui/time-of-day-picker.js';
 import { mountAnimatedTokenOverlay } from '../ui/animated-token-overlay.js';
+import { mountPermissionsModal } from '../ui/permissions-modal.js';
+import { createSpectatorPermissionsStore } from '../state/spectator-permissions.js';
 import { mountImportOptionsModal } from '../ui/import-options-modal.js';
 import { mergeImportState } from '../state/import-merge.js';
 import { mountMiniMap } from '../ui/mini-map.js';
@@ -742,6 +744,7 @@ mountSessionMenu(document.body, {
   onScenes: () => scenesModal.open(),
   onReplayTour: () => openOnboardingTour(),
   onRemotePlay: () => remotePlayModal?.open(),
+  onPermissions: () => permissionsModal.open(),
   onClearDrawings: () => {
     const state = store.getState();
     if (state.strokes.length === 0) return;
@@ -1385,6 +1388,23 @@ void mountConnectedPlayersPanel({
   selfId: playerId,
 });
 
+// Phase 82 — per-Spectator permissions. The store holds GM-side
+// overrides (default = full permissions for everyone); the modal
+// surfaces them as togglable checkboxes per connected Spectator.
+// `onChange` broadcasts the new permissions to the affected
+// Spectator over the existing sync wire so their UI updates
+// immediately. The GM-side enforcement (drop unauthorized `ping`
+// / `dice-roll` messages) reads `permissionsStore.get(senderId)`
+// in the channel handler.
+const permissionsStore = createSpectatorPermissionsStore();
+const permissionsModal = mountPermissionsModal({
+  registry: identityRegistry,
+  store: permissionsStore,
+  onChange: (targetId, perms) => {
+    channel?.send({ type: 'permissions', targetId, permissions: perms });
+  },
+});
+
 // Re-broadcast identity when the user edits name / color. Phase 67
 // switched the source from `preferences` to `identityPrefs`; the
 // signature-cache guard (`lastBroadcastIdentity`) still ensures
@@ -1487,7 +1507,7 @@ function sendCameraIfBroadcasting() {
 let initialLoadComplete = false;
 
 if (channel) {
-  channel.onMessage((msg) => {
+  channel.onMessage((msg, env) => {
     if (msg.type === 'hello' && msg.from === 'spectator') {
       if (!initialLoadComplete) return;
       channel.send({ type: 'full-state', state: serializeState(store.getState()) });
@@ -1502,6 +1522,9 @@ if (channel) {
     } else if (msg.type === 'request-camera') {
       sendCameraIfBroadcasting();
     } else if (msg.type === 'ping') {
+      // Spectators don't currently emit pings (GM-only mechanic), but
+      // any incoming `ping` message is honored — a future per-
+      // Spectator `canPing` permission would gate it here.
       pingManager.add(msg.x, msg.y, msg.color);
       if (msg.senderName) {
         announcer.announce(`${msg.senderName} pinged the map.`);
@@ -1511,6 +1534,15 @@ if (channel) {
       spectatorViewportRef.lastUpdate = Date.now();
       if (preferences.get().showSpectatorViewport) renderer.requestRender();
     } else if (msg.type === 'dice-roll') {
+      // Phase 82 — drop rolls from Spectators whose canRoll has been
+      // revoked. Same belt-and-suspenders as the ping check above.
+      if (
+        msg.roll.from === 'spectator' &&
+        env &&
+        !permissionsStore.get(env.senderId).canRoll
+      ) {
+        return;
+      }
       dicePanel.pushRemoteRoll(msg.roll);
       if (msg.roll.from !== 'gm') {
         const who = msg.roll.senderName ?? 'Spectator';
@@ -1521,6 +1553,17 @@ if (channel) {
       checkConflictBanner();
     } else if (msg.type === 'identity') {
       identityRegistry.update(msg.identity);
+      // Phase 82 — push the new Spectator their effective permissions
+      // so their UI gates can apply before they try to ping or roll.
+      // GM identities skip — the GM doesn't gate themselves.
+      if (msg.identity.role === 'spectator') {
+        const perms = permissionsStore.get(msg.identity.id);
+        channel?.send({
+          type: 'permissions',
+          targetId: msg.identity.id,
+          permissions: perms,
+        });
+      }
     } else if (msg.type === 'identity-leave') {
       identityRegistry.forget(msg.id);
     } else if (msg.type === 'damage-fx') {
