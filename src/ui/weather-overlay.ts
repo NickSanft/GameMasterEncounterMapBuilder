@@ -63,18 +63,32 @@ interface Snowflake {
   alpha: number;
 }
 
-interface FogWisp {
+/**
+ * 0.79.1 — fog wisps now render as cloud-shaped sprites composed of
+ * 5–7 overlapping soft radial-gradient blobs, instead of single
+ * circles. Each cloud's bumps are pre-baked into an off-screen
+ * canvas at seed time so the per-frame work is just one
+ * `drawImage` per cloud — fast even with the larger silhouettes.
+ *
+ * The bumps are arranged into a "puffy top, flat-ish bottom" cloud
+ * shape with per-cloud randomization, and we generate a few
+ * variants (different bump layouts + slight color jitter) so the
+ * sky doesn't look like a copy-pasted shape.
+ */
+interface FogCloud {
   x: number;
   y: number;
   vx: number;
-  /** Soft radius in px. */
-  r: number;
+  /** Width / height of the cloud sprite in px. */
+  width: number;
+  height: number;
   alpha: number;
+  /** Pre-baked cloud silhouette. */
+  sprite: HTMLCanvasElement;
 }
 
 const RAIN_COLOR = 'rgba(180, 200, 230, 0.55)';
 const SNOW_COLOR = 'rgba(255, 255, 255, 0.85)';
-const FOG_COLOR = 'rgba(220, 222, 230, 0.18)';
 
 const REDUCED_TINT: Record<Exclude<WeatherKind, 'none'>, string> = {
   rain: 'rgba(70, 90, 120, 0.10)',
@@ -95,7 +109,7 @@ export function mountWeatherOverlay(
   let weather: WeatherKind = 'none';
   let raindrops: RainDrop[] = [];
   let snowflakes: Snowflake[] = [];
-  let fogWisps: FogWisp[] = [];
+  let fogClouds: FogCloud[] = [];
   let rafId = 0;
   let lastFrameMs = 0;
 
@@ -116,7 +130,7 @@ export function mountWeatherOverlay(
     const h = window.innerHeight;
     raindrops = [];
     snowflakes = [];
-    fogWisps = [];
+    fogClouds = [];
     if (weather === 'rain') {
       // Density scales with viewport area; cap at ~250 to keep the
       // per-frame draw cheap on small screens but still visible on
@@ -146,18 +160,78 @@ export function mountWeatherOverlay(
         });
       }
     } else if (weather === 'fog') {
-      // A handful of large soft wisps — fewer particles, each huge.
-      const count = Math.min(14, Math.floor((w * h) / 80000) + 4);
+      // A handful of large soft cloud sprites — fewer particles,
+      // each huge + pre-baked at seed time so per-frame is one
+      // drawImage per cloud.
+      const count = Math.min(12, Math.floor((w * h) / 90000) + 3);
       for (let i = 0; i < count; i++) {
-        fogWisps.push({
-          x: Math.random() * w,
+        // Width 280–520 px, height ~55% of width (cloud-typical
+        // wider-than-tall silhouette).
+        const cloudW = 280 + Math.random() * 240;
+        const cloudH = cloudW * (0.5 + Math.random() * 0.15);
+        fogClouds.push({
+          x: Math.random() * w - cloudW / 2,
           y: Math.random() * h,
           vx: 6 + Math.random() * 12,
-          r: 110 + Math.random() * 180,
-          alpha: 0.4 + Math.random() * 0.5,
+          width: cloudW,
+          height: cloudH,
+          alpha: 0.55 + Math.random() * 0.4,
+          sprite: makeCloudSprite(cloudW, cloudH),
         });
       }
     }
+  }
+
+  /**
+   * 0.79.1 — bake a single cloud silhouette into an off-screen
+   * canvas. Layout: one large central body blob + 3–5 puffy top/side
+   * blobs forming a fluffy upper outline, and 1–2 medium bottom
+   * blobs giving the cloud a flatter base. Each blob is a soft
+   * radial gradient so the silhouette dissolves at its edges
+   * (clouds don't have hard outlines). Random per-blob jitter so
+   * no two seeded clouds look identical.
+   */
+  function makeCloudSprite(w: number, h: number): HTMLCanvasElement {
+    const sprite = document.createElement('canvas');
+    sprite.width = Math.ceil(w);
+    sprite.height = Math.ceil(h);
+    const sctx = sprite.getContext('2d');
+    if (!sctx) return sprite;
+    // Layout (relative to width / height): a few "body" blobs at
+    // ~60% Y, then puffy blobs scattered along the upper edge.
+    const blobs: Array<{ cx: number; cy: number; r: number }> = [
+      // Central body — biggest
+      { cx: 0.50, cy: 0.62, r: 0.32 },
+      // Body sides
+      { cx: 0.28, cy: 0.66, r: 0.26 },
+      { cx: 0.72, cy: 0.66, r: 0.26 },
+      // Puffy peaks along the top
+      { cx: 0.40, cy: 0.40, r: 0.22 },
+      { cx: 0.58, cy: 0.36, r: 0.24 },
+      { cx: 0.72, cy: 0.45, r: 0.18 },
+      { cx: 0.30, cy: 0.50, r: 0.18 },
+    ];
+    // Per-cloud jitter so two clouds with the same dimensions don't
+    // look identical.
+    const jx = (Math.random() - 0.5) * 0.06;
+    const jy = (Math.random() - 0.5) * 0.04;
+    for (const b of blobs) {
+      const cx = (b.cx + jx) * w;
+      const cy = (b.cy + jy) * h;
+      const r = b.r * w * (0.92 + Math.random() * 0.16);
+      const grad = sctx.createRadialGradient(cx, cy, 0, cx, cy, r);
+      // Solid-ish core, soft falloff. The outer alpha is 0 so the
+      // edges fade cleanly into the canvas + the layered blobs
+      // composite into a single soft cloud.
+      grad.addColorStop(0, 'rgba(225, 228, 234, 0.62)');
+      grad.addColorStop(0.55, 'rgba(220, 224, 232, 0.34)');
+      grad.addColorStop(1, 'rgba(220, 224, 232, 0)');
+      sctx.fillStyle = grad;
+      sctx.beginPath();
+      sctx.arc(cx, cy, r, 0, Math.PI * 2);
+      sctx.fill();
+    }
+    return sprite;
   }
 
   function step(now: number) {
@@ -214,17 +288,18 @@ export function mountWeatherOverlay(
       }
       ctx.globalAlpha = 1;
     } else if (weather === 'fog') {
-      ctx.fillStyle = FOG_COLOR;
-      for (const wisp of fogWisps) {
-        wisp.x += wisp.vx * dt;
-        if (wisp.x - wisp.r > w) {
-          wisp.x = -wisp.r;
-          wisp.y = Math.random() * h;
+      // 0.79.1 — render each cloud's pre-baked sprite. drawImage of
+      // a small off-screen canvas is dramatically faster than
+      // re-painting all the radial-gradient blobs every frame.
+      for (const cloud of fogClouds) {
+        cloud.x += cloud.vx * dt;
+        // Wrap when the cloud's right edge clears the right side.
+        if (cloud.x > w) {
+          cloud.x = -cloud.width;
+          cloud.y = Math.random() * h;
         }
-        ctx.globalAlpha = wisp.alpha;
-        ctx.beginPath();
-        ctx.arc(wisp.x, wisp.y, wisp.r, 0, Math.PI * 2);
-        ctx.fill();
+        ctx.globalAlpha = cloud.alpha;
+        ctx.drawImage(cloud.sprite, cloud.x, cloud.y);
       }
       ctx.globalAlpha = 1;
     }
@@ -263,7 +338,7 @@ export function mountWeatherOverlay(
       canvas.hidden = true;
       raindrops = [];
       snowflakes = [];
-      fogWisps = [];
+      fogClouds = [];
       return;
     }
     canvas.hidden = false;

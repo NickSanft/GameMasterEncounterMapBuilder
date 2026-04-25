@@ -11,10 +11,26 @@
   --modal-backdrop: rgba(0, 0, 0, 0.55);
   --active-glow: rgba(255, 255, 255, 0.12);
   --panel-shadow: 0 8px 30px rgba(0, 0, 0, 0.45);
+  /* 0.79.1 — opt the page into the dark color scheme so native form
+     controls (in particular the dropdown options of <select>) render
+     with a matching background instead of falling back to OS-native
+     white-on-white. Light themes override this below. */
+  color-scheme: dark;
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 }
 
+/* 0.79.1 — explicit option styling so even browsers that ignore
+   `color-scheme` (or render the popup outside the page's CSS context)
+   still pick up the theme palette. Modern Chromium honors this; some
+   versions of Safari + Firefox use OS chrome regardless, but at minimum
+   these declarations don't make matters worse there. */
+select option {
+  background: var(--bg-elev);
+  color: var(--fg);
+}
+
 body.theme-light {
+  color-scheme: light;
   --bg: #f3f4f7;
   --bg-elev: #ffffff;
   --fg: #1d1f24;
@@ -32,6 +48,7 @@ body.theme-light {
 /* Phase 59 — flavored theme variants. Layout / component sizing is
    unchanged across themes; only the palette swaps via CSS variables. */
 body.theme-parchment {
+  color-scheme: light;
   --bg: #f4ecd8;
   --bg-elev: #fbf6e8;
   --fg: #3a2e1f;

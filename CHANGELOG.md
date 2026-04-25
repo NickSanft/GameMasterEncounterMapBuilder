@@ -44,6 +44,25 @@ chat history for the full breakdown:
 
 ---
 
+## [0.79.1] — 2026-04-25 — Weather overlay polish (dark-theme dropdown + cloud-shaped fog)
+
+### Fixed
+- **Native dropdown items now match the active theme.** Pre-0.79.1 the weather picker's `<select>` chrome rendered with the dark-theme background, but the OS-native dropdown popup that appears on click came up as white-on-white in the dark / console / purple-dusk themes (and similar "wrong-mode" rendering across the other built-in `<select>`s in the app). Fix: declare `color-scheme: dark` on `:root` (with `light` overrides on the `theme-light` and `theme-parchment` blocks) so browsers render their native form-control popups in the page's color scheme. Belt-and-suspenders explicit `select option { background: var(--bg-elev); color: var(--fg); }` for browsers that ignore `color-scheme` on the popup chrome.
+- Affects every `<select>` in the app — weather picker, initiative add-row, settings tabs, etc. — not just the new weather widget.
+
+### Changed
+- **Fog weather looks like clouds, not floating circles.** Pre-0.79.1 each fog "wisp" was a single translucent disc; the result on screen was a few suspicious orbs drifting across the map. Now each cloud is a pre-baked sprite composed of 7 overlapping soft radial-gradient blobs arranged into a "puffy top, flatter bottom" silhouette with per-cloud randomization (jitter on the blob layout + a 92–108% scale on each blob's radius), so no two clouds look identical.
+- The sprite is rendered ONCE per cloud at seed time into an off-screen `<canvas>`, then drawn per frame as a single `drawImage` call — actually faster than the old per-frame `arc + fill` path despite the more elaborate silhouette.
+- Cloud size: 280–520 px wide, ~55% as tall (cloud-typical wider-than-tall aspect). Spawn density unchanged (~12 clouds at 1080p).
+
+### Tests
+- **All 796 unit tests + 187 Playwright specs continue to pass.** No new tests for the fog visual change (asserting cloud silhouettes via Playwright is fragile, and the existing `weather picker toggles the overlay canvas visibility` spec already covers the canvas mount/unmount path).
+
+### Bundle
+- 71.27 / 72 KB initial-load brotli (+0.35 KB for the cloud-sprite baking helper). CSS unchanged. Lazy chunks unchanged.
+
+---
+
 ## [0.79.0] — 2026-04-25 — Atmospheric weather overlays (rain / snow / fog)
 
 ### Added
