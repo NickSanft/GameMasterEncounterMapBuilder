@@ -2715,6 +2715,24 @@ body.notes-open .mini-map {
   right: calc(320px + 0.75rem);
 }
 
+/* ───── Phase 81 — animated GIF token host ──────────────────────────
+   Hidden container that holds every loaded animated `<img>` so the
+   browser keeps advancing GIF frames. Off-DOM <img> elements don't
+   animate; this gives them a render tree to live in without painting
+   anything visible. Pointer events disabled so it can't intercept
+   clicks even if the off-screen position fails for some reason. */
+
+.animated-token-host {
+  position: fixed;
+  top: -10000px;
+  left: -10000px;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
+
 /* ───── Phase 79 — weather overlay ─────────────────────────────────
    Full-screen <canvas> pinned over the main map canvas. Renders
    rain / snow / fog as a screen-space particle system. Pointer

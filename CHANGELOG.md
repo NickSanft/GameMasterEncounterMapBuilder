@@ -36,11 +36,38 @@ chat history for the full breakdown:
 - **0.78.0** — Fog reveal fade-in ✅
 - **0.79.0** — Weather overlays ✅
 - **0.80.0** — Day / night cycle ✅
-- **0.81.0** — Animated GIF token portraits
+- **0.81.0** — Animated GIF token portraits ✅
 - **0.82.0** — Per-Spectator permissions
 - **0.83.0** — Latency indicator on the status chip
 - **0.84.0** — Conflict-merge UI
 - **0.85.0** — Wall editing revamp (in-place edit of endpoints, blocksSight / blocksMovement, thickness; live drag-out preview while drawing; chain merging so a corridor edits as one shape; per-wall `visibility: 'shared' | 'gm'` for secret features)
+
+---
+
+## [0.81.0] — 2026-04-25 — Animated GIF token portraits
+
+### Added
+- **Animated GIF tokens just work.** Upload an `image/gif` file as a token portrait via the Token Editor's existing "Upload" button and the GIF animates on the canvas — no per-token opt-in, no new UI surface, no library dependency. PNG / JPG tokens render unchanged.
+- **Cross-tab.** Token images are stored in IndexedDB + referenced by `Token.imageId`; the GM and Spectator each load their own decoded copy. As long as the GIF blob is in IDB, both views animate it.
+
+### How it works
+- **`src/images/loader.ts`** now reads `image/gif` MIME at load time and flags the cache entry as `isAnimated`. Animated `<img>` elements are appended to a hidden host (`.animated-token-host`, pinned off-screen + opacity 0) so the browser's native GIF playback engine actually advances frames — an off-DOM `<img>` element doesn't animate; it has to live in a render tree somewhere.
+- **A 12 fps redraw ticker** (kicked off when the first animated image loads, shut down when the count returns to zero) calls `renderer.requestRender()` on a `setInterval` so the canvas's existing `ctx.drawImage(img)` per-frame pass picks up the animated `<img>`'s current frame. The token render path itself didn't change — same `drawImage` call as before, same circular clip.
+- **No GIF decoder library.** Bundle-wise this is the cheapest possible implementation — leans entirely on the browser's built-in GIF playback. ~+0.2 KB brotli for the loader plumbing.
+
+### Caveats
+- The 12 fps cap is intentional — running a full canvas redraw at 60 fps just for token animation would be wasteful. GIFs typically run at 10–15 fps anyway, so the cap is invisible to the eye for most actual files.
+- Animated WEBP / APNG fall through unchanged (they'd render as a static frame). The same DOM-host trick would extend to them; we kept the scope to GIF for now since that's by far the most common animated format users have on hand.
+
+### Tests
+- **+7 unit tests** in `src/images/loader.test.ts` (jsdom env): initial state, static-PNG doesn't bump count, GIF DOES bump count + appends to host, invalidate decrements + detaches, invalidate-on-unknown-id is safe, invalidate-mid-load is safe, error result doesn't bump count.
+- **All 815 unit tests + 190 Playwright specs continue to pass.** No e2e for the GIF rendering itself (asserting frame-by-frame canvas content via Playwright is fragile); the loader behavior is the integration boundary worth pinning, and the in-app render surface is straightforward plumbing.
+
+### Bundle
+- 71.75 / 72 KB initial-load brotli (+0.23 KB for the animated tracking). CSS unchanged. Lazy chunks unchanged.
+
+### Internal change worth noting
+- The loader switched from calling `getImageURL` to `getImage` directly (so it can read `mimeType` for animation detection). It now creates its own `URL.createObjectURL` per load, bypassing the per-tab URL cache in `images/store.ts`. Functionally identical — token-editor previews + other consumers still use the cached URLs unchanged — but the loader's URLs aren't revoked on `deleteImage`. Negligible leak (a handful of object URLs per session, freed on tab close); a future cleanup could thread the cached URL through.
 
 ---
 
