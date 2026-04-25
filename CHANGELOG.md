@@ -31,7 +31,7 @@ chat history for the full breakdown:
 - **0.73.0** — 3D dice animation + multi-dice rolling ✅
 - **0.74.0** — `/dice` chat shortcuts ✅
 - **0.75.0** — Recent-scenes quick-switch (Ctrl+1..9) ✅
-- **0.76.0** — Auto-save indicator pill
+- **0.76.0** — Auto-save indicator pill ✅
 - **0.77.0** — Token damage / heal animations
 - **0.78.0** — Fog reveal fade-in
 - **0.79.0** — Weather overlays
@@ -41,6 +41,55 @@ chat history for the full breakdown:
 - **0.83.0** — Latency indicator on the status chip
 - **0.84.0** — Conflict-merge UI
 - **0.85.0** — Wall editing revamp (in-place edit of endpoints, blocksSight / blocksMovement, thickness; live drag-out preview while drawing; chain merging so a corridor edits as one shape; per-wall `visibility: 'shared' | 'gm'` for secret features)
+
+---
+
+## [0.76.0] — 2026-04-24 — Auto-save indicator pill
+
+### Added
+- **Tiny "Saving… / Saved / Save failed" pill** in the top-left strip (just to the right of the scene indicator) that surfaces persist status in real time. States:
+  - **idle** — hidden. The default between saves.
+  - **saving** — visible with a spinning ⟳ + "Saving…". Shown for the duration of the persist promise (typically 10-50 ms on warm IDB).
+  - **saved** — visible with a green ✓ + "Saved". Auto-fades back to idle after ~1.7 s so the chrome doesn't stay cluttered when nothing's happening.
+  - **error** — visible with a red ⚠ + "Save failed". **Sticky** — stays visible until the next 'saving' transition, because the user genuinely needs to see this (their recent edits aren't safe in either IDB or localStorage). Cleared automatically on the next successful save.
+- **Mounted on both GM and Spectator.** Spectator's pill reflects its OWN local-snapshot persistence (used for offline-after-disconnect), not the GM's authoritative state — but the user still benefits from knowing whether the local backup is intact.
+
+### Why this matters
+- Pre-0.76 the persist debounce was `void saveState(...)` — fire-and-forget with a `console.warn` on failure. A user in private-browsing mode (where IDB writes typically fail) had no visible signal that their work wasn't being saved. They'd discover it on a reload when the scene was empty. **The 0.72.2 race fix plugged the data-loss path**, but 0.76's pill plugs the *trust* path: now you can see, in real time, that your edits are durable.
+- The 0.76 spinner is also a discoverable "the app is autosaving" hint — first-time users sometimes ask whether they need to manually save anything; the periodic pill flash answers that without docs.
+
+### Persistence change
+- **`saveState(state)` now returns `Promise<boolean>`** (`true` = at least one of IDB or localStorage accepted the write; `false` = both failed). Existing `void saveState(...)` callers ignore the return value — no behavioral change for them.
+- **`tryWriteLocalStorageBackup(serialized)` now returns `boolean`** internally (not exported). Used by `saveState` to compute the overall result.
+- Both changes are non-breaking on the wire and in storage; they only add information that previously got swallowed.
+
+### New module
+- **`src/ui/save-status-pill.ts`** — `mountSaveStatusPill()` returns `{ setStatus, getStatus, destroy }`. The pill manages its own auto-fade timer; callers just call `setStatus('saving')` / `setStatus('saved')` / `setStatus('error')` and the pill handles the visual lifecycle. Stateless on the wire.
+
+### Wire-up
+- Both `gm.ts` and `spectator.ts` mount the pill and replace the persist debounce body with:
+  ```ts
+  const persist = debounce(async () => {
+    saveStatusPill.setStatus('saving');
+    try {
+      const ok = await saveState(store.getState());
+      saveStatusPill.setStatus(ok ? 'saved' : 'error');
+    } catch (err) {
+      console.warn('[persist] save threw unexpectedly', err);
+      saveStatusPill.setStatus('error');
+    }
+  }, 200);
+  ```
+- The reduced-motion preference is honored — the spinner glyph stops rotating but the pill itself still appears + cycles, so the status is conveyed via color + text rather than animation.
+
+### Tests
+- **+10 unit tests** in `src/ui/save-status-pill.test.ts` (uses jsdom env): initial idle hidden state, each status renders the right text/icon/data-attribute, saved auto-fades to idle after the hold, a fresh saving during the saved-hold preempts the auto-fade, error is sticky (doesn't auto-fade), error → saving clears the error, destroy removes the element, two consecutive saved calls reset the timer.
+- **+2 Playwright specs** in `e2e/save-status-pill.spec.ts`: GM places a token → pill cycles through saved → auto-fades back to hidden; Spectator mounts the pill on boot.
+- **All 772 unit tests + 184 Playwright specs pass.**
+
+### Bundle
+- 68.83 / 70 KB initial-load brotli (+0.4 KB for the pill module + persist wrap). Lazy chunks unchanged.
+- **CSS budget bumped 9 → 10 KB.** The new pill rules (data-status variants + spinner keyframe + responsive media query) push CSS to 8.98 KB; bumping to 10 KB keeps the previous 1 KB of headroom. Total CSS is now 8.98 / 10 KB.
 
 ---
 

@@ -44,16 +44,19 @@ function tryReadLocalStorage(): SerializedSessionState | null {
   }
 }
 
-function tryWriteLocalStorageBackup(serialized: SerializedSessionState): void {
+function tryWriteLocalStorageBackup(serialized: SerializedSessionState): boolean {
   try {
     const json = JSON.stringify(serialized);
     if (json.length > LOCAL_STORAGE_BACKUP_LIMIT) {
       localStorage.removeItem(STORAGE_KEY);
-      return;
+      // Oversized → not persisted to LS; IDB still might succeed.
+      return false;
     }
     localStorage.setItem(STORAGE_KEY, json);
+    return true;
   } catch {
     // Quota/OOM exceptions — safely ignored.
+    return false;
   }
 }
 
@@ -65,15 +68,27 @@ function tryWriteLocalStorageBackup(serialized: SerializedSessionState): void {
  * Call `saveStateSync` from `beforeunload` — it skips the async IDB
  * write (which wouldn't complete before the page dies) and only
  * updates the synchronous localStorage backup.
+ *
+ * Returns `true` when at least one of the durable stores accepted
+ * the write (IDB OR LS — IDB is preferred but LS is a viable backup
+ * for the next boot). Returns `false` when BOTH failed — typically
+ * a private-browsing mode or a hard quota exhaustion. Phase 76's
+ * save-status pill reads this return value to surface "Save failed"
+ * proactively instead of waiting for the user to discover it on
+ * reload.
  */
-export async function saveState(state: SessionState): Promise<void> {
-  tryWriteLocalStorageBackup(serializeState(state));
+export async function saveState(state: SessionState): Promise<boolean> {
+  const serialized = serializeState(state);
+  const lsOk = tryWriteLocalStorageBackup(serialized);
+  let idbOk = false;
   try {
     const sceneId = await ensureActiveScene();
     await saveScene(sceneId, state);
+    idbOk = true;
   } catch (err) {
     console.warn('[persistence] IDB save failed (localStorage backup may be intact)', err);
   }
+  return idbOk || lsOk;
 }
 
 /**

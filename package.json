@@ -1,7 +1,7 @@
 {
   "name": "gm-encounter-maps",
   "private": true,
-  "version": "0.75.0",
+  "version": "0.76.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -42,7 +42,7 @@
     {
       "name": "CSS (all chunks, brotli)",
       "path": "dist/assets/*.css",
-      "limit": "9 KB"
+      "limit": "10 KB"
     },
     {
       "name": "HTML entries (brotli)",

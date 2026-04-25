@@ -119,6 +119,7 @@ import { mountSlashCommandInput } from '../ui/slash-command-input.js';
 import { rollInitiativeForUnlinkedTokens } from '../state/initiative.js';
 import { noteSceneActivated, pickRecent } from '../state/scene-recents.js';
 import { mountStatusBanners } from '../ui/status-banners.js';
+import { mountSaveStatusPill } from '../ui/save-status-pill.js';
 import { mountImportOptionsModal } from '../ui/import-options-modal.js';
 import { mergeImportState } from '../state/import-merge.js';
 import { mountMiniMap } from '../ui/mini-map.js';
@@ -1506,9 +1507,23 @@ const miniMap = mountMiniMap({
 });
 miniMap.setEnabled(preferences.get().showMiniMap);
 
+// Phase 76 — auto-save indicator pill. Top-left, after the scene
+// indicator. Updated as the persist debounce fires.
+const saveStatusPill = mountSaveStatusPill();
+
 // Async IDB save, fire-and-forget from the debounced path.
-const persist = debounce(() => {
-  void saveState(store.getState());
+// Phase 76 — wraps the save in status updates so the pill reflects
+// the persist lifecycle ('saving' → 'saved' or 'error'). Failures
+// don't propagate (callers `void` the promise).
+const persist = debounce(async () => {
+  saveStatusPill.setStatus('saving');
+  try {
+    const ok = await saveState(store.getState());
+    saveStatusPill.setStatus(ok ? 'saved' : 'error');
+  } catch (err) {
+    console.warn('[persist] save threw unexpectedly', err);
+    saveStatusPill.setStatus('error');
+  }
 }, 200);
 
 function updateCanvasLabel() {

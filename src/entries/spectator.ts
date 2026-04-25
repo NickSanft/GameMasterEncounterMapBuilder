@@ -49,6 +49,7 @@ import { isEditableFocus } from '../util/focus.js';
 import { createAnnouncer } from '../util/announcer.js';
 import { registerPwa } from '../util/pwa.js';
 import { mountStatusBanners } from '../ui/status-banners.js';
+import { mountSaveStatusPill } from '../ui/save-status-pill.js';
 import { applyTheme } from '../util/theme.js';
 import { createFogWorkerClient } from '../render/fog-worker-client.js';
 import FogWorker from '../render/fog-worker.js?worker';
@@ -285,8 +286,21 @@ mountZoomControls(document.body, {
   onReset: () => resetCamera(renderer),
 });
 
-const persist = debounce(() => {
-  void saveState(store.getState());
+// Phase 76 — auto-save indicator pill (Spectator side). The Spectator
+// persists its OWN local snapshot (used for offline-after-disconnect),
+// not the GM's authoritative state — but the user still benefits from
+// knowing whether the local backup is intact.
+const saveStatusPill = mountSaveStatusPill();
+
+const persist = debounce(async () => {
+  saveStatusPill.setStatus('saving');
+  try {
+    const ok = await saveState(store.getState());
+    saveStatusPill.setStatus(ok ? 'saved' : 'error');
+  } catch (err) {
+    console.warn('[persist] save threw unexpectedly', err);
+    saveStatusPill.setStatus('error');
+  }
 }, 200);
 
 function updateCanvasLabel() {

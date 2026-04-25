@@ -2698,6 +2698,92 @@ body.notes-open .mini-map {
   right: calc(320px + 0.75rem);
 }
 
+/* ───── Phase 76 — auto-save indicator pill ─────────────────────────
+   Tiny chip pinned to the top-left, just to the right of the scene
+   indicator. Surfaces persist status (saving / saved / error) so
+   the user knows their edits are durable. */
+
+.save-status-pill {
+  position: fixed;
+  top: 0.85rem;
+  /* Right of the scene indicator (which sits at ~5.5rem from the
+     left + grows to its content). Use a wider start offset so we
+     don't crash into long scene names; CSS truncation in the
+     scene-indicator handles overflow on its side. */
+  left: 22rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.25rem 0.6rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--panel-bg);
+  color: var(--fg-muted);
+  font-size: 0.78rem;
+  font-weight: 500;
+  z-index: 50;
+  pointer-events: none;
+  user-select: none;
+  transition: opacity 200ms ease-out, background 150ms ease-out,
+    color 150ms ease-out, border-color 150ms ease-out;
+}
+
+.save-status-pill[hidden] {
+  display: none;
+}
+
+.save-status-pill[data-status='saving'] {
+  background: color-mix(in srgb, var(--accent) 10%, var(--panel-bg));
+  border-color: color-mix(in srgb, var(--accent) 30%, var(--border));
+  color: var(--fg);
+}
+
+.save-status-pill[data-status='saved'] {
+  background: color-mix(in srgb, #4caf50 12%, var(--panel-bg));
+  border-color: color-mix(in srgb, #4caf50 35%, var(--border));
+  color: #4caf50;
+}
+
+.save-status-pill[data-status='error'] {
+  background: color-mix(in srgb, #c0392b 14%, var(--panel-bg));
+  border-color: color-mix(in srgb, #c0392b 40%, var(--border));
+  color: #ffab91;
+  pointer-events: auto; /* let the user mouse-over the warning */
+}
+
+.save-status-icon {
+  display: inline-block;
+  font-size: 0.85rem;
+  line-height: 1;
+}
+
+/* Spinner glyph rotates while in the saving state. Reduced motion
+   skips the rotation. */
+.save-status-pill[data-status='saving'] .save-status-icon {
+  display: inline-block;
+  animation: save-status-spin 1.1s linear infinite;
+}
+
+body.reduced-motion .save-status-pill[data-status='saving'] .save-status-icon {
+  animation: none;
+}
+
+@keyframes save-status-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* On narrower viewports the scene indicator + slash-input crowd the
+   top strip; tuck the pill below the indicator so it doesn't
+   collide. */
+@media (max-width: 720px) {
+  .save-status-pill {
+    top: 3rem;
+    left: 0.85rem;
+  }
+}
+
 /* ───── Phase 74 — slash-command input ──────────────────────────────
    Floating one-liner pinned top-center. Press `/` to open; type a
    command (`/r 1d20+5`, `/d20`, `/init`, `/help`) and Enter to fire.
