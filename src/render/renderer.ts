@@ -18,6 +18,8 @@ import { createBackgroundCache } from './background-cache.js';
 import { drawLasso } from './layer-lasso.js';
 import { drawPings } from './layer-pings.js';
 import { drawDamageFx } from './layer-damage-fx.js';
+import { drawFogFade } from './layer-fog-fade.js';
+import { type FogFadeCell } from './fog-fade-tracker.js';
 import { drawAnnotations } from './layer-annotations.js';
 import { drawMeasurement, type MeasurementOverlay } from './layer-measure.js';
 import { drawAoeTemplates, type AoePreview } from './layer-aoe.js';
@@ -81,6 +83,21 @@ interface CreateRendererOptions {
    * without renderer help.
    */
   getDamageFx?(): readonly import('../state/damage-fx-manager.js').DamageFx[];
+  /**
+   * Phase 78 — cells currently fading from "hidden" to "revealed".
+   * Returned by a `FogFadeTracker` that the entry observes against
+   * the latest `state.fog`. Each entry carries `{x, y, startedAt}`;
+   * the renderer interpolates an overlay alpha from full-dark down
+   * to transparent over `FOG_FADE_MS` (or 0 in reduced-motion mode).
+   */
+  getFogFadeCells?(): readonly FogFadeCell[];
+  /**
+   * Phase 78 — when true, the fog-fade overlay renders for 0ms (no
+   * fade). The base fog layer + any reveal patch still render
+   * normally; only the bloom-in overlay is skipped. Wired from
+   * `preferences.reducedMotion` by the entries.
+   */
+  getReducedMotion?(): boolean;
   getMeasurement?(): MeasurementOverlay | null;
   getAoePreview?(): AoePreview | null;
   getSpectatorViewport?(): ViewportRect | null;
@@ -156,6 +173,8 @@ export function createRenderer(opts: CreateRendererOptions): Renderer {
     getLassoOverlay,
     getPings,
     getDamageFx,
+    getFogFadeCells,
+    getReducedMotion,
     getMeasurement,
     getAoePreview,
     getSpectatorViewport,
@@ -246,6 +265,22 @@ export function createRenderer(opts: CreateRendererOptions): Renderer {
       gmOpacity: gmFogOpacity,
       ...(precomputedFogRects ? { precomputedRects: precomputedFogRects } : {}),
     });
+    // Phase 78 — bloom-in overlay on cells that just transitioned
+    // hidden → revealed. Drawn AFTER drawFog so it sits on top of
+    // the now-transparent base; alpha eases from full-opaque (matches
+    // the surrounding fog) down to 0 over ~480 ms.
+    const fadeCells = getFogFadeCells ? getFogFadeCells() : null;
+    if (fadeCells && fadeCells.length > 0) {
+      const reduced = getReducedMotion?.() ?? false;
+      drawFogFade(ctx, fadeCells, state.grid.cellSize, performance.now(), {
+        // GM tints the fog with the user's chosen color at the user's
+        // opacity; Spectator paints solid black. Match the base layer
+        // so the fade dissolves cleanly into the surrounding fog.
+        color: mode === 'gm' ? gmFogColor : '#000000',
+        baseOpacity: mode === 'gm' ? gmFogOpacity : 1,
+        ...(reduced ? { fadeMs: 0 } : {}),
+      });
+    }
     drawStrokes(ctx, state.strokes, {
       mode,
       preview: getDrawPreview ? getDrawPreview() : null,

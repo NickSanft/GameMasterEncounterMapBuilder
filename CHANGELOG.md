@@ -33,7 +33,7 @@ chat history for the full breakdown:
 - **0.75.0** — Recent-scenes quick-switch (Ctrl+1..9) ✅
 - **0.76.0** — Auto-save indicator pill ✅
 - **0.77.0** — Token damage / heal animations ✅
-- **0.78.0** — Fog reveal fade-in
+- **0.78.0** — Fog reveal fade-in ✅
 - **0.79.0** — Weather overlays
 - **0.80.0** — Day / night cycle
 - **0.81.0** — Animated GIF token portraits
@@ -41,6 +41,33 @@ chat history for the full breakdown:
 - **0.83.0** — Latency indicator on the status chip
 - **0.84.0** — Conflict-merge UI
 - **0.85.0** — Wall editing revamp (in-place edit of endpoints, blocksSight / blocksMovement, thickness; live drag-out preview while drawing; chain merging so a corridor edits as one shape; per-wall `visibility: 'shared' | 'gm'` for secret features)
+
+---
+
+## [0.78.0] — 2026-04-25 — Fog reveal fade-in
+
+### Added
+- **Smooth bloom-in animation** for every fog cell that transitions from hidden (0) to revealed (1). On the GM side the user's chosen fog tint dissolves over ~480 ms with an ease-out cubic curve; on the Spectator side the solid black fog dissolves the same way. Reading the room: a hidden corridor now *appears* instead of cutting in, which is much closer to the dramatic intent of "I uncover the next room."
+- **Cross-tab parity.** When the GM paints a reveal, the patch propagates over the existing sync wire, the Spectator's diff sees the same 0 → 1 transitions, and the players watch the same fade. No new wire format — the animation is purely a local derivation of the existing `state.fog` change stream.
+- **1 → 0 (re-hide) is intentionally NOT animated.** Re-hiding a region is almost always a GM correction or a cleanup gesture; a hard cut reads as the right intent.
+
+### How it works
+- **`src/render/fog-fade-tracker.ts`** — pure module that diffs successive `state.fog` snapshots. `observe(currFog, cols, rows, now)` queues a `{x, y, startedAt}` entry for every cell that flipped 0 → 1; `getActive(now)` returns those still mid-fade (`elapsed < FOG_FADE_MS`). The very first observe just seeds the cached previous buffer without queueing — so the boot-time "load existing scene" doesn't flash every already-revealed cell.
+- **Self-driven rAF ticker.** Same shape as the Phase 39 ping-manager: when fades are queued, the tracker spins a `requestAnimationFrame` loop that calls `onTick()` (wired to `renderer.requestRender()`) until the queue empties. Without this the animation would only update on the next store-subscribe tick — so a single-cell reveal would freeze mid-fade.
+- **`src/render/layer-fog-fade.ts`** — drawn AFTER the base fog layer. For each active cell, paints a darkening rect at `baseOpacity * (1 - easedProgress)` so the overlay "blooms in" cleanly, dissolving from the surrounding fog colour into transparency.
+- **Renderer plumbing** — new `getFogFadeCells?()` + `getReducedMotion?()` callbacks on `CreateRendererOptions`. The reduced-motion override sets the layer's `fadeMs` to 0 so the fade is skipped entirely (the cell still revealed-cuts as it did pre-78).
+- **Entry wiring** — both `gm.ts` and `spectator.ts` mount the tracker and wire it into their existing `store.subscribe` block. A `session-reset` patch (or `null` patch from a `loadState`) calls `tracker.reset()` so the destination scene's already-revealed cells don't all flash in.
+
+### Tests
+- **+10 unit tests** in `src/render/fog-fade-tracker.test.ts` covering: first-observe-seeds-no-queue, 0 → 1 queues, 1 → 0 doesn't queue, multi-cell reveal in one diff, FOG_FADE_MS expiration boundary, earlier fades preserved while queueing new ones, dimensions-change reset, explicit reset(), unchanged buffer no-op, (x,y) computation correctness for non-square grids.
+- **All 790 unit tests + 184 Playwright specs continue to pass.** No e2e for the fade itself (asserting bitmap content over a 480 ms window via Playwright is fragile); the fog-rect render path was already exercised by the existing fog-tool tests.
+
+### Bundle
+- **Initial-load brotli budget bumped 70 → 72 KB.** Phase 78 added ~0.6 KB (tracker + layer + entry wiring); we landed at 69.94 / 70 KB which would have been 60 bytes from the ceiling — too tight to absorb even a small Phase 79 follow-up. Current usage: 69.94 / 72 KB.
+- Lazy chunks 18.37 / 20 KB (unchanged), CSS 8.98 / 10 KB (unchanged).
+
+### Why no e2e
+Asserting that a cell is "currently 60% faded" via Playwright requires either pixel sampling on a transient overlay (race-prone) or instrumenting the renderer to expose its render state. Given the layer is plumbing-thin (the tracker is well-unit-tested, the layer just maps `cells × time → ctx.fillRect calls`), and the existing fog-tool e2e specs continue to pass (so the fog transitions still LAND correctly in `state.fog`), I chose unit tests for the tracker + manual verification of the visual.
 
 ---
 

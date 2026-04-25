@@ -35,6 +35,7 @@ import { mountSlashCommandInput } from '../ui/slash-command-input.js';
 import { mountMiniMap } from '../ui/mini-map.js';
 import { createPingManager } from '../state/ping-manager.js';
 import { createDamageFxManager } from '../state/damage-fx-manager.js';
+import { createFogFadeTracker } from '../render/fog-fade-tracker.js';
 import { createMeasurementOverlayRef } from '../input/context.js';
 import { createMeasureTool, createRulerToolOptionsRef } from '../input/tool-measure.js';
 import { mountRulerSettings } from '../ui/ruler-settings.js';
@@ -102,6 +103,12 @@ void loadPersistedState().then((persisted) => {
 const imageLoader = createImageLoader(() => renderer.requestRender());
 const pingManager = createPingManager(() => renderer.requestRender());
 const damageFxManager = createDamageFxManager(() => renderer.requestRender());
+// Phase 78 — fog-reveal fade-in tracker. Diffs the fog buffer on
+// every state change (including incoming patches from the GM) so
+// reveals that arrive over the wire animate in for the player.
+// The onTick callback drives a requestAnimationFrame loop while
+// fades are in flight so the overlay actually animates.
+const fogFadeTracker = createFogFadeTracker(() => renderer.requestRender());
 const measurementOverlayRef = createMeasurementOverlayRef();
 
 const initialCamera = (preferences.get().persistCamera && loadCamera('spectator')) || { ...DEFAULT_CAMERA };
@@ -117,6 +124,8 @@ const renderer = createRenderer({
   getPreferences: () => preferences.get(),
   getPings: () => pingManager.getActive(),
   getDamageFx: () => damageFxManager.getActive(),
+  getFogFadeCells: () => fogFadeTracker.getActive(performance.now()),
+  getReducedMotion: () => preferences.get().reducedMotion,
   getMeasurement: () => measurementOverlayRef.current,
   getRulerTargetFeet: () => rulerToolOptionsRef.current.targetFeet,
   getFogRects: () => fogWorkerClient.getLatest(),
@@ -341,6 +350,19 @@ store.subscribe((patch) => {
   } else if (patch?.kind === 'background-update' && patch.changes.imageId) {
     imageLoader.invalidate(patch.changes.imageId);
   }
+  // Phase 78 — diff fog buffer for the bloom-in overlay. session-reset
+  // / null-patch (e.g. full-state from the GM at boot) reseeds so the
+  // initial fog snapshot doesn't all flash in.
+  if (patch?.kind === 'session-reset' || patch === null) {
+    fogFadeTracker.reset();
+  }
+  const s = store.getState();
+  fogFadeTracker.observe(
+    s.fog,
+    s.grid.cols,
+    s.grid.rows,
+    performance.now(),
+  );
 });
 
 // Phase 66 — `createSyncChannel` takes the tab's player id so every

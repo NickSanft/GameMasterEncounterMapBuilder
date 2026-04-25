@@ -95,6 +95,7 @@ import { mountTokenLibraryModal } from '../ui/token-library-modal.js';
 import { mountTemplateLibraryModal } from '../ui/template-library-modal.js';
 import { createPingManager } from '../state/ping-manager.js';
 import { createDamageFxManager } from '../state/damage-fx-manager.js';
+import { createFogFadeTracker } from '../render/fog-fade-tracker.js';
 import { mountNotesPanel } from '../ui/notes-panel.js';
 import { mountOnboardingTour } from '../ui/onboarding-tour.js';
 import { createTourController, GM_TOUR_STEPS } from '../state/onboarding-tour.js';
@@ -217,6 +218,14 @@ const panZoomRef: { handle: PanZoomHandle | null } = { handle: null };
 const imageLoader = createImageLoader(() => renderer.requestRender());
 const pingManager = createPingManager(() => renderer.requestRender());
 const damageFxManager = createDamageFxManager(() => renderer.requestRender());
+// Phase 78 — fog-reveal fade-in tracker. Updated on every state
+// change (the store-subscribe block lower in the file diffs
+// state.fog against the previous snapshot + queues fades for
+// 0 → 1 transitions). The renderer's `getFogFadeCells` callback
+// returns the live queue. The onTick callback drives a
+// requestAnimationFrame loop while fades are mid-flight so the
+// overlay actually animates between store-subscribe ticks.
+const fogFadeTracker = createFogFadeTracker(() => renderer.requestRender());
 
 const spectatorViewportRef: { current: ViewportRect | null; lastUpdate: number } = {
   current: null,
@@ -249,6 +258,8 @@ const renderer = createRenderer({
   getLassoOverlay: () => lassoOverlayRef.current,
   getPings: () => pingManager.getActive(),
   getDamageFx: () => damageFxManager.getActive(),
+  getFogFadeCells: () => fogFadeTracker.getActive(performance.now()),
+  getReducedMotion: () => preferences.get().reducedMotion,
   getMeasurement: () => measurementOverlayRef.current,
   getAoePreview: () => aoeOverlayRef.current,
   getSpectatorViewport,
@@ -1578,6 +1589,21 @@ store.subscribe((patch) => {
   // Re-run LoS whenever state changes — the worker client signatures
   // its inputs + skips the round-trip on unchanged walls+viewers.
   refreshLos();
+  // Phase 78 — diff the fog buffer against the previous snapshot so
+  // newly-revealed cells get queued for the bloom-in overlay. Skipped
+  // for non-fog patches via the buffer-equality fast path inside
+  // observe(); a session-reset (null patch) reseeds the baseline so
+  // the destination scene's already-revealed cells don't all flash in.
+  if (patch?.kind === 'session-reset' || patch === null) {
+    fogFadeTracker.reset();
+  }
+  const s = store.getState();
+  fogFadeTracker.observe(
+    s.fog,
+    s.grid.cols,
+    s.grid.rows,
+    performance.now(),
+  );
   if (!channel) return;
   if (patch) {
     channel.send({ type: 'patch', patch: toSerializablePatch(patch) });
