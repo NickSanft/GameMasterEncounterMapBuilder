@@ -17,6 +17,7 @@ import { drawBackground, type ImageProvider } from './layer-background.js';
 import { createBackgroundCache } from './background-cache.js';
 import { drawLasso } from './layer-lasso.js';
 import { drawPings } from './layer-pings.js';
+import { drawDamageFx } from './layer-damage-fx.js';
 import { drawAnnotations } from './layer-annotations.js';
 import { drawMeasurement, type MeasurementOverlay } from './layer-measure.js';
 import { drawAoeTemplates, type AoePreview } from './layer-aoe.js';
@@ -72,6 +73,14 @@ interface CreateRendererOptions {
   getDragOverlay?(): DragOverlay | null;
   getLassoOverlay?(): LassoOverlay | null;
   getPings?(): readonly Ping[];
+  /**
+   * Phase 77 — active damage / heal floating-number effects, queued
+   * by the damage-heal dialog (locally) and the `damage-fx` sync
+   * message (remotely). Renders above tokens, fades + rises over
+   * ~1.4 s. The manager self-prunes via rAF so this list shrinks
+   * without renderer help.
+   */
+  getDamageFx?(): readonly import('../state/damage-fx-manager.js').DamageFx[];
   getMeasurement?(): MeasurementOverlay | null;
   getAoePreview?(): AoePreview | null;
   getSpectatorViewport?(): ViewportRect | null;
@@ -146,6 +155,7 @@ export function createRenderer(opts: CreateRendererOptions): Renderer {
     getDragOverlay,
     getLassoOverlay,
     getPings,
+    getDamageFx,
     getMeasurement,
     getAoePreview,
     getSpectatorViewport,
@@ -291,6 +301,20 @@ export function createRenderer(opts: CreateRendererOptions): Renderer {
     const pings = getPings ? getPings() : null;
     if (pings && pings.length > 0) {
       drawPings(ctx, pings, state.grid.cellSize, performance.now());
+    }
+    // Phase 77 — floating damage / heal numbers above the affected
+    // tokens. Drawn after pings so they sit on top of the ping
+    // burst (which is rare-coincidence, but visually correct when it
+    // happens — the number is the "what" and the ping is the "where").
+    const damageFx = getDamageFx ? getDamageFx() : null;
+    if (damageFx && damageFx.length > 0) {
+      drawDamageFx(
+        ctx,
+        damageFx,
+        state.tokens,
+        state.grid.cellSize,
+        performance.now(),
+      );
     }
     if (mode === 'gm' && getSpectatorViewport) {
       const vp = getSpectatorViewport();

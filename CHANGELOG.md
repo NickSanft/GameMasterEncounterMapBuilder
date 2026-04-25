@@ -32,7 +32,7 @@ chat history for the full breakdown:
 - **0.74.0** — `/dice` chat shortcuts ✅
 - **0.75.0** — Recent-scenes quick-switch (Ctrl+1..9) ✅
 - **0.76.0** — Auto-save indicator pill ✅
-- **0.77.0** — Token damage / heal animations
+- **0.77.0** — Token damage / heal animations ✅
 - **0.78.0** — Fog reveal fade-in
 - **0.79.0** — Weather overlays
 - **0.80.0** — Day / night cycle
@@ -41,6 +41,28 @@ chat history for the full breakdown:
 - **0.83.0** — Latency indicator on the status chip
 - **0.84.0** — Conflict-merge UI
 - **0.85.0** — Wall editing revamp (in-place edit of endpoints, blocksSight / blocksMovement, thickness; live drag-out preview while drawing; chain merging so a corridor edits as one shape; per-wall `visibility: 'shared' | 'gm'` for secret features)
+
+---
+
+## [0.77.0] — 2026-04-25 — Token damage / heal animations
+
+### Added
+- **Floating damage / heal numbers** above tokens. Every Apply on the Damage / Heal dialog spawns a brief animated label (red `−7` for damage, green `+5` for heal) that rises ~30 px while fading over ~1.4 s, then disappears. Multiple effects on the same or different tokens stack independently.
+- **Cross-tab replay.** When the GM applies damage, the Spectator's tab plays the SAME animation with the SAME numbers. Reuses the Phase 66 envelope's self-echo guard to avoid double-rendering on the originating tab.
+
+### How it works
+- **`src/state/damage-fx-manager.ts`** — small queue mirroring the Phase 39 ping-manager pattern. `add(tokenId, amount)` queues an effect; `getActive()` returns the in-flight ones; expired effects (>1.4 s) self-prune via a rAF ticker that shuts down when the queue empties.
+- **`src/render/layer-damage-fx.ts`** — renders one number per active effect. Builds a `tokenId → token` lookup once per frame so the inner loop stays O(n + m). Eased fade (full opacity for the first ~30 % of the lifetime, smooth decay after) and eased rise (decelerates as it floats up) so the motion reads as "settled" rather than linear.
+- **Renderer plumbing** — new `getDamageFx?()` callback on `CreateRendererOptions`, alongside the existing `getPings?()`. Drawn after pings so the number sits on top of any coincident ping burst.
+- **Wire format** — new `damage-fx` `SyncMessage` variant: `{ type: 'damage-fx'; tokenId; amount; id }`. Optional / back-compat — pre-77 receivers ignore it.
+- **`damage-heal-dialog`** — extended `DamageHealDialogOptions` with an `onDamageFx(tokenId, amount)` callback. Fires once per affected token after the Apply batch, with `amount` signed (positive = damage, negative = heal). The host wires this to `damageFxManager.add(...)` for local rendering AND `channel.send({type: 'damage-fx', ...})` for the broadcast.
+
+### Tests
+- **+8 unit tests** in `src/state/damage-fx-manager.test.ts` (jsdom): queue + get-active for damage AND heal, zero / NaN / Infinity guard, falsy tokenId guard, fractional rounding, fresh ids per effect, concurrent independent effects, onTick fires while alive. The rAF-driven expiration is exercised by real e2e behavior rather than a brittle fake-timer test (`performance.now()` doesn't auto-advance under Vitest's fake timers).
+- **All 780 unit tests + 184 Playwright specs continue to pass.** No e2e for the canvas-rendered text (asserting bitmap content via Playwright is fragile); the layer is plumbing-thin and the manager is well-unit-tested.
+
+### Bundle
+- 69.32 / 70 KB initial-load brotli (+0.5 KB for the manager + layer + dialog wiring). Lazy chunks unchanged. CSS unchanged.
 
 ---
 

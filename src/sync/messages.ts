@@ -233,7 +233,20 @@ export type SyncMessage =
    * latency, especially on a clean tab close where no ICE timeout
    * fires).
    */
-  | { type: 'identity-leave'; id: string };
+  | { type: 'identity-leave'; id: string }
+  /**
+   * Phase 77 — broadcast a transient damage / heal effect so remote
+   * peers can replay the floating-number animation locally. Emitted
+   * by the damage-heal dialog after `Apply` (one per affected token).
+   * Receivers queue an effect via their local damage-fx manager.
+   *
+   * `amount`: positive = damage, negative = heal. Mirrors the
+   * `DamageFx.amount` field. `id` is monotonic for de-dup; the
+   * receiver should ignore an `id` it has already seen.
+   *
+   * Optional / back-compat: pre-77 receivers ignore the message.
+   */
+  | { type: 'damage-fx'; tokenId: string; amount: number; id: number };
 
 export function serializeState(s: SessionState): SerializedSessionState {
   return {

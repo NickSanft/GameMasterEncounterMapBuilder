@@ -34,6 +34,7 @@ import { mountDicePanel } from '../ui/dice-panel.js';
 import { mountSlashCommandInput } from '../ui/slash-command-input.js';
 import { mountMiniMap } from '../ui/mini-map.js';
 import { createPingManager } from '../state/ping-manager.js';
+import { createDamageFxManager } from '../state/damage-fx-manager.js';
 import { createMeasurementOverlayRef } from '../input/context.js';
 import { createMeasureTool, createRulerToolOptionsRef } from '../input/tool-measure.js';
 import { mountRulerSettings } from '../ui/ruler-settings.js';
@@ -100,6 +101,7 @@ void loadPersistedState().then((persisted) => {
 
 const imageLoader = createImageLoader(() => renderer.requestRender());
 const pingManager = createPingManager(() => renderer.requestRender());
+const damageFxManager = createDamageFxManager(() => renderer.requestRender());
 const measurementOverlayRef = createMeasurementOverlayRef();
 
 const initialCamera = (preferences.get().persistCamera && loadCamera('spectator')) || { ...DEFAULT_CAMERA };
@@ -114,6 +116,7 @@ const renderer = createRenderer({
   getImage: (id) => imageLoader.get(id),
   getPreferences: () => preferences.get(),
   getPings: () => pingManager.getActive(),
+  getDamageFx: () => damageFxManager.getActive(),
   getMeasurement: () => measurementOverlayRef.current,
   getRulerTargetFeet: () => rulerToolOptionsRef.current.targetFeet,
   getFogRects: () => fogWorkerClient.getLatest(),
@@ -468,6 +471,10 @@ if (channel) {
       identityRegistry.update(msg.identity);
     } else if (msg.type === 'identity-leave') {
       identityRegistry.forget(msg.id);
+    } else if (msg.type === 'damage-fx') {
+      // Phase 77 — replay the GM's damage / heal floating-number
+      // animation locally. Self-echo dropped at the envelope layer.
+      damageFxManager.add(msg.tokenId, msg.amount);
     }
   });
   channel.send({ type: 'hello', from: 'spectator' });

@@ -33,6 +33,15 @@ export interface DamageHealDialogOptions {
    * it to an aria-live announcer.
    */
   onAnnounce?(summary: string): void;
+  /**
+   * Phase 77 — fired once per affected token after a successful Apply.
+   * `amount` is signed: positive for damage, negative for heal. The
+   * host wires this to:
+   *   - the local damage-fx manager (to render the floating number
+   *     on this tab's canvas), and
+   *   - the sync channel (so remote peers also render it).
+   */
+  onDamageFx?(tokenId: string, amount: number): void;
 }
 
 /**
@@ -309,6 +318,16 @@ export function mountDamageHealDialog(
           id: t.id,
           changes,
         });
+        // Phase 77 — fire a damage/heal floating-number effect for
+        // every token whose HP actually changed. The effect is
+        // signed: positive = damage, negative = heal. The host wires
+        // this to the local damage-fx manager + the sync channel.
+        const delta = nextHp.current - t.hp.current;
+        if (delta !== 0) {
+          // delta is negative for damage, positive for heal — flip
+          // so the wire convention (positive = damage) holds.
+          opts.onDamageFx?.(t.id, -delta);
+        }
       }
     });
     opts.onAfterChange?.();

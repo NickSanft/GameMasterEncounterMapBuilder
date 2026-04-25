@@ -94,6 +94,7 @@ import {
 import { mountTokenLibraryModal } from '../ui/token-library-modal.js';
 import { mountTemplateLibraryModal } from '../ui/template-library-modal.js';
 import { createPingManager } from '../state/ping-manager.js';
+import { createDamageFxManager } from '../state/damage-fx-manager.js';
 import { mountNotesPanel } from '../ui/notes-panel.js';
 import { mountOnboardingTour } from '../ui/onboarding-tour.js';
 import { createTourController, GM_TOUR_STEPS } from '../state/onboarding-tour.js';
@@ -215,6 +216,7 @@ const panZoomRef: { handle: PanZoomHandle | null } = { handle: null };
 
 const imageLoader = createImageLoader(() => renderer.requestRender());
 const pingManager = createPingManager(() => renderer.requestRender());
+const damageFxManager = createDamageFxManager(() => renderer.requestRender());
 
 const spectatorViewportRef: { current: ViewportRect | null; lastUpdate: number } = {
   current: null,
@@ -246,6 +248,7 @@ const renderer = createRenderer({
   getDragOverlay: () => dragOverlayRef.current,
   getLassoOverlay: () => lassoOverlayRef.current,
   getPings: () => pingManager.getActive(),
+  getDamageFx: () => damageFxManager.getActive(),
   getMeasurement: () => measurementOverlayRef.current,
   getAoePreview: () => aoeOverlayRef.current,
   getSpectatorViewport,
@@ -724,6 +727,19 @@ const annotationEditor = mountAnnotationEditor({ store });
 const damageHealDialog = mountDamageHealDialog({
   store,
   onAnnounce: (msg) => announcer.announce(msg),
+  // Phase 77 — emit one damage-fx event per affected token. We
+  // queue it locally (so the GM sees the floating number on their
+  // own canvas) AND broadcast it so the Spectator's tab plays the
+  // same animation. Monotonic id from `Date.now()` for de-dup.
+  onDamageFx: (tokenId, amount) => {
+    damageFxManager.add(tokenId, amount);
+    channel?.send({
+      type: 'damage-fx',
+      tokenId,
+      amount,
+      id: Date.now() + Math.floor(Math.random() * 1000),
+    });
+  },
 });
 
 const notesPanel = mountNotesPanel({ preferences });
@@ -1468,6 +1484,13 @@ if (channel) {
       identityRegistry.update(msg.identity);
     } else if (msg.type === 'identity-leave') {
       identityRegistry.forget(msg.id);
+    } else if (msg.type === 'damage-fx') {
+      // Phase 77 — replay the floating-number animation locally
+      // when the GM applies damage in the OTHER tab role (the
+      // Spectator). Phase 66's envelope handler already drops
+      // self-echoes via senderId, so we don't need a second dedup
+      // layer here.
+      damageFxManager.add(msg.tokenId, msg.amount);
     }
   });
 }
