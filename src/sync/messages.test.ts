@@ -113,6 +113,29 @@ describe('serializeState / deserializeState', () => {
     expect(restored.tokens[0]!.initiativeMod).toBe(0);
   });
 
+  it("defaults timeOfDay to 'none' for legacy saves (Phase 79 and earlier)", () => {
+    const legacy = serializeState(createDefaultState());
+    delete (legacy as { timeOfDay?: string }).timeOfDay;
+    const restored = deserializeState(legacy);
+    expect(restored.timeOfDay).toBe('none');
+  });
+
+  it('preserves timeOfDay across a serialize / deserialize round-trip', () => {
+    const state = createDefaultState();
+    state.timeOfDay = 'night';
+    const restored = deserializeState(serializeState(state));
+    expect(restored.timeOfDay).toBe('night');
+  });
+
+  it("collapses unknown timeOfDay values to 'none'", () => {
+    const malformed = {
+      ...serializeState(createDefaultState()),
+      timeOfDay: 'eclipse',
+    } as unknown as SerializedSessionState;
+    const restored = deserializeState(malformed);
+    expect(restored.timeOfDay).toBe('none');
+  });
+
   it("defaults weather to 'none' for legacy saves (Phase 78 and earlier)", () => {
     const legacy = {
       ...serializeState(createDefaultState()),

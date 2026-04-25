@@ -2734,7 +2734,8 @@ body.notes-open .mini-map {
 }
 
 /* Weather picker — small inline <select> in the session menu. */
-.weather-picker {
+.weather-picker,
+.time-picker {
   position: fixed;
   top: 0.85rem;
   /* Right of the save-status pill (which sits at ~22rem on wide
@@ -2761,12 +2762,14 @@ body.notes-open .mini-map {
   }
 }
 
-.weather-picker label {
+.weather-picker label,
+.time-picker label {
   color: var(--fg-muted);
   font-weight: 500;
 }
 
-.weather-picker select {
+.weather-picker select,
+.time-picker select {
   appearance: none;
   -webkit-appearance: none;
   background: transparent;
@@ -2779,8 +2782,23 @@ body.notes-open .mini-map {
   outline: none;
 }
 
-.weather-picker:focus-within {
+.weather-picker:focus-within,
+.time-picker:focus-within {
   border-color: var(--accent);
+}
+
+/* 0.80.0 — time picker sits to the right of the weather picker.
+   Width measurement matches the weather picker plus a small gap. */
+.time-picker {
+  left: 38rem;
+}
+
+@media (max-width: 880px) {
+  .time-picker {
+    /* On narrow viewports both pickers stack below the indicator. */
+    top: 5.6rem;
+    left: 0.85rem;
+  }
 }
 
 /* ───── Phase 76 — auto-save indicator pill ─────────────────────────

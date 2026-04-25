@@ -257,6 +257,20 @@ export interface InitiativeState {
  */
 export type WeatherKind = 'none' | 'rain' | 'snow' | 'fog';
 
+/**
+ * Phase 80 — time-of-day tint applied to the scene as a final
+ * compositing pass over the canvas (after grid + tokens + fog +
+ * etc.). Per-scene state, GM-set, spectator-mirrored over the
+ * existing patch wire — same scoping as Phase 79 weather.
+ *
+ * `'none'` skips the tint entirely (default — preserves the
+ * pre-Phase-80 look). `'day'` is a near-imperceptible warm
+ * highlight; `'dawn'` and `'dusk'` are warmer / more pink+orange;
+ * `'night'` is a deep cool blue. The GM and Phase 43's user-level
+ * "scene light" preference compose: both render, in that order.
+ */
+export type TimeOfDay = 'none' | 'dawn' | 'day' | 'dusk' | 'night';
+
 export interface SessionState {
   version: 1;
   grid: GridConfig;
@@ -273,6 +287,12 @@ export interface SessionState {
    * `'none'`. `deserializeState` defaults missing values for back-compat.
    */
   weather: WeatherKind;
+  /**
+   * Phase 80 — time-of-day tint for the current scene. Default
+   * `'none'`. `deserializeState` defaults missing values + collapses
+   * unknown kinds to `'none'` for back-compat.
+   */
+  timeOfDay: TimeOfDay;
 }
 
 export interface Camera {
@@ -313,6 +333,7 @@ export type StatePatch =
   | { kind: 'wall-remove'; id: ID }
   | { kind: 'walls-clear' }
   | { kind: 'weather-set'; weather: WeatherKind }
+  | { kind: 'time-set'; timeOfDay: TimeOfDay }
   | { kind: 'session-reset'; state: SessionState };
 
 export const DEFAULT_GRID: GridConfig = {
@@ -350,5 +371,6 @@ export function createDefaultState(): SessionState {
     strokes: [],
     walls: [],
     weather: 'none',
+    timeOfDay: 'none',
   };
 }

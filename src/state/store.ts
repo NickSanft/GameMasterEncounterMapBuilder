@@ -50,6 +50,7 @@ function snapshot(s: SessionState): SessionState {
     })),
     walls: s.walls.map((w) => ({ ...w })),
     weather: s.weather,
+    timeOfDay: s.timeOfDay,
   };
 }
 
@@ -335,6 +336,11 @@ export function createStore(initial?: SessionState): Store {
         // user clicks the active option in the dropdown).
         if (state.weather === patch.weather) return;
         state = { ...state, weather: patch.weather };
+        break;
+      case 'time-set':
+        // Phase 80 — same same-value no-op fast path.
+        if (state.timeOfDay === patch.timeOfDay) return;
+        state = { ...state, timeOfDay: patch.timeOfDay };
         break;
       case 'session-reset':
         state = patch.state;

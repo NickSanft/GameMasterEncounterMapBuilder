@@ -417,6 +417,32 @@ describe('applyPatch — Phase 70 round-based condition expiry', () => {
   });
 });
 
+describe('Phase 80 — time-set patch', () => {
+  it('time-set updates state.timeOfDay', () => {
+    const store = createStore();
+    expect(store.getState().timeOfDay).toBe('none');
+    store.applyPatch({ kind: 'time-set', timeOfDay: 'night' });
+    expect(store.getState().timeOfDay).toBe('night');
+  });
+
+  it('time-set with the same value is a no-op (no listener fire)', () => {
+    const store = createStore();
+    store.applyPatch({ kind: 'time-set', timeOfDay: 'dusk' });
+    const listener = vi.fn();
+    store.subscribe(listener);
+    store.applyPatch({ kind: 'time-set', timeOfDay: 'dusk' });
+    expect(listener).not.toHaveBeenCalled();
+  });
+
+  it('time-set notifies the subscriber on actual change', () => {
+    const store = createStore();
+    const listener = vi.fn();
+    store.subscribe(listener);
+    store.applyPatch({ kind: 'time-set', timeOfDay: 'dawn' });
+    expect(listener).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('Phase 79 — weather-set patch', () => {
   it('weather-set updates state.weather', () => {
     const store = createStore();

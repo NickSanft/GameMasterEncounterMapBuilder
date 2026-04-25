@@ -35,12 +35,53 @@ chat history for the full breakdown:
 - **0.77.0** — Token damage / heal animations ✅
 - **0.78.0** — Fog reveal fade-in ✅
 - **0.79.0** — Weather overlays ✅
-- **0.80.0** — Day / night cycle
+- **0.80.0** — Day / night cycle ✅
 - **0.81.0** — Animated GIF token portraits
 - **0.82.0** — Per-Spectator permissions
 - **0.83.0** — Latency indicator on the status chip
 - **0.84.0** — Conflict-merge UI
 - **0.85.0** — Wall editing revamp (in-place edit of endpoints, blocksSight / blocksMovement, thickness; live drag-out preview while drawing; chain merging so a corridor edits as one shape; per-wall `visibility: 'shared' | 'gm'` for secret features)
+
+---
+
+## [0.80.0] — 2026-04-25 — Day / night cycle (per-scene time-of-day tint)
+
+### Added
+- **Per-scene time-of-day tint** rendered as a final compositing pass over the canvas. GM picks one of `none / dawn / day / dusk / night` from a small inline `<select>` pinned next to the weather picker; the choice persists with the scene + propagates to any connected Spectator over the existing patch wire.
+- Tint palette:
+  - **dawn** — warm orange-pink (`#ff9966`) at 18% opacity (subtle "first light" glow).
+  - **day** — labeled but renders as a no-op (a noticeable midday tint on an already-light map just washes it out; the option exists so the GM can mark "yes this is daytime" for clarity).
+  - **dusk** — deep orange-red (`#d35400`) at 22% opacity (the long shadows of late afternoon).
+  - **night** — deep cool blue (`#0e1a3a`) at 42% opacity (heaviest tint — moonlight + shadow contrast).
+- **Composes with Phase 43's user-pref `sceneLightColor / sceneLightOpacity`.** Both render in order: user-pref tint first, then the scene's time-of-day tint on top. So a player who set "I prefer a 10% purple cast on every scene" still gets that PLUS whatever time the GM set.
+- **PNG snapshot exports include the tint** — so handouts / VTT-shared images match what's on screen.
+
+### State change
+- **`SessionState.timeOfDay: TimeOfDay`** — new required field, `'none' | 'dawn' | 'day' | 'dusk' | 'night'`. Default `'none'`. `deserializeState` defaults missing values + collapses unknown kinds to `'none'` for back-compat.
+- **`{ kind: 'time-set'; timeOfDay: TimeOfDay }`** — new patch variant. Reducer no-ops on same-value selection (matches the Phase 79 weather pattern).
+- **Import-merge** carries `timeOfDay` under the `background` opt-in (same scoping as `weather` — both are scene-mood that travels with the layout).
+
+### New modules
+- **`src/state/time-of-day.ts`** — pure palette + helpers. `tintFor(time)` returns `{color, opacity}` or `null` for the no-op kinds; `TIME_LABELS` maps each kind to a display string for the picker.
+- **`src/ui/time-of-day-picker.ts`** — small inline `<select>` widget. Same shape as `mountWeatherPicker`; calls `opts.onChange(time)` on user select; exposes `setTime` for external state changes (so a sync from another tab updates the dropdown).
+
+### Renderer + snapshot
+- **`renderer.ts`** — adds a second `drawSceneTint` pass after the existing user-pref one. The tint is read from `state.timeOfDay` via `tintFor`; `null` returns skip the pass.
+- **`snapshot.ts`** — same composition for PNG export.
+- Both passes use the existing `drawSceneTint` helper unchanged — Phase 80 is purely a new caller.
+
+### Tests
+- **+6 unit tests** in `src/state/time-of-day.test.ts`: `tintFor` returns null for none/day, returns valid `{color, opacity}` for dawn/dusk/night, night is the heaviest opacity, full coverage of `TIME_TINTS` + `TIME_LABELS`.
+- **+3 reducer tests** in `src/state/store.test.ts`: `time-set` updates state, same-value no-op skips notify, actual change does notify.
+- **+3 deserializer tests** in `src/sync/messages.test.ts`: missing field defaults to `'none'`, round-trip preservation, unknown kinds collapse.
+- **+3 Playwright specs** in `e2e/time-of-day.spec.ts`: GM picker mounts with all canonical options, switching value persists, Spectator does NOT mount the picker.
+- **All 808 unit tests + 190 Playwright specs pass.**
+
+### Bundle
+- 71.52 / 72 KB initial-load brotli (+0.25 KB for the palette + picker + reducer + entries wiring). Lazy chunks unchanged. CSS unchanged (the new `.time-picker` rules share the existing `.weather-picker` selector via grouping).
+
+### Why a discrete dropdown (not a 0–24 hour slider)
+A continuous slider would be more flexible — any specific hour and a smoothly-interpolated palette — but it adds picker UI complexity and asks GMs to make a fiddly decision. The 4 named-time presets cover the actual narrative beats most GMs reach for ("dawn arrives" / "night falls"). A future `0.80.1` could layer a "Custom…" option that opens an HSL + opacity picker for one-off scenes that need a specific shade.
 
 ---
 

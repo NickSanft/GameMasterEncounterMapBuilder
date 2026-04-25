@@ -124,6 +124,7 @@ import { mountStatusBanners } from '../ui/status-banners.js';
 import { mountSaveStatusPill } from '../ui/save-status-pill.js';
 import { mountWeatherOverlay } from '../ui/weather-overlay.js';
 import { mountWeatherPicker } from '../ui/weather-picker.js';
+import { mountTimeOfDayPicker } from '../ui/time-of-day-picker.js';
 import { mountImportOptionsModal } from '../ui/import-options-modal.js';
 import { mergeImportState } from '../state/import-merge.js';
 import { mountMiniMap } from '../ui/mini-map.js';
@@ -1560,6 +1561,16 @@ const weatherPicker = mountWeatherPicker({
   },
 });
 
+// Phase 80 — time-of-day picker. Same shape as the weather picker;
+// dispatches a `time-set` patch on change. Tint is rendered by the
+// renderer's `drawSceneTint` pass (see renderer.ts), AFTER the
+// existing user-pref scene-light tint so they compose.
+const timeOfDayPicker = mountTimeOfDayPicker({
+  onChange: (time) => {
+    store.applyPatch({ kind: 'time-set', timeOfDay: time });
+  },
+});
+
 // Async IDB save, fire-and-forget from the debounced path.
 // Phase 76 — wraps the save in status updates so the pill reflects
 // the persist lifecycle ('saving' → 'saved' or 'error'). Failures
@@ -1625,6 +1636,10 @@ store.subscribe((patch) => {
   // and the explicit weather-set patch in one shared block.
   weatherOverlay.setWeather(s.weather);
   weatherPicker.setWeather(s.weather);
+  // Phase 80 — same idempotent sync for the time-of-day picker.
+  // The renderer reads `state.timeOfDay` directly during draw, so
+  // there's no separate "overlay" to update — just the picker UI.
+  timeOfDayPicker.setTime(s.timeOfDay);
   if (!channel) return;
   if (patch) {
     channel.send({ type: 'patch', patch: toSerializablePatch(patch) });

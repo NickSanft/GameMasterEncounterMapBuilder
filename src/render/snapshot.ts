@@ -9,6 +9,7 @@ import { drawAnnotations } from './layer-annotations.js';
 import { drawAoeTemplates } from './layer-aoe.js';
 import { drawStrokes } from './layer-strokes.js';
 import { drawGridLabels, drawSceneTint } from './layer-grid-labels.js';
+import { tintFor as tintForTimeOfDay } from '../state/time-of-day.js';
 
 /**
  * Canvas background for snapshot exports — must match the renderer's
@@ -182,6 +183,21 @@ export async function renderSnapshot(
       pixelHeight,
       prefs.sceneLightColor,
       prefs.sceneLightOpacity,
+      camera.zoom,
+      camera.x,
+      camera.y,
+    );
+  }
+  // Phase 80 — time-of-day tint, painted after the user-pref scene
+  // light so PNG exports match the live render.
+  const tod = tintForTimeOfDay(state.timeOfDay);
+  if (tod) {
+    drawSceneTint(
+      ctx,
+      pixelWidth,
+      pixelHeight,
+      tod.color,
+      tod.opacity,
       camera.zoom,
       camera.x,
       camera.y,

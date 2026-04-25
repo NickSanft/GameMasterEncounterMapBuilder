@@ -93,6 +93,9 @@ export function mergeImportState(
     // who imports "Stormy harbor map" gets the rain too). When the
     // user UNCHECKED background, they keep their current weather.
     weather: selection.background ? imported.weather : base.weather,
+    // Phase 80 — time-of-day pairs with weather as scene-mood, so it
+    // travels under the same `background` opt-in.
+    timeOfDay: selection.background ? imported.timeOfDay : base.timeOfDay,
   };
 }
 

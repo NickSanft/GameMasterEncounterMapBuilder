@@ -32,6 +32,7 @@ import { drawWalls } from './layer-walls.js';
 import { drawLosPolygons } from './layer-los.js';
 import { drawLighting } from './layer-lighting.js';
 import { drawGridLabels, drawSceneTint } from './layer-grid-labels.js';
+import { tintFor as tintForTimeOfDay } from '../state/time-of-day.js';
 import { gridDistance, formatDistance } from '../state/distance.js';
 import type { DrawStroke } from '../state/types.js';
 import type { Preferences } from '../state/preferences.js';
@@ -373,6 +374,23 @@ export function createRenderer(opts: CreateRendererOptions): Renderer {
         cssHeight,
         prefs.sceneLightColor,
         prefs.sceneLightOpacity,
+        camera.zoom,
+        camera.x,
+        camera.y,
+      );
+    }
+    // Phase 80 — time-of-day tint, painted AFTER the user-pref scene
+    // light so they compose ("scene set to night" + "user prefers a
+    // slight purple cast" both apply). `tintFor` returns null for
+    // 'none' / 'day' which skips the pass entirely.
+    const tod = tintForTimeOfDay(state.timeOfDay);
+    if (tod) {
+      drawSceneTint(
+        ctx,
+        cssWidth,
+        cssHeight,
+        tod.color,
+        tod.opacity,
         camera.zoom,
         camera.x,
         camera.y,

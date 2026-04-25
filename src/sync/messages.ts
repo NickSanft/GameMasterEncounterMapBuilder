@@ -11,6 +11,7 @@ import type {
   Token,
   TokenHp,
   TokenLight,
+  TimeOfDay,
   Wall,
   WeatherKind,
 } from '../state/types.js';
@@ -107,6 +108,11 @@ export interface SerializedSessionState {
    * by `deserializeState`.
    */
   weather?: WeatherKind;
+  /**
+   * Phase 80 — time-of-day tint for the scene. Optional + back-compat
+   * the same way as `weather`.
+   */
+  timeOfDay?: TimeOfDay;
 }
 
 export type SerializablePatch =
@@ -275,6 +281,7 @@ export function serializeState(s: SessionState): SerializedSessionState {
     })),
     walls: s.walls.map((w) => ({ ...w })),
     weather: s.weather,
+    timeOfDay: s.timeOfDay,
   };
 }
 
@@ -405,6 +412,15 @@ export function deserializeState(s: SerializedSessionState): SessionState {
       s.weather === 'fog' ||
       s.weather === 'none'
         ? s.weather
+        : 'none',
+    // Phase 80 — same defaulting + clamping as `weather`.
+    timeOfDay:
+      s.timeOfDay === 'dawn' ||
+      s.timeOfDay === 'day' ||
+      s.timeOfDay === 'dusk' ||
+      s.timeOfDay === 'night' ||
+      s.timeOfDay === 'none'
+        ? s.timeOfDay
         : 'none',
   };
 }
