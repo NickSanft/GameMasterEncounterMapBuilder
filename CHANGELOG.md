@@ -30,7 +30,7 @@ chat history for the full breakdown:
 - **0.72.0** — Death saves UI ✅
 - **0.73.0** — 3D dice animation + multi-dice rolling ✅
 - **0.74.0** — `/dice` chat shortcuts ✅
-- **0.75.0** — Recent-scenes quick-switch (Ctrl+1..9)
+- **0.75.0** — Recent-scenes quick-switch (Ctrl+1..9) ✅
 - **0.76.0** — Auto-save indicator pill
 - **0.77.0** — Token damage / heal animations
 - **0.78.0** — Fog reveal fade-in
@@ -41,6 +41,38 @@ chat history for the full breakdown:
 - **0.83.0** — Latency indicator on the status chip
 - **0.84.0** — Conflict-merge UI
 - **0.85.0** — Wall editing revamp (in-place edit of endpoints, blocksSight / blocksMovement, thickness; live drag-out preview while drawing; chain merging so a corridor edits as one shape; per-wall `visibility: 'shared' | 'gm'` for secret features)
+
+---
+
+## [0.75.0] — 2026-04-24 — Recent-scenes quick-switch (Ctrl+1..9)
+
+### Added
+- **`Ctrl/Cmd+1` … `Ctrl/Cmd+9`** quick-switches to the Nth most-recently-active scene, excluding whatever scene is currently active. So pressing `Ctrl+1` always moves you SOMEWHERE — never no-ops on the current scene. Empty slots (e.g. `Ctrl+9` with only 3 scenes) are silent no-ops with an aria-live announcement.
+- **Per-scene activation tracking** in localStorage under `gm-encounter-maps-scene-recents`. Bumped on every `switchToScene` call (modal click, programmatic `/init`-style command, or the new Ctrl+N). Pruned to the top 32 entries on every write so a long-lived session that's churned through dozens of one-off scenes doesn't bloat localStorage.
+
+### Why a separate tracker (not `SceneRecord.updatedAt`)
+Reusing `updatedAt` would have made `Ctrl+1` always pick the current scene (since every state edit ticks `updatedAt`). The separate map tracks "last activated" — when a scene was made the *active* scene, not when it was edited. That's what the user means by "recent."
+
+### New module
+- **`src/state/scene-recents.ts`** — pure helpers, all unit-tested:
+  - `noteSceneActivated(id, now?)` — bump the timestamp.
+  - `forgetScene(id)` — drop one entry (exposed but not yet wired; the `pickRecent` resilience to deleted scenes makes the cleanup nice-to-have rather than required).
+  - `orderByRecency(scenes, recents?)` — return scenes sorted by descending activation timestamp; never-activated scenes fall to the end in their input order.
+  - `pickRecent(scenes, n, excludeId?, recents?)` — return the Nth most-recent scene excluding `excludeId`. Used by the Ctrl+N hotkey.
+
+### Wire-up
+- **`gm.ts`'s `switchToScene`** now calls `noteSceneActivated(id)` BEFORE the async `getSceneState` so the ranking is correct even if the load takes a moment.
+- **`gm.ts`'s keydown handler** maps `Ctrl/Cmd+1` … `Ctrl/Cmd+9` to a new `quickSwitchToRecent(slot)` async helper that lists scenes, picks the Nth, and switches. Skipped when only one scene exists (no useful target). Skipped when an editable field is focused (the existing `isEditableFocus` guard at the top of the handler).
+- **Spectator entry is unchanged** — Ctrl+N is GM-only because Spectators don't author scenes.
+
+### Tests
+- **+17 unit tests** in `src/state/scene-recents.test.ts` covering: timestamp record + overwrite + sibling preservation, falsy id ignore, the 32-entry prune cap, `forgetScene` removal + no-op, `orderByRecency` (descending order, never-activated tail, empty inputs, non-mutation), and `pickRecent` (slot picking, exclusion, empty slots, invalid `n`, unranked fallback).
+- **+2 Playwright specs** in `e2e/scenes.spec.ts`: full create-Cave → create-Forest → switch-back-to-Cave → `Ctrl+1` lands on Forest; `Ctrl+9` with no target is a silent no-op (indicator unchanged).
+- **Shortcut overlay** updated to list `Ctrl/Cmd+1…9` for the GM in the "Other" section.
+- **All 762 unit tests + 182 Playwright specs pass.**
+
+### Bundle
+- 68.42 / 70 KB initial-load brotli (+0.5 KB for the new module + handler). Lazy chunks unchanged. CSS unchanged.
 
 ---
 

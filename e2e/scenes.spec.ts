@@ -127,4 +127,51 @@ test.describe('Scenes', () => {
       dialog.locator('.scene-name', { hasText: /\(copy\)/ }),
     ).toBeVisible();
   });
+
+  /**
+   * Phase 75 — Ctrl+1..9 jumps to the Nth most-recently-active OTHER
+   * scene (excluding the current one). Activation timestamps are
+   * tracked per-scene in localStorage so the ordering survives reloads.
+   */
+  test('Ctrl+1 quick-switches to the most-recently-active other scene', async ({
+    page,
+  }) => {
+    // Create three scenes (default + two new). Switch order:
+    //   default → Cave → Forest → Cave
+    // After that, the recents map (most→least recent activation):
+    //   [Cave, Forest, default]. Active is Cave; pressing Ctrl+1
+    //   should pick Forest (next most recent OTHER scene).
+    let dialog = await openScenesModal(page);
+    page.once('dialog', (d) => void d.accept('Cave'));
+    await dialog.getByRole('button', { name: '+ New scene' }).click();
+    await expect(page.locator('.scene-indicator-label')).toHaveText(/Cave/);
+
+    dialog = await openScenesModal(page);
+    page.once('dialog', (d) => void d.accept('Forest'));
+    await dialog.getByRole('button', { name: '+ New scene' }).click();
+    await expect(page.locator('.scene-indicator-label')).toHaveText(/Forest/);
+
+    // Switch back to Cave so it becomes the most-recent.
+    dialog = await openScenesModal(page);
+    const caveCard = dialog
+      .locator('.scene-card')
+      .filter({ hasText: 'Cave' })
+      .first();
+    await caveCard.locator('[data-action="switch"]').click();
+    await expect(page.locator('.scene-indicator-label')).toHaveText(/Cave/);
+
+    // Ctrl+1 should now jump to Forest (next most-recent excluding active).
+    await page.keyboard.press('Control+1');
+    await expect(page.locator('.scene-indicator-label')).toHaveText(/Forest/);
+  });
+
+  test('Ctrl+9 with no scene in that slot is a silent no-op', async ({
+    page,
+  }) => {
+    // Only one scene exists by default — Ctrl+9 has no target.
+    const before = await page.locator('.scene-indicator-label').innerText();
+    await page.keyboard.press('Control+9');
+    // Indicator unchanged.
+    await expect(page.locator('.scene-indicator-label')).toHaveText(before);
+  });
 });

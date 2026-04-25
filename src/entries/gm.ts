@@ -117,6 +117,7 @@ import { mountDamageHealDialog } from '../ui/damage-heal-dialog.js';
 import { mountDicePanel } from '../ui/dice-panel.js';
 import { mountSlashCommandInput } from '../ui/slash-command-input.js';
 import { rollInitiativeForUnlinkedTokens } from '../state/initiative.js';
+import { noteSceneActivated, pickRecent } from '../state/scene-recents.js';
 import { mountStatusBanners } from '../ui/status-banners.js';
 import { mountImportOptionsModal } from '../ui/import-options-modal.js';
 import { mergeImportState } from '../state/import-merge.js';
@@ -795,6 +796,12 @@ async function switchToScene(id: string): Promise<void> {
   }
 
   setActiveSceneId(id);
+  // Phase 75 — record the activation timestamp so the Ctrl+N
+  // quick-switch hotkey can rank scenes by recency. Done BEFORE the
+  // async getSceneState so the Nth-recent ordering is correct even
+  // if the load takes a moment (Ctrl+N reads from localStorage,
+  // not from in-flight promises).
+  noteSceneActivated(id);
   try {
     const next = await getSceneState(id);
     if (next) {
@@ -814,6 +821,30 @@ async function switchToScene(id: string): Promise<void> {
   } catch {
     // Indicator refresh failure is not user-facing; skip the announcement.
   }
+}
+
+/**
+ * Phase 75 — fire the Nth Ctrl-N quick-switch. Reads the live scenes
+ * catalog + the recents map, picks the Nth most-recently-active
+ * scene that ISN'T the current one, and switches to it. Silently
+ * no-ops when the slot is empty (e.g. user only has 2 scenes and
+ * pressed Ctrl+9).
+ */
+async function quickSwitchToRecent(slot: number): Promise<void> {
+  let scenes;
+  try {
+    scenes = await listScenes();
+  } catch (err) {
+    console.warn('[scenes] Ctrl+N quick-switch: list failed', err);
+    return;
+  }
+  if (scenes.length <= 1) return;
+  const target = pickRecent(scenes, slot, getActiveSceneId());
+  if (!target) {
+    announcer.announce(`No recent scene in slot ${slot}.`);
+    return;
+  }
+  await switchToScene(target.id);
 }
 
 async function handleDeleteActiveScene(): Promise<void> {
@@ -1812,6 +1843,16 @@ window.addEventListener('keydown', (e) => {
     }
     if (key === 'd') {
       if (duplicateSelection()) e.preventDefault();
+      return;
+    }
+    // Phase 75 — Ctrl+1..9 quick-switches to the Nth most-recently-
+    // active OTHER scene (excluding the current one — pressing
+    // Ctrl+1 should always move you somewhere, not no-op on the
+    // active scene). Skipped when no scene catalog has loaded yet.
+    if (/^[1-9]$/.test(e.key) && !e.shiftKey && !e.altKey) {
+      const slot = parseInt(e.key, 10);
+      e.preventDefault();
+      void quickSwitchToRecent(slot);
       return;
     }
     return;

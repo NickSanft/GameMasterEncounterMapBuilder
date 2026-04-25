@@ -83,6 +83,10 @@ const GM_SECTIONS: ShortcutSection[] = [
         keys: '/',
         desc: 'Slash command (/r 1d20+5, /d20, /init, /help)',
       },
+      {
+        keys: 'Ctrl/Cmd+1…9',
+        desc: 'Switch to the Nth most-recently-active scene',
+      },
       { keys: 'Escape', desc: 'Close modal / menu / editor' },
       { keys: 'Right-click empty', desc: 'Reveal/Hide 5×5, Place/Paste, Fit, Reset' },
     ],
