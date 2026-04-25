@@ -122,6 +122,8 @@ import { rollInitiativeForUnlinkedTokens } from '../state/initiative.js';
 import { noteSceneActivated, pickRecent } from '../state/scene-recents.js';
 import { mountStatusBanners } from '../ui/status-banners.js';
 import { mountSaveStatusPill } from '../ui/save-status-pill.js';
+import { mountWeatherOverlay } from '../ui/weather-overlay.js';
+import { mountWeatherPicker } from '../ui/weather-picker.js';
 import { mountImportOptionsModal } from '../ui/import-options-modal.js';
 import { mergeImportState } from '../state/import-merge.js';
 import { mountMiniMap } from '../ui/mini-map.js';
@@ -1545,6 +1547,19 @@ miniMap.setEnabled(preferences.get().showMiniMap);
 // indicator. Updated as the persist debounce fires.
 const saveStatusPill = mountSaveStatusPill();
 
+// Phase 79 — atmospheric weather overlay + GM picker. Picker
+// dispatches a `weather-set` patch on change; the overlay
+// re-syncs from `state.weather` via the store-subscribe block.
+// Spectators get the same overlay (no picker) by mirroring state.
+const weatherOverlay = mountWeatherOverlay({
+  getReducedMotion: () => preferences.get().reducedMotion,
+});
+const weatherPicker = mountWeatherPicker({
+  onChange: (kind) => {
+    store.applyPatch({ kind: 'weather-set', weather: kind });
+  },
+});
+
 // Async IDB save, fire-and-forget from the debounced path.
 // Phase 76 — wraps the save in status updates so the pill reflects
 // the persist lifecycle ('saving' → 'saved' or 'error'). Failures
@@ -1604,6 +1619,12 @@ store.subscribe((patch) => {
     s.grid.rows,
     performance.now(),
   );
+  // Phase 79 — keep the weather overlay + picker in sync with the
+  // store's current scene weather. Cheap: both setters are no-ops
+  // when the value is unchanged. Covers session-reset, scene-switch,
+  // and the explicit weather-set patch in one shared block.
+  weatherOverlay.setWeather(s.weather);
+  weatherPicker.setWeather(s.weather);
   if (!channel) return;
   if (patch) {
     channel.send({ type: 'patch', patch: toSerializablePatch(patch) });

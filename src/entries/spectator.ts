@@ -52,6 +52,7 @@ import { createAnnouncer } from '../util/announcer.js';
 import { registerPwa } from '../util/pwa.js';
 import { mountStatusBanners } from '../ui/status-banners.js';
 import { mountSaveStatusPill } from '../ui/save-status-pill.js';
+import { mountWeatherOverlay } from '../ui/weather-overlay.js';
 import { applyTheme } from '../util/theme.js';
 import { createFogWorkerClient } from '../render/fog-worker-client.js';
 import FogWorker from '../render/fog-worker.js?worker';
@@ -109,6 +110,13 @@ const damageFxManager = createDamageFxManager(() => renderer.requestRender());
 // The onTick callback drives a requestAnimationFrame loop while
 // fades are in flight so the overlay actually animates.
 const fogFadeTracker = createFogFadeTracker(() => renderer.requestRender());
+
+// Phase 79 — atmospheric weather overlay (Spectator side). No
+// picker; the Spectator just mirrors the GM-set weather via the
+// state-sync wire. Re-synced from the store-subscribe block below.
+const weatherOverlay = mountWeatherOverlay({
+  getReducedMotion: () => preferences.get().reducedMotion,
+});
 const measurementOverlayRef = createMeasurementOverlayRef();
 
 const initialCamera = (preferences.get().persistCamera && loadCamera('spectator')) || { ...DEFAULT_CAMERA };
@@ -363,6 +371,9 @@ store.subscribe((patch) => {
     s.grid.rows,
     performance.now(),
   );
+  // Phase 79 — mirror the GM-set weather effect locally. Idempotent
+  // when unchanged; runs cheap on every patch.
+  weatherOverlay.setWeather(s.weather);
 });
 
 // Phase 66 — `createSyncChannel` takes the tab's player id so every

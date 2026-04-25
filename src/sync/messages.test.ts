@@ -113,6 +113,32 @@ describe('serializeState / deserializeState', () => {
     expect(restored.tokens[0]!.initiativeMod).toBe(0);
   });
 
+  it("defaults weather to 'none' for legacy saves (Phase 78 and earlier)", () => {
+    const legacy = {
+      ...serializeState(createDefaultState()),
+      // weather field missing entirely.
+    } as unknown as SerializedSessionState;
+    delete (legacy as { weather?: string }).weather;
+    const restored = deserializeState(legacy);
+    expect(restored.weather).toBe('none');
+  });
+
+  it('preserves weather across a serialize / deserialize round-trip', () => {
+    const state = createDefaultState();
+    state.weather = 'rain';
+    const restored = deserializeState(serializeState(state));
+    expect(restored.weather).toBe('rain');
+  });
+
+  it("collapses unknown weather values to 'none'", () => {
+    const malformed = {
+      ...serializeState(createDefaultState()),
+      weather: 'tornado', // not a valid kind
+    } as unknown as SerializedSessionState;
+    const restored = deserializeState(malformed);
+    expect(restored.weather).toBe('none');
+  });
+
   it('defaults conditionExpirations to {} for legacy tokens (Phase 69 and earlier)', () => {
     const legacy = {
       ...serializeState(createDefaultState()),

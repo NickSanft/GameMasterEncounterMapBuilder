@@ -2698,6 +2698,74 @@ body.notes-open .mini-map {
   right: calc(320px + 0.75rem);
 }
 
+/* ───── Phase 79 — weather overlay ─────────────────────────────────
+   Full-screen <canvas> pinned over the main map canvas. Renders
+   rain / snow / fog as a screen-space particle system. Pointer
+   events pass through so the overlay never blocks GM tooling. */
+
+.weather-overlay {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  /* Above the map + UI overlays but below modals + status banners
+     so the storm doesn't bleed through dialog backdrops. */
+  z-index: 30;
+}
+
+.weather-overlay[hidden] {
+  display: none;
+}
+
+/* Weather picker — small inline <select> in the session menu. */
+.weather-picker {
+  position: fixed;
+  top: 0.85rem;
+  /* Right of the save-status pill (which sits at ~22rem on wide
+     screens) but with enough margin to clear typical "Saving…" text. */
+  left: 30rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.25rem 0.55rem;
+  background: var(--panel-bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--fg);
+  font-size: 0.78rem;
+  z-index: 50;
+}
+
+@media (max-width: 880px) {
+  .weather-picker {
+    /* On narrower viewports the top strip gets crowded; tuck the
+       picker to a second row below the scene indicator. */
+    top: 3rem;
+    left: 0.85rem;
+  }
+}
+
+.weather-picker label {
+  color: var(--fg-muted);
+  font-weight: 500;
+}
+
+.weather-picker select {
+  appearance: none;
+  -webkit-appearance: none;
+  background: transparent;
+  border: none;
+  color: var(--fg);
+  font-family: inherit;
+  font-size: inherit;
+  cursor: pointer;
+  padding: 0 0.6rem 0 0;
+  outline: none;
+}
+
+.weather-picker:focus-within {
+  border-color: var(--accent);
+}
+
 /* ───── Phase 76 — auto-save indicator pill ─────────────────────────
    Tiny chip pinned to the top-left, just to the right of the scene
    indicator. Surfaces persist status (saving / saved / error) so

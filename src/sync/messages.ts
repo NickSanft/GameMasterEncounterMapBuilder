@@ -12,6 +12,7 @@ import type {
   TokenHp,
   TokenLight,
   Wall,
+  WeatherKind,
 } from '../state/types.js';
 import type { PlayerIdentity } from '../state/player-identity.js';
 
@@ -100,6 +101,12 @@ export interface SerializedSessionState {
   initiative: InitiativeState;
   strokes: DrawStroke[];
   walls: Wall[];
+  /**
+   * Phase 79 — atmospheric weather effect for the scene. Optional in
+   * the serialized form so pre-79 saves load with `'none'` defaulted
+   * by `deserializeState`.
+   */
+  weather?: WeatherKind;
 }
 
 export type SerializablePatch =
@@ -267,6 +274,7 @@ export function serializeState(s: SessionState): SerializedSessionState {
       points: st.points.map((p) => ({ ...p })),
     })),
     walls: s.walls.map((w) => ({ ...w })),
+    weather: s.weather,
   };
 }
 
@@ -389,6 +397,15 @@ export function deserializeState(s: SerializedSessionState): SessionState {
             blocksMovement: w.blocksMovement !== false,
           }))
       : [],
+    // Phase 79 — pre-79 saves don't have `weather`; default to 'none'.
+    // Defensive: anything outside the known kinds collapses to 'none'.
+    weather:
+      s.weather === 'rain' ||
+      s.weather === 'snow' ||
+      s.weather === 'fog' ||
+      s.weather === 'none'
+        ? s.weather
+        : 'none',
   };
 }
 

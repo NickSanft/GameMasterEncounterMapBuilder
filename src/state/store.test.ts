@@ -417,6 +417,32 @@ describe('applyPatch — Phase 70 round-based condition expiry', () => {
   });
 });
 
+describe('Phase 79 — weather-set patch', () => {
+  it('weather-set updates state.weather', () => {
+    const store = createStore();
+    expect(store.getState().weather).toBe('none');
+    store.applyPatch({ kind: 'weather-set', weather: 'rain' });
+    expect(store.getState().weather).toBe('rain');
+  });
+
+  it('weather-set with the same value is a no-op (no listener fire)', () => {
+    const store = createStore();
+    store.applyPatch({ kind: 'weather-set', weather: 'snow' });
+    const listener = vi.fn();
+    store.subscribe(listener);
+    store.applyPatch({ kind: 'weather-set', weather: 'snow' });
+    expect(listener).not.toHaveBeenCalled();
+  });
+
+  it('weather-set notifies the subscriber on actual change', () => {
+    const store = createStore();
+    const listener = vi.fn();
+    store.subscribe(listener);
+    store.applyPatch({ kind: 'weather-set', weather: 'fog' });
+    expect(listener).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('Phase 72 — death-save round-trip', () => {
   it('preserves deathSaves through token-update', () => {
     const initial = createDefaultState();

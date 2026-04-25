@@ -88,6 +88,11 @@ export function mergeImportState(
     walls: selection.walls
       ? imported.walls.map((w) => ({ ...w }))
       : base.walls.map((w) => ({ ...w })),
+    // Phase 79 — weather is per-scene mood; tied to the imported
+    // scene's `background` rather than its own opt-in (so a user
+    // who imports "Stormy harbor map" gets the rain too). When the
+    // user UNCHECKED background, they keep their current weather.
+    weather: selection.background ? imported.weather : base.weather,
   };
 }
 

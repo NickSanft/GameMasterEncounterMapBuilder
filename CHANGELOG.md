@@ -34,13 +34,49 @@ chat history for the full breakdown:
 - **0.76.0** — Auto-save indicator pill ✅
 - **0.77.0** — Token damage / heal animations ✅
 - **0.78.0** — Fog reveal fade-in ✅
-- **0.79.0** — Weather overlays
+- **0.79.0** — Weather overlays ✅
 - **0.80.0** — Day / night cycle
 - **0.81.0** — Animated GIF token portraits
 - **0.82.0** — Per-Spectator permissions
 - **0.83.0** — Latency indicator on the status chip
 - **0.84.0** — Conflict-merge UI
 - **0.85.0** — Wall editing revamp (in-place edit of endpoints, blocksSight / blocksMovement, thickness; live drag-out preview while drawing; chain merging so a corridor edits as one shape; per-wall `visibility: 'shared' | 'gm'` for secret features)
+
+---
+
+## [0.79.0] — 2026-04-25 — Atmospheric weather overlays (rain / snow / fog)
+
+### Added
+- **Per-scene weather effect** rendered as a screen-space particle overlay over the main canvas:
+  - **Rain** — diagonal vertical streaks falling at ~600 px/s with subtle wind. Density scales with viewport (capped at 250 drops on huge screens).
+  - **Snow** — soft drifting flakes with a swaying horizontal motion (sinusoidal phase per flake). Density caps at 180.
+  - **Fog** — slow-moving translucent wisps (~14 large soft circles) drifting left → right.
+  - **None** — overlay tears down + canvas hides.
+- **GM-side picker** — a small inline `<select>` pinned next to the auto-save pill in the top strip. Picking a value dispatches a `weather-set` patch; the new state propagates over the existing patch sync wire so any connected Spectator immediately mirrors the effect.
+- **Per-scene scoping** — weather is part of `SessionState`, so different scenes carry different moods. Switching scenes (manually or via Ctrl+1..9) restores the destination scene's weather. Imported sessions carry the weather alongside `background` (so a "Stormy Harbor" scene import brings the rain along).
+
+### Reduced motion
+- When the user has `prefers-reduced-motion` (or the in-app preference) on, the particle simulation is replaced with a static tinted overlay per kind (subtle blue-grey for rain, soft white for snow, muted grey for fog). The effect still conveys "it's raining" without any animation. Same `getReducedMotion()` callback both modules already use.
+
+### Architecture
+- **`src/ui/weather-overlay.ts`** — full-screen `<canvas>` pinned over the map, runs a per-frame particle simulation. Self-driven `requestAnimationFrame` loop while a kind is active; tears down on `setWeather('none')`. Pointer events pass through (`pointer-events: none`) so the overlay never blocks the GM's tools. DPR-aware — re-seeds particles on `resize`.
+- **`src/ui/weather-picker.ts`** — small standalone `<select>` widget. Calls `opts.onChange(kind)`; exposes `setWeather` for external state updates (when another tab toggles weather, the picker reflects it without re-typing).
+- **`SessionState.weather: WeatherKind`** — new required field, `'none' | 'rain' | 'snow' | 'fog'`. Default `'none'`. `deserializeState` defaults missing values for back-compat AND clamps unknown values to `'none'` to shrug off malformed wire payloads.
+- **`{ kind: 'weather-set'; weather: WeatherKind }`** — new patch variant. Reducer no-ops when the value is unchanged, so re-selecting the active option doesn't trigger a useless persist + broadcast cycle.
+- **Wire format** — automatic. The patch type already round-trips through `toSerializablePatch` / `fromSerializablePatch`; serialize/deserialize handle the field. No new SyncMessage variant.
+- **Import-merge** — weather travels with `background` (the most natural pairing — the user picks "I want this scene's vibe"). When the user unchecks `background` in the import modal, the destination scene's weather is preserved.
+
+### Tests
+- **+3 deserializer tests** in `src/sync/messages.test.ts`: missing field defaults to `'none'`, round-trip preserves the value, unknown weather kinds collapse to `'none'`.
+- **+3 store reducer tests** in `src/state/store.test.ts`: `weather-set` updates state, same-value is a no-op (subscriber NOT notified), actual change DOES notify.
+- **+3 Playwright specs** in `e2e/weather.spec.ts`: picker toggles the overlay canvas visibility, weather selection persists across scene switches via `Ctrl+1`, Spectator mounts the overlay but NOT the picker.
+- **All 796 unit tests + 187 Playwright specs pass.**
+
+### Bundle
+- 70.92 / 72 KB initial-load brotli (+1.0 KB for the overlay + picker + reducer + entries wiring). Lazy chunks unchanged. CSS 9.07 / 10 KB.
+
+### Why no lazy-load
+The overlay module is small (~1.5 KB raw) and the user can switch weather instantly on every roll, so a synchronous mount makes the first-pick feel snappy. If a future phase needs to add more particle-heavy effects (Phase 80's day/night cycle is also planned), we can revisit by extracting an `effects` lazy bundle.
 
 ---
 

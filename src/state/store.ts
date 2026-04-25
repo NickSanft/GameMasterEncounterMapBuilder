@@ -49,6 +49,7 @@ function snapshot(s: SessionState): SessionState {
       points: st.points.map((p) => ({ ...p })),
     })),
     walls: s.walls.map((w) => ({ ...w })),
+    weather: s.weather,
   };
 }
 
@@ -327,6 +328,13 @@ export function createStore(initial?: SessionState): Store {
         break;
       case 'walls-clear':
         state = { ...state, walls: [] };
+        break;
+      case 'weather-set':
+        // Phase 79 — fast-path: skip the patch broadcast / persist
+        // tick when the weather hasn't actually changed (e.g. the
+        // user clicks the active option in the dropdown).
+        if (state.weather === patch.weather) return;
+        state = { ...state, weather: patch.weather };
         break;
       case 'session-reset':
         state = patch.state;

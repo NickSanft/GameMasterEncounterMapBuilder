@@ -241,6 +241,22 @@ export interface InitiativeState {
   round: number;
 }
 
+/**
+ * Phase 79 — atmospheric weather effect rendered as a screen-space
+ * particle overlay. Per-scene state (different scenes can carry
+ * different moods); spectator mirrors via the normal patch wire.
+ *
+ * `'none'`   = no overlay (default).
+ * `'rain'`   = vertical streaks of rain falling diagonally.
+ * `'snow'`   = soft drifting flakes.
+ * `'fog'`    = slow-moving translucent wisps drifting across the view.
+ *
+ * Reduced-motion users see a static dimmed tint per kind instead of
+ * animated particles — see `WEATHER_REDUCED_MOTION_TINT` in the
+ * overlay module.
+ */
+export type WeatherKind = 'none' | 'rain' | 'snow' | 'fog';
+
 export interface SessionState {
   version: 1;
   grid: GridConfig;
@@ -252,6 +268,11 @@ export interface SessionState {
   initiative: InitiativeState;
   strokes: DrawStroke[];
   walls: Wall[];
+  /**
+   * Phase 79 — active weather effect for the current scene. Default
+   * `'none'`. `deserializeState` defaults missing values for back-compat.
+   */
+  weather: WeatherKind;
 }
 
 export interface Camera {
@@ -291,6 +312,7 @@ export type StatePatch =
   | { kind: 'wall-update'; id: ID; changes: Partial<Omit<Wall, 'id'>> }
   | { kind: 'wall-remove'; id: ID }
   | { kind: 'walls-clear' }
+  | { kind: 'weather-set'; weather: WeatherKind }
   | { kind: 'session-reset'; state: SessionState };
 
 export const DEFAULT_GRID: GridConfig = {
@@ -327,5 +349,6 @@ export function createDefaultState(): SessionState {
     initiative: { order: [], activeId: null, round: 0 },
     strokes: [],
     walls: [],
+    weather: 'none',
   };
 }
