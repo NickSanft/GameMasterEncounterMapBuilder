@@ -1765,6 +1765,40 @@ body.reduced-motion *::after {
   margin-bottom: 0.4rem;
 }
 
+/* Phase 106 — scene search row sits between the toolbar and the
+   library-hint copy. The search input fills the row with a small
+   "N of M" counter on the right that updates from the input handler. */
+.scenes-search {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.scenes-search-input {
+  flex: 1;
+  appearance: none;
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.45rem 0.7rem;
+  font-family: inherit;
+  font-size: 0.88rem;
+}
+
+.scenes-search-input::placeholder {
+  color: var(--fg-muted);
+}
+
+.scenes-search-count {
+  font-size: 0.78rem;
+  color: var(--fg-muted);
+  font-variant-numeric: tabular-nums;
+  min-width: 4.5rem;
+  text-align: right;
+}
+
 .scenes-toolbar button.primary {
   background: var(--accent);
   color: var(--bg);

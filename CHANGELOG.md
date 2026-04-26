@@ -91,11 +91,46 @@ _Mobile / tablet ergonomics:_
 
 _Polish:_
 
-- **0.106.0** — Scene search / filter (text filter in the Scenes modal once the catalog grows past ~10)
+- **0.106.0** — Scene search / filter ✅ (text filter in the Scenes modal once the catalog grows past ~10)
 - **0.107.0** — Dice expression history recall (up-arrow in the slash-command input cycles previous rolls)
 - **0.108.0** — Recent backgrounds quick switcher (mirrors the Phase 75 recent-scenes pattern but for backgrounds)
 - **0.109.0** — Per-spectator token visibility (extend Phase 82's permissions to "GM hides individual tokens from individual players")
 - **0.110.0** — Persistent player names across reloads (stable cross-session player IDs — flagged in Phase 82 as future)
+
+---
+
+## [0.106.0] — 2026-04-26 — Scene search / filter
+
+### Added
+- **Type-to-filter the Scenes modal**. A search input at the top of the modal narrows the visible scene cards by name as you type. Auto-focused on open so a many-scene catalog ("type 'thr' → see only Throne Room scenes") is one keystroke away from the indicator click. An *N of M* counter beside the input shows how many scenes survived the filter so the user can tell whether their query is too narrow at a glance.
+- **3-tier ranking** (same as the Phase 95 command palette): prefix matches first, then word-boundary matches, then plain-substring matches. Within a rank, the original list ordering is preserved — and `listScenes()` already returns `updatedAt desc`, so most-recently-edited matches come first for free.
+- **Esc behavior matches the command palette**: first Esc clears a non-empty query; second Esc closes the modal. So a stray query left in the field is one keystroke to clear, not "tap the modal closed and re-open."
+- **No-match empty state** ("No scenes match \"xyzzy-no-match\".") replaces the grid when nothing matches, with a hint to shorten the query or clear the filter.
+
+### Why this matters
+Long-running campaigns accumulate scenes fast — one per encounter, dungeon room, set piece. By session 8 the Scenes modal can have 30+ cards, scrolling a wall of thumbnails to find "the dragon's lair" mid-session is slow. The Ctrl+1..9 quick-switch (Phase 75) handles "the most recent scenes," and the command-palette has a different scope; this fills the "I named it but I don't remember which row it's in" gap with the same type-to-find affordance every other long list in the app already has.
+
+### Architecture
+- **`src/state/scene-filter.ts`** (new, ~70 lines) — pure helper. `filterScenes(scenes, query)` returns a ranked, filtered list. Empty / whitespace query passes the input through unchanged. Match is case-insensitive (both name + query lowercased once), and the query is treated as a literal substring (no regex parsing — `[a-z]` is a literal `[a-z]`, not a character class). Stable within a rank: input order is preserved so the caller's `updatedAt desc` ordering survives.
+- **`src/ui/scenes-modal.ts`** — added a `<input type="search">` row between the toolbar and the library hint copy. The input fires `input` events that re-render the grid via a new `rerender()` helper split out of the existing `refresh()` path; that way a keystroke doesn't re-fetch from IDB (the listScenes() roundtrip is the only source of changed data and would add 50–200ms latency to each keystroke). `refresh()` still re-fetches when called from the other code paths (rename / delete / create / duplicate). Each `open()` resets the query so a stale filter from a previous open doesn't leak through.
+- **`src/ui/styles.css`** — small new section for `.scenes-search` (the row), `.scenes-search-input` (full-width input with the standard modal-input visual), and `.scenes-search-count` (right-aligned, tabular-numerals counter).
+- **Search input gets `aria-label="Filter scenes by name"`** + a `placeholder` so the role is clear to screen-reader users + visible. The counter is `aria-live="polite"` so the post-filter count is announced as the user types — useful when typing fast and the text changes faster than the eye can refocus.
+
+### UX details
+- **Auto-focus the search input** on every open (replacing the prior auto-focus on the first scene card). The earliest action 90% of users want is to type, not to tab — and even when they DO want to tab, the search input is the first focusable element so Tab still lands on a card next.
+- **Search is name-only**, not "match against tags / metadata / token contents." Scenes don't have a tag system today; if Phase 110+ adds one, the filter would extend to it without changing the input's UX.
+- **Esc-clears-then-closes** mirrors the command palette + the dice-input (Phase 74) so the keyboard contract is consistent across the three "type-to-narrow" surfaces in the app.
+
+### Tests
+- **+12 unit tests** in `src/state/scene-filter.test.ts` (new): empty / whitespace query passthrough; returns a fresh array (not the input reference); prefix > word-boundary > substring ranking; within-rank input ordering preservation; drops non-matches; case-insensitive matching; returns empty array on zero-matches + on empty input; literal-not-regex matching (no regex chars); whitespace trim on the query.
+- **+6 Playwright specs** in `e2e/scenes-search.spec.ts` (new): search input present + auto-focused on open; typing narrows the visible cards by name; clearing the input restores the full list + empties the counter; no-match empty state shows when nothing matches; Esc clears the query first then closes on second press; re-opening clears any stale query.
+- **All 1194 unit tests + 279 Playwright specs pass** locally on the first run.
+
+### Bundle
+- **JS budget bumped 90 → 92 KB** for headroom. Phase 106 added ~0.3 KB JS; landed at 89.92 / 90 KB which would have been 80B under the limit — too tight to leave for Phase 107. CSS 11.26 / 12 KB. Lazy chunks unchanged.
+
+### Pre-push checklist
+Caught zero issues — full unit suite + full e2e + visual-regression spec + size-limit all green before push (after the proactive 90 → 92 KB bump). Nine clean phases in a row now (97 + 99 + 100 + 101 + 102 + 103 + 104 + 105 + 106).
 
 ---
 

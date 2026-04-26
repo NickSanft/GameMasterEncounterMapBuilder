@@ -10,6 +10,7 @@ import {
   type SceneSummary,
 } from '../state/scenes.js';
 import { exportScene, importScene } from '../state/scene-export.js';
+import { filterScenes } from '../state/scene-filter.js';
 import { nid } from '../util/id.js';
 import { attachFocusTrap, rememberFocus, restoreFocus } from '../util/focus.js';
 
@@ -58,6 +59,12 @@ export function mountScenesModal(opts: ScenesModalOptions): ScenesModalHandle {
           title="Import a scene from a JSON file (Phase 98)">Import scene…</button>
         <input type="file" data-field="import-file" accept="application/json,.json" hidden />
       </div>
+      <div class="scenes-search">
+        <input type="search" data-field="search" class="scenes-search-input"
+          placeholder="Filter scenes by name…" aria-label="Filter scenes by name"
+          autocomplete="off" />
+        <span class="scenes-search-count" data-field="count" aria-live="polite"></span>
+      </div>
       <p class="library-hint">
         Save a scene per encounter, dungeon room, or set piece. Switching scenes persists the one you're leaving and loads the one you pick. Undo history resets per scene.
       </p>
@@ -65,6 +72,10 @@ export function mountScenesModal(opts: ScenesModalOptions): ScenesModalHandle {
       <div class="library-empty" data-field="empty" hidden>
         <p>No scenes yet.</p>
         <p class="settings-hint">Click "New scene" above to create your first one.</p>
+      </div>
+      <div class="library-empty" data-field="no-match" hidden>
+        <p data-field="no-match-text">No scenes match.</p>
+        <p class="settings-hint">Try a shorter query or clear the filter to see all scenes.</p>
       </div>
     </div>
   `;
@@ -75,25 +86,73 @@ export function mountScenesModal(opts: ScenesModalOptions): ScenesModalHandle {
 
   const grid = modal.querySelector<HTMLDivElement>('[data-field="grid"]')!;
   const empty = modal.querySelector<HTMLDivElement>('[data-field="empty"]')!;
+  const noMatch = modal.querySelector<HTMLDivElement>('[data-field="no-match"]')!;
+  const noMatchText = modal.querySelector<HTMLParagraphElement>('[data-field="no-match-text"]')!;
+  const searchInput = modal.querySelector<HTMLInputElement>('[data-field="search"]')!;
+  const searchCount = modal.querySelector<HTMLSpanElement>('[data-field="count"]')!;
   const closeBtn = modal.querySelector<HTMLButtonElement>('.modal-close')!;
   const newBtn = modal.querySelector<HTMLButtonElement>('[data-action="new-scene"]')!;
 
   let triggerFocus: HTMLElement | null = null;
   let scenes: SceneSummary[] = [];
+  let query = '';
 
   async function refresh(): Promise<void> {
     scenes = await listScenes();
+    rerender();
+  }
+
+  // Phase 106 — split the grid build out of `refresh` so a search-input
+  // change can re-render the filtered list WITHOUT re-fetching from
+  // IDB (the listScenes() roundtrip is otherwise the only source of
+  // changed data and adds latency to every keystroke).
+  function rerender(): void {
     grid.innerHTML = '';
+    // Empty catalog (no scenes at all) still gets the original copy.
     if (scenes.length === 0) {
       empty.hidden = false;
+      noMatch.hidden = true;
+      searchCount.textContent = '';
       return;
     }
     empty.hidden = true;
+    const filtered = filterScenes(scenes, query);
+    if (filtered.length === 0) {
+      // Catalog has scenes but the query matches none.
+      noMatch.hidden = false;
+      noMatchText.textContent = `No scenes match "${query.trim()}".`;
+      searchCount.textContent = `0 of ${scenes.length}`;
+      return;
+    }
+    noMatch.hidden = true;
+    if (query.trim()) {
+      searchCount.textContent = `${filtered.length} of ${scenes.length}`;
+    } else {
+      searchCount.textContent = '';
+    }
     const activeId = opts.getActiveId();
-    for (const s of scenes) {
+    for (const s of filtered) {
       grid.appendChild(renderCard(s, s.id === activeId));
     }
   }
+
+  searchInput.addEventListener('input', () => {
+    query = searchInput.value;
+    rerender();
+  });
+  // Esc inside the search input clears the filter first; only when
+  // the input is already empty does Esc fall through to the modal-
+  // level handler that closes the dialog. Mirrors the command-palette
+  // (Phase 95) pattern.
+  searchInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && searchInput.value !== '') {
+      searchInput.value = '';
+      query = '';
+      rerender();
+      e.preventDefault();
+      e.stopPropagation();
+    }
+  });
 
   function renderCard(s: SceneSummary, isActive: boolean): HTMLElement {
     const card = document.createElement('div');
@@ -264,9 +323,19 @@ export function mountScenesModal(opts: ScenesModalOptions): ScenesModalHandle {
   function open() {
     triggerFocus = rememberFocus();
     backdrop.hidden = false;
+    // Phase 106 — clear any stale query from the previous open so the
+    // user always sees the full catalog first. Sync the model so
+    // rerender() produces the right empty-state too.
+    searchInput.value = '';
+    query = '';
     void refresh().then(() => {
-      const first = modal.querySelector<HTMLButtonElement>('[data-action="switch"]');
-      (first ?? closeBtn).focus();
+      // Auto-focus the search input — by far the most common next
+      // action after opening the modal in a many-scene catalog.
+      // Falls back to the first scene card / close button when the
+      // catalog is empty (no search input is shown anyway? actually
+      // it is — but focusing an empty search lets the user type
+      // immediately).
+      searchInput.focus();
     });
   }
 
