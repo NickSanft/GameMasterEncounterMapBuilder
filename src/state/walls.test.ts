@@ -3,8 +3,13 @@ import {
   createWall,
   distanceSquaredToSegment,
   hitTestWalls,
+  hitTestWallEndpoint,
+  clampThickness,
   wallLength,
   WALL_HIT_TOLERANCE_PX,
+  WALL_DEFAULT_THICKNESS_PX,
+  WALL_MIN_THICKNESS_PX,
+  WALL_MAX_THICKNESS_PX,
 } from './walls.js';
 
 describe('createWall', () => {
@@ -103,5 +108,87 @@ describe('wallLength', () => {
     [{ x1: 0, y1: 0, x2: 10, y2: 0 }, 10],
   ])('computes %o → %d', (seg, expected) => {
     expect(wallLength(seg)).toBeCloseTo(expected, 6);
+  });
+});
+
+describe('createWall — Phase 85 (thickness + visibility)', () => {
+  it('omits thickness + visibility from the result by default (back-compat shape)', () => {
+    const w = createWall({ x1: 0, y1: 0, x2: 1, y2: 1 });
+    expect(w.thickness).toBeUndefined();
+    expect(w.visibility).toBeUndefined();
+  });
+
+  it('passes through an explicit thickness', () => {
+    const w = createWall({ x1: 0, y1: 0, x2: 1, y2: 1, thickness: 5 });
+    expect(w.thickness).toBe(5);
+  });
+
+  it('passes through an explicit visibility', () => {
+    const w = createWall({ x1: 0, y1: 0, x2: 1, y2: 1, visibility: 'gm' });
+    expect(w.visibility).toBe('gm');
+  });
+});
+
+describe('clampThickness', () => {
+  it('returns the default for non-numeric input', () => {
+    expect(clampThickness('foo')).toBe(WALL_DEFAULT_THICKNESS_PX);
+    expect(clampThickness(null)).toBe(WALL_DEFAULT_THICKNESS_PX);
+    expect(clampThickness(undefined)).toBe(WALL_DEFAULT_THICKNESS_PX);
+    expect(clampThickness(NaN)).toBe(WALL_DEFAULT_THICKNESS_PX);
+    expect(clampThickness(Infinity)).toBe(WALL_DEFAULT_THICKNESS_PX);
+  });
+
+  it('clamps to [MIN, MAX]', () => {
+    expect(clampThickness(0)).toBe(WALL_MIN_THICKNESS_PX);
+    expect(clampThickness(-5)).toBe(WALL_MIN_THICKNESS_PX);
+    expect(clampThickness(1000)).toBe(WALL_MAX_THICKNESS_PX);
+  });
+
+  it('passes through values inside the range unchanged', () => {
+    expect(clampThickness(3)).toBe(3);
+    expect(clampThickness(WALL_MIN_THICKNESS_PX)).toBe(WALL_MIN_THICKNESS_PX);
+    expect(clampThickness(WALL_MAX_THICKNESS_PX)).toBe(WALL_MAX_THICKNESS_PX);
+  });
+});
+
+describe('hitTestWallEndpoint', () => {
+  const wall = createWall({ x1: 0, y1: 0, x2: 100, y2: 0 });
+  const otherWall = createWall({ x1: 50, y1: 50, x2: 150, y2: 50 });
+  const walls = [wall, otherWall];
+  const selected = new Set([wall.id]);
+
+  it('returns null when no walls are selected', () => {
+    expect(hitTestWallEndpoint(walls, new Set(), 0, 0, 8)).toBeNull();
+  });
+
+  it('returns null when the cursor is far from any selected endpoint', () => {
+    expect(hitTestWallEndpoint(walls, selected, 50, 50, 8)).toBeNull();
+  });
+
+  it('returns endpoint 1 when the cursor is near the start', () => {
+    const hit = hitTestWallEndpoint(walls, selected, 2, 1, 8);
+    expect(hit?.endpoint).toBe(1);
+    expect(hit?.wall.id).toBe(wall.id);
+  });
+
+  it('returns endpoint 2 when the cursor is near the end', () => {
+    const hit = hitTestWallEndpoint(walls, selected, 98, 0, 8);
+    expect(hit?.endpoint).toBe(2);
+  });
+
+  it('skips walls that are not in the selection set', () => {
+    // Cursor right on otherWall's endpoint, but otherWall isn't selected.
+    expect(hitTestWallEndpoint(walls, selected, 50, 50, 8)).toBeNull();
+  });
+
+  it('respects the tolerance parameter', () => {
+    expect(hitTestWallEndpoint(walls, selected, 0, 5, 4)).toBeNull(); // 5 > 4
+    expect(hitTestWallEndpoint(walls, selected, 0, 3, 4)?.endpoint).toBe(1); // 3 ≤ 4
+  });
+
+  it('picks the closer endpoint when both are within tolerance (degenerate short wall)', () => {
+    const tiny = createWall({ x1: 0, y1: 0, x2: 4, y2: 0 });
+    const hit = hitTestWallEndpoint([tiny], new Set([tiny.id]), 1, 0, 10);
+    expect(hit?.endpoint).toBe(1); // closer to (0,0) than to (4,0)
   });
 });

@@ -467,15 +467,34 @@ export function deserializeState(s: SerializedSessionState): SessionState {
             typeof (w as { x2?: unknown }).x2 === 'number' &&
             typeof (w as { y2?: unknown }).y2 === 'number',
           )
-          .map((w) => ({
-            id: String(w.id ?? ''),
-            x1: w.x1,
-            y1: w.y1,
-            x2: w.x2,
-            y2: w.y2,
-            blocksSight: w.blocksSight !== false,
-            blocksMovement: w.blocksMovement !== false,
-          }))
+          .map((w) => {
+            const out: Wall = {
+              id: String(w.id ?? ''),
+              x1: w.x1,
+              y1: w.y1,
+              x2: w.x2,
+              y2: w.y2,
+              blocksSight: w.blocksSight !== false,
+              blocksMovement: w.blocksMovement !== false,
+            };
+            // Phase 85 — optional thickness + visibility. Pre-85 walls
+            // omit these; we keep the field absent on the deserialized
+            // wall so a roundtrip of a pre-85 save stays byte-identical
+            // (the renderer falls back to its default when absent).
+            // Anything outside the known visibility kinds collapses
+            // to `'shared'` (the safer default — making a wall
+            // unexpectedly invisible could surprise a GM mid-session).
+            if (
+              typeof (w as { thickness?: unknown }).thickness === 'number' &&
+              Number.isFinite((w as { thickness: number }).thickness)
+            ) {
+              out.thickness = (w as { thickness: number }).thickness;
+            }
+            const vis = (w as { visibility?: unknown }).visibility;
+            if (vis === 'gm') out.visibility = 'gm';
+            else if (vis === 'shared') out.visibility = 'shared';
+            return out;
+          })
       : [],
     // Phase 79 — pre-79 saves don't have `weather`; default to 'none'.
     // Defensive: anything outside the known kinds collapses to 'none'.

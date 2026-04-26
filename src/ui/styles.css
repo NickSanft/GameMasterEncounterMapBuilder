@@ -2811,6 +2811,94 @@ body.notes-open .mini-map {
   color: var(--accent);
 }
 
+/* ───── Phase 85 — Wall editor modal ────────────────────────────────
+   Opens from the wall right-click "Edit wall…" entry or the E
+   keyboard shortcut. Single editor for all wall properties:
+   sight/movement toggles, GM-only visibility, line thickness. */
+
+.wall-editor {
+  min-width: 400px;
+  max-width: 540px;
+}
+
+.wall-editor .wall-editor-hint {
+  margin: 0 0 0.8rem;
+  color: var(--fg-muted);
+  font-size: 0.82rem;
+  text-transform: none;
+  letter-spacing: 0;
+  line-height: 1.4;
+}
+
+.wall-editor-row {
+  margin: 0.55rem 0;
+}
+
+.wall-editor-toggle,
+.wall-editor-radio {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.86rem;
+  color: var(--fg);
+  cursor: pointer;
+  user-select: none;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.wall-editor-radio {
+  margin: 0.2rem 0;
+}
+
+.wall-editor-fieldset {
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 0.4rem 0.7rem 0.5rem;
+  margin: 0;
+}
+
+.wall-editor-fieldset legend {
+  padding: 0 0.4rem;
+  color: var(--fg-muted);
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.wall-editor-slider {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.86rem;
+  color: var(--fg);
+}
+
+.wall-editor-slider input[type="range"] {
+  width: 100%;
+}
+
+.wall-editor-slider output {
+  font-variant-numeric: tabular-nums;
+  color: var(--fg-muted);
+  min-width: 4em;
+  text-align: right;
+}
+
+.wall-editor .modal-footer {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 0 0;
+  border-top: 1px solid var(--border);
+  margin-top: 0.8rem;
+}
+
+.wall-editor .modal-spacer {
+  flex: 1 1 auto;
+}
+
 /* ───── Phase 84 — Conflict-merge modal ─────────────────────────────
    Opens from the conflict warning banner ("Resolve…" action). Lists
    every detected GM peer with a side-by-side state summary (last

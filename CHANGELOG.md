@@ -40,7 +40,41 @@ chat history for the full breakdown:
 - **0.82.0** — Per-Spectator permissions ✅
 - **0.83.0** — Latency indicator on the status chip ✅
 - **0.84.0** — Conflict-merge UI ✅
-- **0.85.0** — Wall editing revamp (in-place edit of endpoints, blocksSight / blocksMovement, thickness; live drag-out preview while drawing; chain merging so a corridor edits as one shape; per-wall `visibility: 'shared' | 'gm'` for secret features)
+- **0.85.0** — Wall editing revamp ✅
+
+---
+
+## [0.85.0] — 2026-04-26 — Wall editing revamp
+
+### Added
+- **In-place wall editor.** Right-click a selected wall → "Edit wall…" (or press `E` with one or more walls selected) opens a dedicated modal with toggles for **blocks sight**, **blocks movement**, **player visibility** (shared / GM-only), and a slider for **line thickness**. Pre-85 the only context-menu actions were "Disable sight blocking" and "Delete wall" — adjusting anything else (changing thickness, marking a wall secret, toggling movement) required deleting + redrawing.
+- **Endpoint drag handles for in-place geometry editing.** Selected walls now render larger square handles at each endpoint. In Select mode, click-and-drag a handle to move that single endpoint live; the wall body re-stretches to follow the cursor at 60fps. Releasing commits a single `wall-update` patch (one undo step). The old "drag the whole wall to translate it" behavior still works — clicking the wall body (not a handle) starts the existing drag.
+- **Per-wall thickness** (`Wall.thickness?: number`, screen-pixels at zoom = 1, default 2.5). A stout exterior wall and a thin interior divider can coexist on the same map. Existing walls keep the field absent + the renderer falls back to the default, so pre-85 saves render byte-identical post-upgrade.
+- **Per-wall player visibility** (`Wall.visibility?: 'shared' | 'gm'`, default `'shared'`). GM-only walls render on the GM canvas with a **dashed purple** style (so the GM sees at a glance which walls are secret) and are **not drawn at all on the Spectator canvas**. Crucially they DO still occlude the Spectator's line-of-sight — they're physical occluders; the player just doesn't see the wall outline. Use case: secret doors, hidden passages, wall-and-revealed-by-trigger style design.
+- **Multi-edit semantics.** Selecting multiple walls and opening the editor shows mixed values as indeterminate checkboxes / a "— (mixed)" thickness output. Picking a value applies it to ALL selected walls in a single `store.batch()` so the multi-edit lands as one undo step.
+- **Larger handle hit area.** The selected-wall endpoint dots are now 9 px screen-pixels (was 5 px) — large enough to grab on touch screens and forgiving on desktop. The unselected wall endpoint indicators stay at 5 px so an unselected line stays visually crisp.
+
+### Architecture
+- **`src/state/walls.ts`** extended with `WALL_DEFAULT_THICKNESS_PX`, `WALL_MIN_THICKNESS_PX`, `WALL_MAX_THICKNESS_PX`, `WALL_HANDLE_SCREEN_PX`, `clampThickness(raw)`, and `hitTestWallEndpoint(walls, selectedIds, px, py, tolerancePx)`. The endpoint hit-test ONLY considers walls in the selection set + scales tolerance with camera zoom so the on-screen target stays consistent.
+- **`src/ui/wall-editor.ts`** (new) — pure UI module mirroring the Phase 84 modal pattern. Re-renders on every `onChange` so the displayed values stay in sync, and auto-closes when the editing walls vanish from state (e.g. external delete via undo).
+- **`src/render/layer-walls.ts`** — substantial rewrite. Per-wall stroke (was: single batched stroke per group) so per-wall thickness + the GM-only dashed style work without bucketing. With <100 walls per encounter the per-wall stroke cost is negligible. Endpoint dots also gain a contrasting outline so the handle stays visible against any background.
+- **`src/render/renderer.ts`** — new optional `getEndpointDrag?()` callback on the GM render path. Returns `{wallId, endpoint, x, y}` while a drag is in-flight; `null` otherwise. Spectator canvas always passes `null`.
+- **`src/input/context.ts`** — new `EndpointDragRef` + factory + optional field on `InputContext` so the Select tool can update the live drag overlay without a side channel.
+- **`src/input/tool-select.ts`** — pointerdown handler hit-tests against endpoints first (only when there's a selection), then falls through to the existing token / annotation / AoE / wall / lasso flow if nothing matched. The endpoint drag is its own state-machine branch; pointerup commits a `wall-update` patch with just the changed endpoint coords + clears the overlay.
+- **`src/sync/messages.ts`** — `deserializeState` accepts the optional `thickness` + `visibility` fields with defaults. Pre-85 saves keep the field absent on roundtrip (so a GM who exports + re-imports doesn't gain spurious fields).
+
+### Tests
+- **+13 unit tests** in `src/state/walls.test.ts` covering `clampThickness` (default fallback, range clamp, identity), `createWall` Phase 85 fields (default-omitted, explicit thickness, explicit visibility), and `hitTestWallEndpoint` (empty selection no-op, far-away cursor null, endpoint 1 / endpoint 2 detection, selection filter, tolerance respect, closer-of-two-endpoints tie-break).
+- **+12 unit tests** in `src/ui/wall-editor.test.ts` (new, jsdom): starts-closed, openFor([])-noop, single-wall title + populated fields, multi-wall title with default fallback, mixed-state indeterminate checkbox + "(mixed)" output, sight toggle calls onChange with all ids, visibility radio calls onChange with new value, thickness change clamps + commits, delete button + close, Done button no-op-and-close, Escape closes, auto-close on external wall vanish.
+- **+4 Playwright specs** in `e2e/wall-editor.spec.ts` (new): right-click "Edit wall…" opens the modal with current state populated; toggle visibility to GM-only persists across modal close (verified via E shortcut re-open); Delete in editor removes the wall (verified via right-click → Map actions menu); endpoint drag moves a single endpoint without deleting the wall (verified via right-click on the wall's new midpoint → Wall actions menu).
+- **All 899 unit tests + 201 Playwright specs pass.**
+
+### Bundle
+- **Initial-load brotli budget bumped 76 → 78 KB.** Phase 85 added ~1.7 KB (wall editor + endpoint drag plumbing + layer-walls rewrite + new exports). Lazy chunks unchanged. CSS 9.92 / 10 KB.
+
+### Out of scope for this phase
+- **Chain merging.** The original Phase 85 plan included "chain merging so a corridor edits as one shape" — letting the GM edit a connected wall sequence as a single polygon with shared vertices. That's a meaningfully bigger graph problem (detecting connected chains, snapping shared endpoints to common control points, splitting on edit) and would benefit from its own phase. The Phase 85 wall editor handles per-wall edits + multi-select group toggles, which covers the common authoring pain point ("I drew this wall slightly wrong, let me nudge it") without the graph machinery.
+- **Live length readout while drawing.** A small "12 ft" tooltip next to the rubber-band cursor would round out the live preview. Considered for this phase but deferred — the existing dashed preview already conveys the geometry, and adding a tooltip means deciding placement / units / collision-with-cursor heuristics. Easy follow-up if requested.
 
 ---
 

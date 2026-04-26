@@ -226,6 +226,32 @@ export interface Wall {
   y2: number;
   blocksSight: boolean;
   blocksMovement: boolean;
+  /**
+   * Phase 85 — render thickness in screen pixels at zoom = 1. Optional;
+   * pre-85 walls and freshly-drawn ones default to `WALL_DEFAULT_THICKNESS_PX`
+   * (see walls.ts). Stored per-wall so a stout exterior wall can be
+   * authored at e.g. 4px while interior dividers stay at 2px.
+   *
+   * Units are screen-pixels (the renderer divides by camera zoom so
+   * lines stay visually consistent across zoom levels) — same as
+   * the existing `WALL_WIDTH_SCREEN_PX` constant the layer used to
+   * apply uniformly.
+   */
+  thickness?: number;
+  /**
+   * Phase 85 — `'shared'` (default) walls render on both GM and
+   * Spectator canvases AND contribute to the spectator's LoS mask.
+   * `'gm'` walls render ONLY on the GM canvas (and STILL contribute
+   * to the spectator's LoS — they're physical occluders, the player
+   * just doesn't see the wall outline). Use case: secret doors,
+   * hidden passages — the wall blocks sight but the player doesn't
+   * know it's there until the GM reveals it.
+   *
+   * Optional + back-compat: pre-85 walls + freshly-drawn ones
+   * default to `'shared'`. Anything outside the known kinds collapses
+   * to `'shared'` in `deserializeState`.
+   */
+  visibility?: 'shared' | 'gm';
 }
 
 export interface InitiativeEntry {

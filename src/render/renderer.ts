@@ -120,6 +120,20 @@ interface CreateRendererOptions {
    */
   getWallsOverlay?(): WallsOverlay | null;
   /**
+   * Phase 85 — endpoint drag overlay for the in-place wall editor.
+   * When a GM is mid-drag of a single wall endpoint, the renderer
+   * uses this to paint the wall with the dragged endpoint at the
+   * cursor while the OTHER endpoint stays committed. The drag
+   * commits via a `wall-update` patch on pointerup; this is purely
+   * a per-frame visual.
+   */
+  getEndpointDrag?(): {
+    wallId: ID;
+    endpoint: 1 | 2;
+    x: number;
+    y: number;
+  } | null;
+  /**
    * Current LoS visibility polygons (one per viewer token). GM entry
    * passes the latest from `fogWorkerClient.getLatestPolygons()` when
    * `losMode !== 'off'`, `null` otherwise. The layer itself further
@@ -183,6 +197,7 @@ export function createRenderer(opts: CreateRendererOptions): Renderer {
     getDrawPreview,
     getFogRects,
     getWallsOverlay,
+    getEndpointDrag,
     getLosPolygons,
     getLightPolygons,
   } = opts;
@@ -277,6 +292,7 @@ export function createRenderer(opts: CreateRendererOptions): Renderer {
         overlay: null,
         highlightIds: EMPTY_HIGHLIGHT,
         dragOverlay: null,
+        endpointDrag: null,
         zoom: camera.zoom,
       });
     }
@@ -324,6 +340,7 @@ export function createRenderer(opts: CreateRendererOptions): Renderer {
         overlay: getWallsOverlay ? getWallsOverlay() : null,
         highlightIds: highlights,
         dragOverlay,
+        endpointDrag: getEndpointDrag ? getEndpointDrag() : null,
         zoom: camera.zoom,
       });
     }

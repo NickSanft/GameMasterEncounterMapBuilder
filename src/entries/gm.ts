@@ -11,6 +11,7 @@ import {
   createAoeOverlayRef,
   createDrawOverlayRef,
   createWallsOverlayRef,
+  createEndpointDragRef,
 } from '../input/context.js';
 import { createToolManager } from '../input/tool-manager.js';
 import { createSelectTool } from '../input/tool-select.js';
@@ -43,6 +44,7 @@ import { mountToolbar } from '../ui/toolbar.js';
 import { mountSessionMenu } from '../ui/session-menu.js';
 import { mountTokenEditor } from '../ui/token-editor.js';
 import { mountAnnotationEditor } from '../ui/annotation-editor.js';
+import { mountWallEditor } from '../ui/wall-editor.js';
 import { mountFogSettings } from '../ui/fog-settings.js';
 import { mountSettingsModal } from '../ui/settings-modal.js';
 import { mountZoomControls } from '../ui/zoom-controls.js';
@@ -209,6 +211,7 @@ const measurementOverlayRef = createMeasurementOverlayRef();
 const aoeOverlayRef = createAoeOverlayRef();
 const drawOverlayRef = createDrawOverlayRef();
 const wallsOverlayRef = createWallsOverlayRef();
+const endpointDragRef = createEndpointDragRef();
 const drawToolOptionsRef = createDrawToolOptionsRef({
   color: DEFAULT_STROKE_COLOR,
   width: DEFAULT_STROKE_WIDTH,
@@ -283,6 +286,8 @@ const renderer = createRenderer({
   getDrawPreview: () => drawOverlayRef.current,
   getFogRects: () => fogWorkerClient.getLatest(),
   getWallsOverlay: () => wallsOverlayRef.current,
+  // Phase 85 — endpoint drag for the in-place wall editor.
+  getEndpointDrag: () => endpointDragRef.current,
   getLosPolygons: () =>
     preferences.get().losMode === 'off'
       ? null
@@ -429,6 +434,8 @@ const inputContext = {
   store,
   selection,
   dragOverlay: dragOverlayRef,
+  // Phase 85 — endpoint drag for the in-place wall editor.
+  endpointDrag: endpointDragRef,
   lassoOverlay: lassoOverlayRef,
   lastPlaced: lastPlacedRef,
   measurementOverlay: measurementOverlayRef,
@@ -771,6 +778,30 @@ const tokenEditor = mountTokenEditor({
   feetPerSquare: () => preferences.get().feetPerSquare,
 });
 const annotationEditor = mountAnnotationEditor({ store });
+// Phase 85 — in-place wall editor. Opened from the right-click
+// "Edit wall…" entry. The modal calls back here with the edits;
+// we wrap them in a `store.batch` so a multi-select edit shows up
+// in the undo stack as a single step.
+const wallEditor = mountWallEditor({
+  getWallById: (id) => store.getState().walls.find((w) => w.id === id) ?? null,
+  onChange: (ids, changes) => {
+    if (ids.length === 0) return;
+    store.batch(() => {
+      for (const id of ids) {
+        store.applyPatch({ kind: 'wall-update', id, changes });
+      }
+    });
+  },
+  onDelete: (ids) => {
+    store.batch(() => {
+      for (const id of ids) {
+        store.applyPatch({ kind: 'wall-remove', id });
+      }
+    });
+    selection.ids = new Set();
+    renderer.requestRender();
+  },
+});
 const damageHealDialog = mountDamageHealDialog({
   store,
   onAnnounce: (msg) => announcer.announce(msg),
@@ -1124,6 +1155,16 @@ canvas.addEventListener('contextmenu', (e) => {
     // it offers to "Enable" all of them. Avoids ambiguous mid-state.
     const anyBlocksSight = selectedWalls.some((x) => x.blocksSight);
     items.push(
+      // Phase 85 — open the full wall editor for property + thickness +
+      // visibility editing. Kept as the first action so it's the
+      // discoverable entry point; the legacy quick toggles stay below
+      // for muscle-memory users.
+      {
+        label: `Edit wall${suffix}…`,
+        shortcut: 'E',
+        onClick: () => wallEditor.openFor(selectedWalls),
+      },
+      { kind: 'separator' },
       {
         label: anyBlocksSight
           ? `Disable sight blocking${suffix}`
@@ -2382,6 +2423,14 @@ window.addEventListener('keydown', (e) => {
       const firstSelectedToken = state.tokens.find((t) => selection.ids.has(t.id));
       if (firstSelectedToken && !tokenEditor.isOpen()) {
         tokenEditor.openFor(firstSelectedToken);
+        e.preventDefault();
+        break;
+      }
+      // Phase 85 — same shortcut opens the wall editor when one or
+      // more walls (and no tokens) are in selection.
+      const selectedWalls = state.walls.filter((w) => selection.ids.has(w.id));
+      if (selectedWalls.length > 0 && !wallEditor.isOpen()) {
+        wallEditor.openFor(selectedWalls);
         e.preventDefault();
       }
       break;

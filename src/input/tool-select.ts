@@ -11,7 +11,11 @@ import {
   collectWallLassoHits,
 } from './lasso.js';
 import { tokensInStackAt, cycleStackSelection } from '../state/token-stack.js';
-import { hitTestWalls } from '../state/walls.js';
+import {
+  hitTestWalls,
+  hitTestWallEndpoint,
+  WALL_HANDLE_SCREEN_PX,
+} from '../state/walls.js';
 import type { ID } from '../state/types.js';
 
 interface LassoInProgress {
@@ -23,8 +27,10 @@ interface LassoInProgress {
 
 export function createSelectTool(ctx: InputContext): Tool {
   const { canvas, renderer, store, selection, dragOverlay, lassoOverlay } = ctx;
+  const endpointDrag = ctx.endpointDrag;
   let activePointerId: number | null = null;
   let isDragging = false;
+  let isEndpointDrag = false;
   let dragStartWorldX = 0;
   let dragStartWorldY = 0;
   let lasso: LassoInProgress | null = null;
@@ -48,6 +54,41 @@ export function createSelectTool(ctx: InputContext): Tool {
     if (e.button !== 0 || ctx.isSpaceHeld()) return;
     const world = pointerToWorld(canvas, renderer, e);
     const state = store.getState();
+
+    // Phase 85 — endpoint-handle hit-test FIRST when there are
+    // selected walls. The handle's hit area is generously sized at
+    // ~12 world-pixels so the GM doesn't have to be pixel-perfect at
+    // any zoom level. World-space tolerance scales inversely with
+    // zoom so the on-screen target stays consistent — matches how
+    // the renderer paints the handle (`WALL_HANDLE_SCREEN_PX / zoom`).
+    if (endpointDrag && selection.ids.size > 0) {
+      const tolerance = (WALL_HANDLE_SCREEN_PX + 3) / Math.max(renderer.camera.zoom, 0.05);
+      const hit = hitTestWallEndpoint(
+        state.walls,
+        selection.ids,
+        world.x,
+        world.y,
+        tolerance,
+      );
+      if (hit) {
+        // Endpoint drag — set the live overlay and capture the pointer.
+        // Selection is unchanged (the endpoint belongs to a wall already
+        // in the selection set).
+        endpointDrag.current = {
+          wallId: hit.wall.id,
+          endpoint: hit.endpoint,
+          x: hit.endpoint === 1 ? hit.wall.x1 : hit.wall.x2,
+          y: hit.endpoint === 1 ? hit.wall.y1 : hit.wall.y2,
+        };
+        isEndpointDrag = true;
+        activePointerId = e.pointerId;
+        canvas.setPointerCapture(e.pointerId);
+        renderer.requestRender();
+        e.preventDefault();
+        return;
+      }
+    }
+
     const tokenHit = hitTestToken(state.tokens, state.grid, world.x, world.y);
     const annotHit = tokenHit
       ? null
@@ -138,6 +179,17 @@ export function createSelectTool(ctx: InputContext): Tool {
   function onPointerMove(e: PointerEvent) {
     if (e.pointerId !== activePointerId) return;
 
+    if (isEndpointDrag && endpointDrag?.current) {
+      const world = pointerToWorld(canvas, renderer, e);
+      endpointDrag.current = {
+        ...endpointDrag.current,
+        x: world.x,
+        y: world.y,
+      };
+      renderer.requestRender();
+      return;
+    }
+
     if (isDragging) {
       const world = pointerToWorld(canvas, renderer, e);
       dragOverlay.current = {
@@ -170,6 +222,31 @@ export function createSelectTool(ctx: InputContext): Tool {
       canvas.releasePointerCapture(e.pointerId);
     } catch {
       /* no-op */
+    }
+
+    if (isEndpointDrag && endpointDrag?.current) {
+      const drag = endpointDrag.current;
+      isEndpointDrag = false;
+      endpointDrag.current = null;
+      const state = store.getState();
+      const w = state.walls.find((x) => x.id === drag.wallId);
+      if (w) {
+        const same = drag.endpoint === 1
+          ? drag.x === w.x1 && drag.y === w.y1
+          : drag.x === w.x2 && drag.y === w.y2;
+        if (!same) {
+          store.applyPatch({
+            kind: 'wall-update',
+            id: drag.wallId,
+            changes:
+              drag.endpoint === 1
+                ? { x1: drag.x, y1: drag.y }
+                : { x2: drag.x, y2: drag.y },
+          });
+        }
+      }
+      renderer.requestRender();
+      return;
     }
 
     if (isDragging) {
@@ -299,7 +376,12 @@ export function createSelectTool(ctx: InputContext): Tool {
         lassoOverlay.current = null;
         renderer.requestRender();
       }
+      if (endpointDrag?.current) {
+        endpointDrag.current = null;
+        renderer.requestRender();
+      }
       isDragging = false;
+      isEndpointDrag = false;
       activePointerId = null;
       lasso = null;
     },

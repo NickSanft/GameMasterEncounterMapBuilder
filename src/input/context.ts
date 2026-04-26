@@ -18,6 +18,12 @@ export interface InputContext {
   setWheelEnabled(enabled: boolean): void;
   selection: SelectionState;
   dragOverlay: DragOverlayRef;
+  /**
+   * Phase 85 — set when a Select-tool drag begins on a selected wall's
+   * endpoint handle. Optional so non-select tools / pre-85 callers
+   * can omit it.
+   */
+  endpointDrag?: EndpointDragRef;
   lassoOverlay: LassoOverlayRef;
   lastPlaced: LastPlacedRef;
   measurementOverlay: MeasurementOverlayRef;
@@ -65,6 +71,30 @@ export interface WallsOverlayRef {
 }
 
 export function createWallsOverlayRef(): WallsOverlayRef {
+  return { current: null };
+}
+
+/**
+ * Phase 85 — endpoint drag in-flight state for the in-place wall
+ * editor. Set by the Select tool's pointerdown handler when the click
+ * landed on a selected wall's endpoint handle; updated on pointermove;
+ * cleared on pointerup after the `wall-update` patch commits. The
+ * renderer reads the value via `getEndpointDrag` so the wall preview
+ * follows the cursor at 60fps without a per-frame patch.
+ */
+export interface EndpointDragState {
+  wallId: ID;
+  endpoint: 1 | 2;
+  /** Live cursor position in world-pixels — what the renderer paints. */
+  x: number;
+  y: number;
+}
+
+export interface EndpointDragRef {
+  current: EndpointDragState | null;
+}
+
+export function createEndpointDragRef(): EndpointDragRef {
   return { current: null };
 }
 

@@ -1,0 +1,285 @@
+/**
+ * Phase 85 — GM-side wall editor modal.
+ *
+ * Pre-85 the GM could only adjust a wall by deleting + re-creating it
+ * (the sole context-menu actions were "Disable sight blocking" and
+ * "Delete wall"). This modal exposes everything the wall stores in
+ * one place: sight blocking, movement blocking, visibility (shared
+ * vs GM-only secret), and the new per-wall thickness slider.
+ *
+ * Multi-edit semantics — when more than one wall is selected, every
+ * field shows a "mixed" / "—" state if the values diverge across the
+ * selection, and applying the change writes it to ALL selected walls
+ * via a `store.batch()` so undo peels back the multi-update as a
+ * single step. Toggling a multi-edit checkbox sets every wall to the
+ * NEW value (not the inverse of each one's current state).
+ */
+
+import type { Wall } from '../state/types.js';
+import {
+  WALL_DEFAULT_THICKNESS_PX,
+  WALL_MIN_THICKNESS_PX,
+  WALL_MAX_THICKNESS_PX,
+  clampThickness,
+} from '../state/walls.js';
+import { attachFocusTrap, rememberFocus, restoreFocus } from '../util/focus.js';
+
+export interface WallEditorHandle {
+  /**
+   * Open the editor for the given walls. The list is captured by
+   * value at open-time; subsequent state mutations re-fetch via
+   * `getWallsById` so the displayed values stay live.
+   */
+  openFor(walls: readonly Wall[]): void;
+  close(): void;
+  isOpen(): boolean;
+  destroy(): void;
+}
+
+export interface WallEditorChange {
+  blocksSight?: boolean;
+  blocksMovement?: boolean;
+  thickness?: number;
+  visibility?: 'shared' | 'gm';
+}
+
+export interface WallEditorOptions {
+  /**
+   * Resolve the live state of a wall by id. Called whenever the modal
+   * re-renders so a concurrent wall-update from elsewhere (drag, undo)
+   * is reflected in the UI.
+   */
+  getWallById(id: string): Wall | null;
+  /**
+   * Apply `changes` to every wall in `ids`. The host wraps the calls
+   * in `store.batch` so undo treats the multi-edit as a single step.
+   */
+  onChange(ids: readonly string[], changes: WallEditorChange): void;
+  /**
+   * Delete every wall in `ids`. Closes the modal on success — the
+   * walls no longer exist to edit.
+   */
+  onDelete(ids: readonly string[]): void;
+}
+
+export function mountWallEditor(opts: WallEditorOptions): WallEditorHandle {
+  const backdrop = document.createElement('div');
+  backdrop.className = 'modal-backdrop';
+  backdrop.hidden = true;
+
+  const modal = document.createElement('div');
+  modal.className = 'modal wall-editor';
+  modal.setAttribute('role', 'dialog');
+  modal.setAttribute('aria-modal', 'true');
+  modal.setAttribute('aria-label', 'Edit wall');
+  modal.innerHTML = `
+    <div class="modal-header">
+      <h2 data-field="title">Edit wall</h2>
+      <button type="button" class="modal-close" aria-label="Close">×</button>
+    </div>
+    <div class="modal-body">
+      <p class="wall-editor-hint" data-field="hint">
+        Toggle behavior + adjust the line thickness. Drag the endpoint
+        handles on the canvas to move the wall in place.
+      </p>
+
+      <div class="wall-editor-row">
+        <label class="wall-editor-toggle">
+          <input type="checkbox" data-field="sight" />
+          <span>Blocks sight (line-of-sight)</span>
+        </label>
+      </div>
+
+      <div class="wall-editor-row">
+        <label class="wall-editor-toggle">
+          <input type="checkbox" data-field="movement" />
+          <span>Blocks movement (reserved for pathing)</span>
+        </label>
+      </div>
+
+      <div class="wall-editor-row">
+        <fieldset class="wall-editor-fieldset">
+          <legend>Visibility to players</legend>
+          <label class="wall-editor-radio">
+            <input type="radio" name="wall-vis" value="shared" data-field="vis-shared" />
+            <span>Shared — players see the wall outline</span>
+          </label>
+          <label class="wall-editor-radio">
+            <input type="radio" name="wall-vis" value="gm" data-field="vis-gm" />
+            <span>GM-only — wall blocks LoS but stays hidden (secret door / passage)</span>
+          </label>
+        </fieldset>
+      </div>
+
+      <div class="wall-editor-row">
+        <label class="wall-editor-slider">
+          <span>Line thickness</span>
+          <input type="range" data-field="thickness"
+                 min="${WALL_MIN_THICKNESS_PX}" max="${WALL_MAX_THICKNESS_PX}" step="0.5" />
+          <output data-field="thickness-out">—</output>
+        </label>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn-danger" data-field="delete">Delete</button>
+      <span class="modal-spacer"></span>
+      <button type="button" class="btn-primary" data-field="done">Done</button>
+    </div>
+  `;
+  backdrop.appendChild(modal);
+  document.body.appendChild(backdrop);
+  attachFocusTrap(modal);
+
+  const titleEl = modal.querySelector<HTMLHeadingElement>('[data-field="title"]')!;
+  const sightEl = modal.querySelector<HTMLInputElement>('[data-field="sight"]')!;
+  const movementEl = modal.querySelector<HTMLInputElement>('[data-field="movement"]')!;
+  const visSharedEl = modal.querySelector<HTMLInputElement>('[data-field="vis-shared"]')!;
+  const visGmEl = modal.querySelector<HTMLInputElement>('[data-field="vis-gm"]')!;
+  const thicknessEl = modal.querySelector<HTMLInputElement>('[data-field="thickness"]')!;
+  const thicknessOut = modal.querySelector<HTMLOutputElement>('[data-field="thickness-out"]')!;
+  const deleteBtn = modal.querySelector<HTMLButtonElement>('[data-field="delete"]')!;
+  const doneBtn = modal.querySelector<HTMLButtonElement>('[data-field="done"]')!;
+  const closeBtn = modal.querySelector<HTMLButtonElement>('.modal-close')!;
+
+  let triggerFocus: HTMLElement | null = null;
+  let editingIds: string[] = [];
+
+  function liveWalls(): Wall[] {
+    const out: Wall[] = [];
+    for (const id of editingIds) {
+      const w = opts.getWallById(id);
+      if (w) out.push(w);
+    }
+    return out;
+  }
+
+  function render() {
+    const walls = liveWalls();
+    if (walls.length === 0) {
+      // Walls vanished while editing (e.g. undo). Close — there's
+      // nothing to edit and no useful UI to show.
+      close();
+      return;
+    }
+
+    titleEl.textContent =
+      walls.length === 1 ? 'Edit wall' : `Edit walls (${walls.length})`;
+
+    // ---- Mixed-state helpers ----
+    function allSame<T>(get: (w: Wall) => T): T | null {
+      const first = get(walls[0]!);
+      for (let i = 1; i < walls.length; i++) {
+        if (get(walls[i]!) !== first) return null;
+      }
+      return first;
+    }
+
+    const sightSame = allSame((w) => w.blocksSight);
+    sightEl.checked = sightSame ?? false;
+    sightEl.indeterminate = sightSame === null;
+
+    const movementSame = allSame((w) => w.blocksMovement);
+    movementEl.checked = movementSame ?? false;
+    movementEl.indeterminate = movementSame === null;
+
+    const visSame = allSame((w) => w.visibility ?? 'shared');
+    visSharedEl.checked = visSame === 'shared';
+    visGmEl.checked = visSame === 'gm';
+    // Mixed selection — neither radio reads as "checked"; the GM has
+    // to pick one explicitly to apply it to all selected walls.
+
+    const thickSame = allSame((w) => w.thickness ?? WALL_DEFAULT_THICKNESS_PX);
+    if (thickSame !== null) {
+      thicknessEl.value = String(thickSame);
+      thicknessOut.textContent = `${thickSame.toFixed(1)} px`;
+    } else {
+      thicknessEl.value = String(WALL_DEFAULT_THICKNESS_PX);
+      thicknessOut.textContent = '— (mixed)';
+    }
+  }
+
+  function open(walls: readonly Wall[]) {
+    editingIds = walls.map((w) => w.id);
+    if (editingIds.length === 0) return;
+    if (!backdrop.hidden) {
+      // Already open — just re-target.
+      render();
+      return;
+    }
+    triggerFocus = rememberFocus();
+    backdrop.hidden = false;
+    render();
+    window.setTimeout(() => sightEl.focus(), 0);
+  }
+
+  function close() {
+    if (backdrop.hidden) return;
+    if (modal.contains(document.activeElement)) {
+      (document.activeElement as HTMLElement | null)?.blur();
+    }
+    backdrop.hidden = true;
+    editingIds = [];
+    const prior = triggerFocus;
+    triggerFocus = null;
+    restoreFocus(prior);
+  }
+
+  // ---- Event wiring ----
+  sightEl.addEventListener('change', () => {
+    opts.onChange(editingIds, { blocksSight: sightEl.checked });
+    render();
+  });
+  movementEl.addEventListener('change', () => {
+    opts.onChange(editingIds, { blocksMovement: movementEl.checked });
+    render();
+  });
+  visSharedEl.addEventListener('change', () => {
+    if (visSharedEl.checked) {
+      opts.onChange(editingIds, { visibility: 'shared' });
+      render();
+    }
+  });
+  visGmEl.addEventListener('change', () => {
+    if (visGmEl.checked) {
+      opts.onChange(editingIds, { visibility: 'gm' });
+      render();
+    }
+  });
+  thicknessEl.addEventListener('input', () => {
+    const v = clampThickness(parseFloat(thicknessEl.value));
+    thicknessOut.textContent = `${v.toFixed(1)} px`;
+  });
+  thicknessEl.addEventListener('change', () => {
+    const v = clampThickness(parseFloat(thicknessEl.value));
+    opts.onChange(editingIds, { thickness: v });
+    render();
+  });
+
+  deleteBtn.addEventListener('click', () => {
+    const ids = editingIds.slice();
+    if (ids.length === 0) return;
+    opts.onDelete(ids);
+    close();
+  });
+
+  doneBtn.addEventListener('click', close);
+  closeBtn.addEventListener('click', close);
+  backdrop.addEventListener('click', (e) => {
+    if (e.target === backdrop) close();
+  });
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !backdrop.hidden) {
+      close();
+      e.preventDefault();
+    }
+  });
+
+  return {
+    openFor: open,
+    close,
+    isOpen: () => !backdrop.hidden,
+    destroy() {
+      backdrop.remove();
+    },
+  };
+}
