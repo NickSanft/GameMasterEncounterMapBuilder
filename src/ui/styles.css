@@ -2064,6 +2064,61 @@ body.reduced-motion *::after {
   background: var(--hover-overlay);
 }
 
+/* Phase 93 — turn-timer slot. Renders to the right of the controls
+   when the GM has set turnTimerSeconds > 0. Visual urgency shifts
+   at the 30 s and 10 s thresholds; expired pulses to draw the
+   GM's eye. The reduced-motion preference disables the pulse. */
+.initiative-bar-timer {
+  font-variant-numeric: tabular-nums;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.92rem;
+  padding: 0.15rem 0.55rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--fg);
+  min-width: 3.2em;
+  text-align: center;
+}
+
+.initiative-bar-timer[hidden] {
+  display: none;
+}
+
+.initiative-bar-timer[data-urgency='warn'] {
+  color: #f5b400;
+  border-color: #f5b400;
+}
+
+.initiative-bar-timer[data-urgency='urgent'] {
+  color: #ff7043;
+  border-color: #ff7043;
+}
+
+.initiative-bar-timer[data-urgency='expired'] {
+  color: #fff;
+  background: #c0392b;
+  border-color: #c0392b;
+  animation: turn-timer-pulse 0.9s ease-in-out infinite;
+}
+
+@keyframes turn-timer-pulse {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.06); }
+}
+
+/* Honor the user's reduced-motion preference (Phase 50): drop the
+   pulse animation entirely so the expired badge holds its color
+   without the size oscillation. */
+@media (prefers-reduced-motion: reduce) {
+  .initiative-bar-timer[data-urgency='expired'] {
+    animation: none;
+  }
+}
+body.reduced-motion .initiative-bar-timer[data-urgency='expired'] {
+  animation: none;
+}
+
 /* Initiative modal */
 .initiative-modal {
   min-width: 520px;

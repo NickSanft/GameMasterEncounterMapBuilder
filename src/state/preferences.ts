@@ -126,6 +126,21 @@ export interface Preferences {
    * loadFromStorage path treats missing keys as the default value.
    */
   onboardingComplete: boolean;
+  /**
+   * Phase 93 — per-turn timer duration in seconds. `0` disables the
+   * timer entirely (default — most groups don't want a clock running);
+   * any positive value resets a countdown to that many seconds when
+   * the active initiative entry changes. The countdown shows next to
+   * the active token's name in the initiative bar; visual urgency
+   * shifts at 30 s and 10 s remaining; reaching 0 announces "Time"
+   * via the live region (Phase 90 rate-limited).
+   *
+   * GM-only: the Spectator initiative bar doesn't render the timer
+   * (the players don't need to see their own clock — that'd add
+   * pressure). A future setting could expose it to Spectator if a
+   * group wants the visible pressure on purpose.
+   */
+  turnTimerSeconds: number;
   // Phase 67 — `playerNameGm`, `playerNameSpectator`,
   // `playerColorGm`, `playerColorSpectator` moved out of Preferences
   // into the dedicated `IdentityPrefsStore` (`state/identity-prefs.ts`).
@@ -158,6 +173,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   autoRevealFromViewers: false,
   voiceTranscription: true,
   onboardingComplete: false,
+  turnTimerSeconds: 0,
 };
 
 export interface PreferencesStore {

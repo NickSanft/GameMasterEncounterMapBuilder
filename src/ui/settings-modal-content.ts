@@ -104,6 +104,8 @@ export function buildSettingsModal(
   const gmFogOpacityLabel = modal.querySelector<HTMLSpanElement>('[data-field="gmFogOpacityValue"]');
   const broadcastCameraInput = modal.querySelector<HTMLInputElement>('[data-field="broadcastCamera"]');
   const followGmCameraInput = modal.querySelector<HTMLInputElement>('[data-field="followGmCamera"]');
+  // Phase 93 — turn-timer duration. Only present in the GM view.
+  const turnTimerSecondsInput = modal.querySelector<HTMLSelectElement>('[data-field="turnTimerSeconds"]');
   const resetBtn = modal.querySelector<HTMLButtonElement>('[data-action="reset-prefs"]')!;
   const scanImagesBtn = modal.querySelector<HTMLButtonElement>('[data-action="scan-images"]');
   const scanImagesStatus = modal.querySelector<HTMLDivElement>('[data-field="scan-images-status"]');
@@ -183,6 +185,7 @@ export function buildSettingsModal(
     if (gmFogOpacityLabel) gmFogOpacityLabel.textContent = `${Math.round(prefs.gmFogOpacity * 100)}%`;
     if (broadcastCameraInput) broadcastCameraInput.checked = prefs.broadcastCamera;
     if (followGmCameraInput) followGmCameraInput.checked = prefs.followGmCamera;
+    if (turnTimerSecondsInput) turnTimerSecondsInput.value = String(prefs.turnTimerSeconds);
     if (showDiagnosticsInput) showDiagnosticsInput.checked = prefs.showDiagnostics;
     if (showSpectatorViewportInput) showSpectatorViewportInput.checked = prefs.showSpectatorViewport;
     for (const r of distanceUnitRadios) r.checked = r.value === prefs.distanceUnit;
@@ -361,6 +364,17 @@ export function buildSettingsModal(
   if (followGmCameraInput) {
     followGmCameraInput.addEventListener('change', () => {
       preferences.update({ followGmCamera: followGmCameraInput.checked });
+    });
+  }
+
+  if (turnTimerSecondsInput) {
+    turnTimerSecondsInput.addEventListener('change', () => {
+      const v = parseInt(turnTimerSecondsInput.value, 10);
+      // Defensive: collapse non-numeric / negative values to 0 (off).
+      // The <option> values are static integers so this normally
+      // won't fire, but a future "Custom" entry would benefit.
+      const next = Number.isFinite(v) && v >= 0 ? v : 0;
+      preferences.update({ turnTimerSeconds: next });
     });
   }
 
@@ -608,6 +622,27 @@ function renderCameraPane(viewMode: ViewMode): string {
         </label>
         <p class="settings-hint">Requires the GM view to enable "Broadcast my camera". Panning or zooming here pauses following for 2 seconds.</p>`;
 
+  // Phase 93 — turn timer subgroup (GM only). Spectator doesn't see
+  // the timer in the bar, so the setting wouldn't do anything for
+  // them either.
+  const turnTimerRow = viewMode === 'gm'
+    ? `
+      <fieldset class="settings-subgroup">
+        <legend>Per-turn timer</legend>
+        <label>Duration
+          <select data-field="turnTimerSeconds">
+            <option value="0">Off</option>
+            <option value="30">30 seconds</option>
+            <option value="60">1 minute</option>
+            <option value="90">1 minute 30</option>
+            <option value="120">2 minutes</option>
+            <option value="180">3 minutes</option>
+          </select>
+        </label>
+        <p class="settings-hint">Shows a countdown next to the active token in the initiative bar. Resets every turn. Counts down silently to 30 s, turns amber, then red at 10 s, and pulses + announces "Time" when it hits zero. Spectator doesn't see the clock.</p>
+      </fieldset>`
+    : '';
+
   return `
     <section ${paneAttrs('camera', false)}>
       <label class="check">
@@ -615,6 +650,7 @@ function renderCameraPane(viewMode: ViewMode): string {
         <span>Persist camera position on refresh</span>
       </label>
       ${syncRow}
+      ${turnTimerRow}
     </section>
   `;
 }

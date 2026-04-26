@@ -871,6 +871,14 @@ const shortcutOverlay = mountShortcutOverlay('gm');
 const initiativeModal = mountInitiativeModal({ store });
 mountInitiativeBar(store, 'gm', {
   onOpenTracker: () => initiativeModal.open(),
+  // Phase 93 — turn-timer plumbing.
+  getTurnTimerSeconds: () => preferences.get().turnTimerSeconds,
+  onTimerExpired: (label) => {
+    // Single short message — Phase 90's repeat-suppress prevents the
+    // "Time" announcement from re-firing if the GM lingers on the
+    // expired turn for a while.
+    announcer.announce(`Time — ${label}`, 'assertive');
+  },
 });
 mountHelpOverlay('gm');
 

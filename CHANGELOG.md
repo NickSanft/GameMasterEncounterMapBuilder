@@ -63,7 +63,7 @@ _Accessibility:_
 _Combat power-user UX:_
 
 - **0.92.0** — Quick-HP adjust via +/- keys (Shift = ±5) — wheel-scroll variant deferred ✅
-- **0.93.0** — Per-token turn timer (optional countdown above the active initiative card)
+- **0.93.0** — Per-turn countdown timer (Settings → Camera; optional, off by default) ✅
 - **0.94.0** — Combat log panel (auto-record damage / conditions / death-saves / turn changes; toggleable side panel + export)
 
 _Onboarding & discoverability:_
@@ -96,6 +96,48 @@ _Polish:_
 - **0.108.0** — Recent backgrounds quick switcher (mirrors the Phase 75 recent-scenes pattern but for backgrounds)
 - **0.109.0** — Per-spectator token visibility (extend Phase 82's permissions to "GM hides individual tokens from individual players")
 - **0.110.0** — Persistent player names across reloads (stable cross-session player IDs — flagged in Phase 82 as future)
+
+---
+
+## [0.93.0] — 2026-04-26 — Per-turn countdown timer
+
+### Added
+- **Optional per-turn countdown** in the GM initiative bar. Off by default; configurable in Settings → Camera → "Per-turn timer" with presets at 30 s / 1 min / 1:30 / 2 min / 3 min. When set, every active-turn change resets the countdown to the chosen duration; the timer ticks once per second next to the active token's name in the initiative bar.
+- **Visual urgency tiers:**
+  - **normal** (white text, neutral border) above 30 s remaining
+  - **warn** (amber `#f5b400`) at ≤ 30 s
+  - **urgent** (orange-red `#ff7043`) at ≤ 10 s
+  - **expired** (white-on-red `#c0392b` + 0.9 s pulse animation) at 0
+- **"Time" announcement** via the live region (assertive priority) when the countdown hits 0. Phase 90's repeat-suppression keeps it from re-announcing if the GM lingers on an expired turn. Format: `"Time — Goblin"`.
+- **Reduced-motion respect** — the expired-state pulse animation is disabled when the OS / app `prefers-reduced-motion` (Phase 50) or the in-app `reducedMotion` preference is on. The badge keeps its color, just doesn't oscillate.
+
+### Why GM-only by default
+The original suggestion was "per-token turn timer" — what shipped is a single global timer that resets per turn. Per-token-specific durations (e.g. "the BBEG gets 90 s, mooks get 30 s") would need a UI to set each entry's individual duration; deferred. The "single global timer with per-turn reset" model covers the main pain point ("nudge slow players without scolding") without the per-entry data + UI complexity.
+
+The Spectator initiative bar deliberately does NOT render the timer:
+- Players seeing their own clock running adds visible time-pressure that not every group wants.
+- The GM is the audience that needs the visual nudge to advance the round.
+- A future setting could expose the clock to Spectator if a group wants the visible pressure on purpose; today it's GM-only with no extra opt-in needed for the "low-pressure default".
+
+### Architecture
+- **`src/state/turn-timer.ts`** (new) — pure helpers + a tiny stateful holder, all easily testable with a clock seam:
+  - `activeTurnKey(activeId, round)` — combines round + id so the same token getting their second turn (e.g. legendary action) still resets the clock.
+  - `urgencyFor(remaining, total)` → `'normal' | 'warn' | 'urgent' | 'expired'`.
+  - `formatTimer(ms)` → `M:SS` (or `:SS` for sub-minute) with ceil rounding so the displayed value never under-promises remaining time.
+  - `computeTimerView({ now, startedAt, durationSeconds })` — the per-render snapshot the bar paints.
+  - `createTurnTimerState({ now })` — tracks `activeKey` + `startedAt`, resets on `syncActive(newKey)`.
+- **`src/ui/initiative-bar.ts`** — extended with the timer slot. Uses `setInterval(1s)` to repaint while the bar is visible; the interval auto-stops when no turn is active or the timer is disabled. New options: `getTurnTimerSeconds()` (polled per render so a Settings change applies on next state tick) + `onTimerExpired(label)` (one-shot per active key).
+- **`src/ui/styles.css`** — `.initiative-bar-timer` with `data-urgency='warn|urgent|expired'` color tiers + the `turn-timer-pulse` keyframes (disabled under `prefers-reduced-motion` and `body.reduced-motion`).
+- **`src/state/preferences.ts`** — new `turnTimerSeconds: number` field. Default 0 (off). Existing `loadFromStorage` spread-merge handles back-compat for pre-93 saves.
+- **`src/ui/settings-modal-content.ts`** — new "Per-turn timer" subgroup at the bottom of the Camera pane (GM-only branch).
+
+### Tests
+- **+22 unit tests** in `src/state/turn-timer.test.ts` covering: `activeTurnKey` null-handling + round-incorporation; `urgencyFor` thresholds (warn / urgent / expired) plus the disabled-timer case; `formatTimer` whole-minute, sub-minute leading-colon, ceil-rounding, non-finite clamping; `computeTimerView` null when disabled / no active turn, accurate remainingMs, urgency tier transitions, expired clamping; `createTurnTimerState` initial null state, syncActive on first key, no-op same-key, reset on new-key, clear on null.
+- **+3 Playwright specs** in `e2e/turn-timer.spec.ts` (new): timer slot hidden by default, Settings dropdown writes the preference (verified via localStorage), Spectator initiative bar omits the timer slot entirely.
+- **All 1039 unit tests + 225 Playwright specs pass.**
+
+### Bundle
+- 79.28 / 80 KB initial-load brotli (+0.5 KB for the timer module + bar wiring + Settings UI). Lazy chunks unchanged. CSS unchanged (the timer slot is small + the keyframes compress well).
 
 ---
 
