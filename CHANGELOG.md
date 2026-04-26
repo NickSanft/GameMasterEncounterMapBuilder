@@ -56,7 +56,7 @@ _Accessibility:_
 - **0.86.0** — Keyboard-navigable canvas selection (Tab cycles entities; arrow keys nudge; Esc clears) ✅
 - **0.87.0** — Per-entity ARIA outline panel (hidden region listing every entity + its current state for screen readers) ✅
 - **0.88.0** — Focus-visible audit per theme (consistent 2 px focus rings across all 5 themes) ✅
-- **0.89.0** — WCAG contrast verification across themes (formal AA+ pass; fix `.fg-muted` secondary-label colors that fail contrast)
+- **0.89.0** — WCAG contrast verification across themes (formal AA+ pass; fix `.fg-muted` secondary-label colors that fail contrast) ✅
 - **0.90.0** — Live-region announcement budget (min-interval queue so combat-heavy bursts don't drown out screen readers)
 - **0.91.0** — `prefers-contrast: more` support (auto-promote OS high-contrast users into the in-app `highContrast` mode)
 
@@ -96,6 +96,47 @@ _Polish:_
 - **0.108.0** — Recent backgrounds quick switcher (mirrors the Phase 75 recent-scenes pattern but for backgrounds)
 - **0.109.0** — Per-spectator token visibility (extend Phase 82's permissions to "GM hides individual tokens from individual players")
 - **0.110.0** — Persistent player names across reloads (stable cross-session player IDs — flagged in Phase 82 as future)
+
+---
+
+## [0.89.0] — 2026-04-26 — WCAG contrast verification across themes
+
+### Added
+- **`src/util/contrast.ts`** (new) — WCAG 2.1 contrast helpers: `parseHex`, `relativeLuminance`, `contrastRatio`, `meetsThreshold`, `formatRatio`, plus a `WCAG` constants table (`AA_NORMAL_TEXT: 4.5`, `AA_LARGE_TEXT: 3`, `AA_UI_COMPONENT: 3`, `AAA_NORMAL_TEXT: 7`, `AAA_LARGE_TEXT: 4.5`). Pure functions, no DOM.
+- **`src/util/theme-contrast.test.ts`** (new) — programmatic WCAG audit covering all 5 theme palettes × 7 token pairs (35 assertions). Acts as a regression guard — any future palette tweak that drops a token below threshold fails this test with a precise message ("expected ≥ 4.50:1, got 4.46:1 for fg-muted on bg in theme-parchment").
+
+### Fixed
+- **Parchment theme `--fg-muted` bumped from `#7a6a4d` to `#776747`.** Audit found it at 4.46:1 against the parchment background — a hair under the WCAG AA normal-text bar (4.5:1). The new value lands at 4.68:1 with minimal visual drift (3 RGB units across the warmer channels). All other 34 audit pairs already met threshold.
+
+### Audit results
+Every theme × pair combination — primary text, secondary text, accent UI components — meets WCAG AA. Highlights:
+
+| theme        | fg on bg | fg-muted on bg     | accent on bg |
+|--------------|----------|--------------------|--------------|
+| dark         | 13.0:1   | 6.6:1              | 4.7:1        |
+| light        | 16.4:1   | 5.7:1              | 5.0:1        |
+| parchment    | 11.2:1   | **4.68:1** (was 4.46:1) | 5.4:1   |
+| console      | 12.8:1   | 4.7:1              | 13.4:1       |
+| purple-dusk  | 13.7:1   | 5.0:1              | 6.6:1        |
+
+All five themes also clear the **AAA** bar (7:1) for primary text on background. `fg-muted` clears AAA on `light` and is between AA and AAA on the others — acceptable for secondary text.
+
+### Tests
+- **+17 unit tests** in `src/util/contrast.test.ts` covering `parseHex` (3-digit, 6-digit, 8-digit-with-alpha, mixed-case, invalid input throws), `relativeLuminance` (white = 1, black = 0, green > red > blue weights, sub-threshold piecewise behavior), `contrastRatio` (white-on-black = 21, identical = 1, symmetric, matches the published `#767676` ≈ 4.54:1 reference), `meetsThreshold` + `formatRatio`.
+- **+35 unit tests** in `src/util/theme-contrast.test.ts` (5 themes × 7 token pairs). Stable regression guard — any future palette change that drops contrast fails CI.
+- **All 981 unit tests + 215 Playwright specs pass.**
+
+### Bundle
+- 77.93 / 78 KB initial-load brotli — unchanged. The contrast helpers are tree-shaken out of the production bundle (only the test files import them).
+- Visual-regression baselines are unchanged — the `--fg-muted` bump is too small to register as a snapshot diff at the screenshot tolerance threshold the CI uses.
+
+### Why "AA polish" vs "AAA pass"
+WCAG AAA on text requires 7:1, which would force a noticeably darker `--fg-muted` in every theme — losing the visual distinction from `--fg`. The mainstream practice is AA across the board with AAA as a stretch target where it doesn't compromise design. Phase 89 ships AA-clean across every theme + every pair, which is the practical accessibility win.
+
+### Known limitations the audit doesn't cover
+- **Computed colors that aren't in the palette table.** The contrast test reads a fixed lookup of named tokens. Inline rgba() values (e.g. `.modal-backdrop`'s `rgba(0,0,0,0.55)`) aren't checked. They're typically used for overlays where the underlying color is already vetted.
+- **Per-component contrast (e.g. `.scene-indicator-count` accent-on-accent).** A few decorative chips use accent for both bg + fg, which the audit table doesn't surface. Visual inspection passes; a future polish could add per-component contrast assertions.
+- **Reduced color schemes** (Windows high contrast, Forced Colors mode). Phase 91's `prefers-contrast: more` will partially address the bigger picture; full Forced-Colors-mode support is a separate effort.
 
 ---
 

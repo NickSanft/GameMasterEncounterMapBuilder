@@ -52,7 +52,11 @@ body.theme-parchment {
   --bg: #f4ecd8;
   --bg-elev: #fbf6e8;
   --fg: #3a2e1f;
-  --fg-muted: #7a6a4d;
+  /* Phase 89 — `#7a6a4d` clocked in at 4.46:1 against `--bg`, just
+     under the 4.5:1 WCAG AA normal-text bar. `#776747` is a tiny
+     darken (3 RGB units across the warmer channels) that lands at
+     4.68:1 with minimal visual drift. */
+  --fg-muted: #776747;
   --accent: #8b4513;
   --accent-hover: #a0522d;
   --border: #d4c5a3;
