@@ -233,9 +233,32 @@ function loadFromStorage(): Preferences {
   }
 }
 
+/**
+ * Read OS-level a11y preferences and fold them into the defaults. The
+ * user's stored preferences (loaded by `loadFromStorage`) override
+ * these — so a user who manually toggles `highContrast` off keeps
+ * their choice even if the OS says "more contrast", and vice versa.
+ *
+ * Phase 91 — added `prefers-contrast: more` → `highContrast: true`
+ * mapping. Mirrors the Phase 50 `prefers-reduced-motion` pattern. Both
+ * preferences feed the in-app `highContrast` flag (Phase 88 wired the
+ * `body.high-contrast` class to thicker focus rings + a complementary
+ * outer halo); pre-91 there was no auto-promotion path, so a user
+ * with Windows High Contrast Mode on landed on the default
+ * `highContrast: false` and had to dig into Settings to flip it.
+ *
+ * Note on runtime OS changes: if the user toggles their OS contrast
+ * preference WHILE the app is open, we don't auto-flip — that would
+ * surprise users who've explicitly chosen a setting. Reloading the
+ * page picks up the new OS preference (subject to the same "stored
+ * value wins" rule).
+ */
 function systemDefaults(): Preferences {
   const reducedMotion = typeof window !== 'undefined'
     ? window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false
     : false;
-  return { ...DEFAULT_PREFERENCES, reducedMotion };
+  const highContrast = typeof window !== 'undefined'
+    ? window.matchMedia?.('(prefers-contrast: more)').matches ?? false
+    : false;
+  return { ...DEFAULT_PREFERENCES, reducedMotion, highContrast };
 }

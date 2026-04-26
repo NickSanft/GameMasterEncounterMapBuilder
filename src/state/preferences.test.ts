@@ -127,3 +127,109 @@ describe('createPreferences', () => {
     expect(prefs.get().showSpectatorViewport).toBe(false);
   });
 });
+
+/**
+ * Phase 91 — `prefers-contrast: more` auto-promotes the in-app
+ * `highContrast` preference. Tests stub `window.matchMedia` so the OS
+ * preference can be controlled deterministically.
+ */
+describe('createPreferences — Phase 91 (prefers-contrast: more)', () => {
+  type MQL = MediaQueryList;
+  const realMatchMedia = window.matchMedia;
+
+  /** Stub matchMedia so a given query returns a specific `matches` value. */
+  function stubMatchMedia(matchesByQuery: Record<string, boolean>) {
+    window.matchMedia = ((query: string) => ({
+      matches: matchesByQuery[query] ?? false,
+      media: query,
+      onchange: null,
+      addListener: () => {},
+      removeListener: () => {},
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      dispatchEvent: () => false,
+    } as unknown as MQL)) as typeof window.matchMedia;
+  }
+
+  function restoreMatchMedia() {
+    window.matchMedia = realMatchMedia;
+  }
+
+  it('seeds highContrast: true when the OS reports prefers-contrast: more', () => {
+    stubMatchMedia({ '(prefers-contrast: more)': true });
+    try {
+      const prefs = createPreferences();
+      expect(prefs.get().highContrast).toBe(true);
+    } finally {
+      restoreMatchMedia();
+    }
+  });
+
+  it('seeds highContrast: false when the OS does NOT report prefers-contrast: more', () => {
+    stubMatchMedia({ '(prefers-contrast: more)': false });
+    try {
+      const prefs = createPreferences();
+      expect(prefs.get().highContrast).toBe(false);
+    } finally {
+      restoreMatchMedia();
+    }
+  });
+
+  it('user stored preference WINS over the OS preference', () => {
+    stubMatchMedia({ '(prefers-contrast: more)': true });
+    try {
+      // User has explicitly disabled high-contrast despite the OS being on.
+      localStorage.setItem(
+        PREFERENCES_KEY,
+        JSON.stringify({ highContrast: false }),
+      );
+      const prefs = createPreferences();
+      expect(prefs.get().highContrast).toBe(false);
+    } finally {
+      restoreMatchMedia();
+    }
+  });
+
+  it('user stored TRUE wins even when OS reports OFF', () => {
+    stubMatchMedia({ '(prefers-contrast: more)': false });
+    try {
+      localStorage.setItem(
+        PREFERENCES_KEY,
+        JSON.stringify({ highContrast: true }),
+      );
+      const prefs = createPreferences();
+      expect(prefs.get().highContrast).toBe(true);
+    } finally {
+      restoreMatchMedia();
+    }
+  });
+
+  it('reset() goes back to the OS-derived default (not the static false)', () => {
+    stubMatchMedia({ '(prefers-contrast: more)': true });
+    try {
+      const prefs = createPreferences();
+      // First flip user preference OFF.
+      prefs.update({ highContrast: false });
+      expect(prefs.get().highContrast).toBe(false);
+      // Reset → should re-pick up the OS preference.
+      prefs.reset();
+      expect(prefs.get().highContrast).toBe(true);
+    } finally {
+      restoreMatchMedia();
+    }
+  });
+
+  it('prefers-reduced-motion + prefers-contrast: more both seed independently', () => {
+    stubMatchMedia({
+      '(prefers-reduced-motion: reduce)': true,
+      '(prefers-contrast: more)': true,
+    });
+    try {
+      const prefs = createPreferences();
+      expect(prefs.get().reducedMotion).toBe(true);
+      expect(prefs.get().highContrast).toBe(true);
+    } finally {
+      restoreMatchMedia();
+    }
+  });
+});

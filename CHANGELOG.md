@@ -58,7 +58,7 @@ _Accessibility:_
 - **0.88.0** — Focus-visible audit per theme (consistent 2 px focus rings across all 5 themes) ✅
 - **0.89.0** — WCAG contrast verification across themes (formal AA+ pass; fix `.fg-muted` secondary-label colors that fail contrast) ✅
 - **0.90.0** — Live-region announcement budget (min-interval queue so combat-heavy bursts don't drown out screen readers) ✅
-- **0.91.0** — `prefers-contrast: more` support (auto-promote OS high-contrast users into the in-app `highContrast` mode)
+- **0.91.0** — `prefers-contrast: more` support (auto-promote OS high-contrast users into the in-app `highContrast` mode) ✅
 
 _Combat power-user UX:_
 
@@ -96,6 +96,42 @@ _Polish:_
 - **0.108.0** — Recent backgrounds quick switcher (mirrors the Phase 75 recent-scenes pattern but for backgrounds)
 - **0.109.0** — Per-spectator token visibility (extend Phase 82's permissions to "GM hides individual tokens from individual players")
 - **0.110.0** — Persistent player names across reloads (stable cross-session player IDs — flagged in Phase 82 as future)
+
+---
+
+## [0.91.0] — 2026-04-26 — `prefers-contrast: more` auto-promotes the highContrast preference
+
+### Added
+- **`prefers-contrast: more` → `highContrast: true` auto-promotion** at boot. Pre-91 a user with Windows High Contrast Mode (or macOS "Increase Contrast", or any OS-level "more contrast" preference) landed on the in-app default `highContrast: false` and had to dig into Settings → Appearance to flip it. Phase 91 mirrors the existing `prefers-reduced-motion` boot path so OS-level a11y preferences feed the in-app flag automatically.
+- **The auto-promotion respects the user's stored override.** If the user explicitly disabled high-contrast in Settings (saved to localStorage), that wins on every subsequent boot — even if the OS still reports "more contrast". And vice versa: a user who turned high-contrast ON manually keeps it on if the OS toggles back to "no preference".
+- **`reset()` re-reads the OS** — clearing the user's override and going back to "system defaults" picks up the current OS preference, not a static `false`.
+
+### How it works
+- **`src/state/preferences.ts`** — extended `systemDefaults()` to read the new media query alongside the existing `prefers-reduced-motion` check:
+  ```typescript
+  const highContrast = window.matchMedia?.('(prefers-contrast: more)').matches ?? false;
+  return { ...DEFAULT_PREFERENCES, reducedMotion, highContrast };
+  ```
+  The user's stored value loaded by `loadFromStorage` continues to win via the existing `{ ...defaults, ...parsed }` merge — same pattern that's been carrying `reducedMotion` since Phase 50.
+
+### Why no runtime-flip on OS change
+Subscribed to `mql.addEventListener('change', ...)` would let us flip the in-app preference live when the user toggles Windows HCM mid-session. Considered + rejected because:
+- The user might have explicitly chosen a setting that disagrees with the new OS preference. Auto-flipping would override their choice silently.
+- The "stored value wins" rule means once a user has touched the Settings checkbox, they own it. Auto-flipping would break that.
+- A page reload picks up the new OS preference (subject to the same stored-override rule), which is the natural cadence for an OS-level setting change.
+
+A future polish could surface a non-blocking notice ("Your OS contrast preference changed — reload to apply") when the OS-level value flips and the user hasn't customized.
+
+### Tests
+- **+6 unit tests** in `src/state/preferences.test.ts` (extended) covering: OS reports `more` → seeds true; OS reports default → seeds false; user-stored false wins over OS true; user-stored true wins over OS false; `reset()` re-reads OS preference; `prefers-reduced-motion` + `prefers-contrast: more` seed independently. Tests stub `window.matchMedia` per-test for deterministic OS-preference simulation.
+- **+3 Playwright specs** in `e2e/prefers-contrast.spec.ts` (new): Playwright's `page.emulateMedia({ contrast: 'more' })` drives the OS-level query; tests verify the resulting `body.high-contrast` class. Coverage: OS more → class present; OS default → class absent; user-stored override wins over OS preference.
+- **All 998 unit tests + 218 Playwright specs pass.**
+
+### Bundle
+- 78.12 / 80 KB initial-load brotli — effectively unchanged (the matchMedia call adds ~50 bytes).
+
+### Ties together
+With Phase 88's high-contrast escalation (3 px focus rings + complementary halo) + Phase 89's WCAG AA verification + Phase 90's announcement budget + Phase 91's auto-promotion, the accessibility primitives in Phases 86–91 form a coherent set: a user with OS-level high-contrast on lands the app in high-contrast mode, hears every entity announced at a comfortable pace, can navigate the canvas via Tab cycling, and reads the full game state via the ARIA outline panel.
 
 ---
 
