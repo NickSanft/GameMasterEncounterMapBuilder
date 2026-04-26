@@ -54,7 +54,7 @@ it announces).
 _Accessibility:_
 
 - **0.86.0** — Keyboard-navigable canvas selection (Tab cycles entities; arrow keys nudge; Esc clears) ✅
-- **0.87.0** — Per-entity ARIA outline panel (hidden region listing every entity + its current state for screen readers)
+- **0.87.0** — Per-entity ARIA outline panel (hidden region listing every entity + its current state for screen readers) ✅
 - **0.88.0** — Focus-visible audit per theme (consistent 2 px focus rings across all 5 themes)
 - **0.89.0** — WCAG contrast verification across themes (formal AA+ pass; fix `.fg-muted` secondary-label colors that fail contrast)
 - **0.90.0** — Live-region announcement budget (min-interval queue so combat-heavy bursts don't drown out screen readers)
@@ -96,6 +96,58 @@ _Polish:_
 - **0.108.0** — Recent backgrounds quick switcher (mirrors the Phase 75 recent-scenes pattern but for backgrounds)
 - **0.109.0** — Per-spectator token visibility (extend Phase 82's permissions to "GM hides individual tokens from individual players")
 - **0.110.0** — Persistent player names across reloads (stable cross-session player IDs — flagged in Phase 82 as future)
+
+---
+
+## [0.87.0] — 2026-04-26 — Per-entity ARIA outline panel
+
+### Added
+- **Visually-hidden `<aside role="region" aria-label="Canvas outline">`** that mirrors the live canvas state as a structured outline. Pre-87 a screen reader landed on the canvas's `aria-label` and got a one-line summary ("12 tokens placed, 40% fog revealed") — useful but coarse. Individual entities were invisible to AT (the canvas paints pixels, not DOM nodes). Phase 86 added Tab cycling + per-cycle descriptions, but didn't expose the full game state in one place.
+- **The outline structure:**
+  ```html
+  <aside role="region" aria-label="Canvas outline" class="sr-only">
+    <h2>Canvas outline</h2>
+    <h3>Tokens (12)</h3>
+    <ul>
+      <li>Goblin at column 5, row 7, 3 of 7 HP (selected)</li>
+      <li>Orc at column 8, row 7, 12 of 12 HP</li>
+      …
+    </ul>
+    <h3>Walls (4)</h3>  …
+  </aside>
+  ```
+  Headings switch to singular for count == 1 ("Wall", "Note") and the kind is omitted entirely when no entities of that kind exist. Empty canvas reads "Canvas is empty."
+- **The active selection is marked** with " (selected)" suffix on the description AND `aria-current="true"` on the `<li>` so AT can navigate directly to it via the "current item" command (NVDA: Insert+End-of-element).
+- **`aria-live="polite"`** on the region so additions / removals get spoken when they happen, with `aria-atomic="false"` so only the changed children get re-read (not the full outline). Combined with the 120 ms render debounce, this gives smooth updates without burying the user in re-reads during a busy combat round.
+
+### How it works
+- **`src/ui/canvas-outline.ts`** (new) — pure UI module, ~120 lines:
+  - Mounts the hidden `<aside>` to `document.body` with the standard `sr-only` clip pattern (already in `styles.css` from earlier phases).
+  - Re-uses Phase 86's `entitiesInReadingOrder` for cycle-consistent ordering (top-to-bottom, left-to-right within a 32 px row band) AND `describeEntity` for the per-item string. So the outline and the Tab-cycle announcer say exactly the same thing for each entity — no drift between "what I tab to" and "what I read".
+  - Groups entities by kind (token / wall / aoe / annotation), preserving reading-order ordering within each group.
+  - Builds the next render as a `DocumentFragment` and uses `replaceChildren(next)` for a single mutation event per update — minimizes AT churn.
+  - 120 ms debounce on the `subscribe` listener so a busy combat tick (multiple patches per second) collapses to one outline update per quiet beat.
+- **`src/entries/gm.ts`** — mounts on init; subscribes via `renderer.onFrame` (not `store.subscribe`) so both store mutations AND selection-only changes — both of which trigger a render request — refresh the outline. No new selection-observable plumbing needed.
+- **No CSS changes** — the existing `.sr-only` recipe already does what we need.
+
+### Why subscribe to `renderer.onFrame` instead of `store.subscribe`
+Selection lives outside the store (`SelectionState` is a plain `{ ids: Set<ID> }` object held by the input layer), so a store-only subscription would miss "user clicked a token" events. Every selection mutation in gm.ts is followed by `renderer.requestRender()` — so frame events are the universal "something visible changed" signal. The outline's internal debounce (120 ms) ensures we don't actually re-render on every animation frame.
+
+### Tests
+- **+8 unit tests** in `src/ui/canvas-outline.test.ts` (new, jsdom): mounts with the right ARIA attributes; "Canvas is empty" empty state; heading + list per kind with correct counts (singular for 1); selected entity gets `(selected)` suffix + `aria-current="true"`; empty kind sections are omitted; `refresh()` bypasses the debounce; `subscribe` listener triggers a debounced re-render (validated with fake timers); `destroy()` unsubscribes + removes the element.
+- **+3 Playwright specs** in `e2e/canvas-outline.spec.ts` (new): mounts a hidden region with `role="region"`, `aria-label="Canvas outline"`, `aria-live="polite"`, `.sr-only`; empty canvas reads "Canvas is empty" + populates after a token is placed; Phase 86 Tab cycle adds `aria-current="true"` to the selected outline `<li>`.
+- **All 929 unit tests + 208 Playwright specs pass.**
+
+### Bundle
+- 77.89 / 78 KB initial-load brotli (+0.4 KB for the outline module + entry wiring). CSS unchanged. Lazy chunks unchanged.
+
+### What this completes
+Phase 86 + Phase 87 together give screen-reader users a complete substitute for visual canvas reading:
+- **Outline panel** (87) = "what's on the map" — read all entities at any time.
+- **Tab cycle** (86) = "make me look at this one specifically" — selection state + per-entity announcement.
+- **Existing aria-label on canvas** = high-level summary that survived from earlier phases.
+
+The next accessibility phases (88 focus-visible audit, 89 contrast pass, 90 live-region budget, 91 prefers-contrast) all polish what's now a working baseline rather than fixing fundamental gaps.
 
 ---
 

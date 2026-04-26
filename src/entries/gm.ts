@@ -46,6 +46,7 @@ import { mountSessionMenu } from '../ui/session-menu.js';
 import { mountTokenEditor } from '../ui/token-editor.js';
 import { mountAnnotationEditor } from '../ui/annotation-editor.js';
 import { mountWallEditor } from '../ui/wall-editor.js';
+import { mountCanvasOutline } from '../ui/canvas-outline.js';
 import { mountFogSettings } from '../ui/fog-settings.js';
 import { mountSettingsModal } from '../ui/settings-modal.js';
 import { mountZoomControls } from '../ui/zoom-controls.js';
@@ -320,6 +321,24 @@ const animatedTokenOverlay = mountAnimatedTokenOverlay({
   getDragOverlay: () => dragOverlayRef.current,
 });
 renderer.onFrame(() => animatedTokenOverlay.update());
+
+// Phase 87 — visually-hidden ARIA outline of the canvas state. A
+// hidden <aside> with one heading + list per entity kind that mirrors
+// `state.tokens / walls / aoeTemplates / annotations`. Screen readers
+// pick it up via region navigation. Subscribed to `renderer.onFrame`
+// (with a 120 ms internal debounce) so it stays in sync with both
+// store mutations + selection-only changes — both of which trigger
+// a render request — without us having to plumb a separate selection
+// subscriber. Mount has no visual surface; safe to mount anywhere
+// after the renderer exists.
+const canvasOutline = mountCanvasOutline({
+  getState: () => store.getState(),
+  getSelectedIds: () => selection.ids,
+  subscribe: (listener) => renderer.onFrame(listener),
+});
+// Reference once so the unused-binding lint stays happy; the handle
+// lives for the lifetime of the page.
+void canvasOutline;
 
 // Re-request compaction whenever the store changes (the worker dedupes
 // identical-fog requests, so this is cheap when fog hasn't moved).
