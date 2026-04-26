@@ -189,6 +189,7 @@ import { createFogWorkerClient } from '../render/fog-worker-client.js';
 import FogWorker from '../render/fog-worker.js?worker';
 import { collectLights, collectSightWalls, collectViewers } from '../state/los-compose.js';
 import { cellsToReveal } from '../state/auto-reveal.js';
+import { detectGridFromBlob } from '../state/grid-detect-blob.js';
 
 const canvasEl = document.getElementById('canvas');
 if (!(canvasEl instanceof HTMLCanvasElement)) {
@@ -595,6 +596,83 @@ async function applyBackgroundBlob(blob: Blob, mimeType: string) {
     kind: 'background-update',
     changes: { imageId: id, offsetX: 0, offsetY: 0, scaleX, scaleY },
   });
+  // Phase 101 — fire-and-forget grid auto-detection. The detector
+  // pulls the blob through a downsampled canvas + autocorrelation
+  // pass; on a confident match (and only when the answer differs
+  // from the user's current grid), surface a Snap action banner.
+  // Detection is async + non-blocking so the upload UX stays
+  // identical for users who don't care.
+  void runGridDetectionForBackground(blob, width, height);
+}
+
+/**
+ * Phase 101 — opt-in helper that runs the grid detector against an
+ * uploaded background image and, if it finds a confident grid that
+ * differs from the user's current setting, offers a one-click Snap
+ * banner. Failures + low-confidence results are silent — there's no
+ * reason to nag the GM about a detector that didn't fire.
+ */
+async function runGridDetectionForBackground(
+  blob: Blob,
+  imgWidth: number,
+  imgHeight: number,
+): Promise<void> {
+  try {
+    const result = await detectGridFromBlob(blob);
+    if (!result) return;
+    const detectedCellSize = result.cellSizePx;
+    if (detectedCellSize <= 0) return;
+    // Compare against the cell size IMPLIED by the current background
+    // fit. If we already match (within 1 image-pixel), there's nothing
+    // for the user to snap to — silently skip the banner.
+    const { grid } = store.getState();
+    const currentImgCellW = imgWidth / grid.cols;
+    const currentImgCellH = imgHeight / grid.rows;
+    if (
+      Math.abs(currentImgCellW - detectedCellSize) <= 1 &&
+      Math.abs(currentImgCellH - detectedCellSize) <= 1
+    ) {
+      return;
+    }
+    const newCols = Math.max(1, Math.round(imgWidth / detectedCellSize));
+    const newRows = Math.max(1, Math.round(imgHeight / detectedCellSize));
+    // Don't clobber a higher-priority banner (conflict warnings,
+    // PWA update notice). Those take precedence; the Snap suggestion
+    // is purely an enhancement.
+    if (statusBanners.isVisible()) return;
+    statusBanners.show({
+      message: `Detected a ${detectedCellSize} px grid in this image. Snap the app's grid to match?`,
+      variant: 'info',
+      dismissible: true,
+      onDismiss: () => statusBanners.hide(),
+      actionLabel: 'Snap',
+      onAction: () => {
+        store.batch(() => {
+          store.applyPatch({
+            kind: 'grid-update',
+            changes: {
+              cellSize: detectedCellSize,
+              cols: newCols,
+              rows: newRows,
+            },
+          });
+          store.applyPatch({
+            kind: 'background-update',
+            changes: { offsetX: 0, offsetY: 0, scaleX: 1, scaleY: 1 },
+          });
+        });
+        statusBanners.hide();
+        announcer.announce(
+          `Grid snapped to ${detectedCellSize} pixel cells (${newCols} by ${newRows}).`,
+        );
+      },
+    });
+    announcer.announce(
+      `Detected a ${detectedCellSize} pixel grid in the uploaded image. A Snap action is available in the status banner.`,
+    );
+  } catch (err) {
+    console.warn('[gm] grid auto-detection failed', err);
+  }
 }
 
 // Phase 100 — drag-and-drop + paste-to-upload for the GM background.

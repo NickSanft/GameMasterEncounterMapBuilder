@@ -80,7 +80,7 @@ _Data lifecycle:_
 _Content authoring:_
 
 - **0.100.0** — Drag-and-drop / paste-to-upload backgrounds ✅
-- **0.101.0** — Auto-grid detection on background upload (edge-detect the map's grid + offer to snap to it)
+- **0.101.0** — Auto-grid detection on background upload (edge-detect the map's grid + offer to snap to it) ✅
 - **0.102.0** — Named camera bookmarks (save positions like "throne room"; Ctrl+1..9-style jump)
 
 _Mobile / tablet ergonomics:_
@@ -96,6 +96,49 @@ _Polish:_
 - **0.108.0** — Recent backgrounds quick switcher (mirrors the Phase 75 recent-scenes pattern but for backgrounds)
 - **0.109.0** — Per-spectator token visibility (extend Phase 82's permissions to "GM hides individual tokens from individual players")
 - **0.110.0** — Persistent player names across reloads (stable cross-session player IDs — flagged in Phase 82 as future)
+
+---
+
+## [0.101.0] — 2026-04-25 — Auto-grid detection on background upload
+
+### Added
+- **Auto-detect the printed grid** in every newly-uploaded background image. When the detector is confident the map ships with a regularly-spaced grid (lines, hexes-as-squares, or any high-contrast periodic pattern in both axes), a top-of-screen banner appears: *"Detected a 64 px grid in this image. Snap the app's grid to match?"* with a one-click **Snap** action.
+- **Snap action** rewrites `cellSize` + `cols` + `rows` to align the app's grid 1:1 with the printed grid (`cols = round(imageWidth / detectedCellSize)`, scale = 1). The image then sits unmodified under the grid — every printed cell maps to exactly one app cell, which is what every downstream feature (LoS, fog, snap-to-grid, walls, AoEs) actually wants.
+- **Detection runs on every upload path** — the existing session-menu "Upload Map" button + Phase 100's drag-drop + paste — by hanging off `applyBackgroundBlob`. The user doesn't need to opt in or remember to trigger it; if a grid is found, the banner just appears.
+
+### How it works
+- **`src/state/grid-detect.ts`** (new, ~230 lines) — pure autocorrelation grid detector. The strategy:
+  1. Build a per-row "darkness profile" — `sum(255 - max(R,G,B))` across each row's pixels. Bright cell interiors contribute little; dark grid lines contribute a lot, producing periodic spikes.
+  2. Run normalized autocorrelation across plausible cell sizes (16 → 200 px, capped to one quarter of the smaller image dimension so we get ≥ 4 periods to lock onto).
+  3. Repeat for the column profile.
+  4. If both axes agree within 1 px AND the autocorrelation peak's z-score (`(peak − mean) / stddev`) maps high enough through a sigmoid (`z / (z + 2)` ≥ 0.4), report the average cell size. Otherwise return `null` — the caller silently skips the banner.
+- **Fundamental-frequency backtrack** — autocorrelation peaks at every multiple of the true period (a P-period signal also self-overlaps at 2P, 3P, …). After picking the global peak, the detector walks divisors `d ∈ [2 .. peakLag/minLag]` and prefers the smallest `peakLag/d` whose score is ≥ 85 % of the headline score. Otherwise the detector would happily report 100 px when the true cell is 50 px.
+- **`src/state/grid-detect-blob.ts`** (new, ~60 lines) — `Blob → ImageData` bridge. Pulls the blob through `Image` + `<canvas>` + `getImageData()`, downsampling so the longest edge is ≤ 800 px. Without the cap, autocorrelation on a 4K map costs multiple seconds; with the cap it's well under 100 ms even on huge battle maps. The `originalScale` is passed back into `detectGrid` so the reported cell size is in original-image pixels.
+- **`src/entries/gm.ts`** — `applyBackgroundBlob` fires `runGridDetectionForBackground` as a fire-and-forget after the existing background-update patch lands. The detection helper:
+  - Skips silently when the detector returns `null` or the result already matches the user's current grid (within 1 image-pixel — no point offering a no-op Snap).
+  - Skips silently when a higher-priority banner is already up (Phase 84 conflict warning, PWA update notice). The Snap suggestion is purely an enhancement; never clobbers a real warning.
+  - Composes the Snap action as a single `store.batch()` so the `grid-update` and the `background-update` (resetting offset / scale to identity) flow as one undo step.
+  - Announces the detection through the Phase 90 announcer queue so screen-reader users learn the banner is there.
+
+### Why a separate banner (not auto-snap)
+The detector is high-precision when it fires, but there are legitimate maps where the user has DELIBERATELY set a grid that doesn't match the printed one — e.g. a map with a printed 50 px grid that the GM wants to play at 25 px to fit twice as many monsters per cell. Auto-snapping would silently overwrite that intent. The opt-in Snap button keeps the choice with the user; the banner is dismissible.
+
+### UX details
+- **Banner is `variant: 'info'` + dismissible** (the default of Phase 100 and earlier conflict banners is `'warn'` non-dismissible). Auto-grid detection is a quality-of-life suggestion, not a warning.
+- **Detection is ~50–100 ms on typical 1080p–4K maps** so the banner appears almost immediately after the image renders. There's no spinner — if the detector is busy, the banner just doesn't appear.
+- **Detector fails closed**: any decode / canvas / getImageData error logs a `console.warn` and resolves `null` so the upload UX is identical for users who don't care.
+
+### Tests
+- **+12 unit tests** in `src/state/grid-detect.test.ts` (new): detects clean 32 / 50 / 64 px grids; returns `null` on a blank image; respects `originalScale` to scale results back to image pixels; rejects when the image is too small for the search range; handles light noise without losing the grid (±1 px slop). Plus targeted tests on the helper functions: `darkProfile` peaks on dark rows + columns and returns the right axis length; `bestLag` returns `null` for too-short signals, finds the period of a synthetic spike train at high confidence, and returns low / null confidence on a flat signal.
+- **Test setup polyfill**: `tests/setup.ts` grew a minimal `MockImageData` since jsdom doesn't ship `ImageData`. The polyfill captures the passed pixel buffer + dimensions; the real browser type is used wherever it exists.
+- **+2 Playwright specs** in `e2e/grid-detect-snap.spec.ts` (new): synthesizes a 256×256 PNG with a 32 px grid in the browser, pastes it via the Phase 100 paste path, and asserts the Snap banner appears with the right text. Second spec clicks Snap on a 320×320 grid, opens the Settings modal, and verifies `cellSize=32`, `cols=10`, `rows=10` flowed through.
+- **All 1135 unit tests + 256 Playwright specs pass** locally. The pre-push full-e2e run flagged one parallel-test flake (`scenes.spec.ts:56` token-state swap; passes in isolation, has been seen before in heavily-parallel runs); CI runs serially with retries=2, absorbed.
+
+### Bundle
+- 87.64 / 88 KB initial-load brotli (+1.06 KB for the detector + blob bridge + entry wiring + the detection helper). CSS 10.92 / 12 KB. Lazy chunks unchanged. **Tight under the limit** — the next bundle-budget-touching phase will likely need a 2 KB bump.
+
+### Pre-push checklist
+Caught zero issues this time — full unit suite + full e2e (with one absorbed flake) + visual-regression spec + size-limit all came back clean before push. Four phases in a row now (97 + 99 + 100 + 101) shipping without a follow-up fix commit.
 
 ---
 

@@ -36,6 +36,37 @@ beforeEach(() => {
   if (typeof localStorage !== 'undefined') localStorage.clear();
 });
 
+// jsdom doesn't ship `ImageData` (Phase 101 grid-detect tests + any
+// future image-pipeline code that builds an ImageData by hand needs
+// it). Minimal polyfill: a constructor that captures the passed
+// pixel buffer + dimensions so consumers can read .data / .width /
+// .height. Real jsdom builds may eventually ship this — the typeof
+// guard keeps the polyfill from clobbering a real implementation.
+if (typeof (globalThis as { ImageData?: unknown }).ImageData === 'undefined') {
+  class MockImageData {
+    readonly data: Uint8ClampedArray;
+    readonly width: number;
+    readonly height: number;
+    constructor(
+      dataOrWidth: Uint8ClampedArray | number,
+      widthOrHeight: number,
+      maybeHeight?: number,
+    ) {
+      if (typeof dataOrWidth === 'number') {
+        this.width = dataOrWidth;
+        this.height = widthOrHeight;
+        this.data = new Uint8ClampedArray(this.width * this.height * 4);
+      } else {
+        this.data = dataOrWidth;
+        this.width = widthOrHeight;
+        this.height = maybeHeight ?? Math.floor(dataOrWidth.length / (4 * widthOrHeight));
+      }
+    }
+  }
+  (globalThis as unknown as { ImageData: typeof MockImageData }).ImageData =
+    MockImageData;
+}
+
 // jsdom doesn't implement URL.createObjectURL. The app uses it for image
 // previews, so we provide a minimal polyfill that produces unique fake URLs
 // and a matching revoker.
