@@ -99,6 +99,21 @@ _Polish:_
 
 ---
 
+## [0.94.1] — 2026-04-26 — Fix: bump CSS bundle limit for Phase 94 combat-log styles
+
+### Fixed
+- **CSS budget**: 10.21 / 10 KB after Phase 94 — over by 212 B from the new combat-log panel rules. Bumped the limit 10 → 12 KB, which covers the combat-log addition + a comfortable margin for the upcoming command-palette / contextual-hints / per-spectator-token-visibility phases (95–110) without needing another bump every two releases.
+- The Phase 94 commit was committed locally with the right limit but the local pre-push `npm run size` only showed the JS line — I missed the CSS line in the head-truncated output, so the CSS over-budget went out to CI. Ships as 0.94.1; nothing else changed.
+
+### Bundle (final, with Phase 94 + this fix)
+- Initial-load JS: 80.82 / 82 KB brotli
+- Lazy chunks JS: 18.61 / 20 KB
+- **CSS: 10.21 / 12 KB** (was over 10 KB)
+- HTML entries: 1.33 / 2 KB
+- Service worker + manifest: 2.12 / 2.5 KB
+
+---
+
 ## [0.94.0] — 2026-04-26 — Combat log panel
 
 ### Added
