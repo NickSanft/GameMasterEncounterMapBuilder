@@ -85,7 +85,7 @@ _Content authoring:_
 
 _Mobile / tablet ergonomics:_
 
-- **0.103.0** — Long-press → context menu on touch (500 ms hold = right-click, unlocks tablet-only GMs)
+- **0.103.0** — Long-press → context menu on touch (500 ms hold = right-click, unlocks tablet-only GMs) ✅
 - **0.104.0** — Two-finger rotate for AoE preview (touch-friendly rotation for cone / line templates)
 - **0.105.0** — Larger touch targets in toolbar (≥44 px hit area in narrow viewports per Apple touch-target guidance)
 
@@ -96,6 +96,47 @@ _Polish:_
 - **0.108.0** — Recent backgrounds quick switcher (mirrors the Phase 75 recent-scenes pattern but for backgrounds)
 - **0.109.0** — Per-spectator token visibility (extend Phase 82's permissions to "GM hides individual tokens from individual players")
 - **0.110.0** — Persistent player names across reloads (stable cross-session player IDs — flagged in Phase 82 as future)
+
+---
+
+## [0.103.0] — 2026-04-26 — Touch long-press → context menu
+
+### Added
+- **Hold a single finger on the canvas for ~500 ms** to open the same context menu desktop GMs reach via right-click. Tablet GMs no longer have to plug in a mouse to access *Edit token*, *Edit annotation*, *Delete wall*, *Fit to screen*, or any of the other right-click actions. The menu opens at the touchdown point so it's anchored to where the GM pressed (not where their finger drifted to mid-press).
+- **Cancel-on-pan / cancel-on-draw**: if the finger moves more than 10 px from the touchdown point during the 500 ms hold, the long-press is abandoned. So the existing single-finger pan, draw stroke, ruler measure, etc. all still work — long-press only fires for an actual *hold still*.
+- **Cancel-on-pinch**: if a second finger lands during the hold, the long-press is abandoned and the gesture upgrades to pinch-zoom (Phase 53). No accidental menus mid-pinch.
+- **Mouse / pen pointers are ignored** by the detector — those have a real right-click / barrel-button affordance and don't need this.
+
+### Why this matters
+Phase 53 brought touch panning + pinch-zoom; Phase 105's larger touch targets are queued. But until Phase 103, the only way to access the rich per-entity right-click menu (token actions, annotation editing, wall toggles, AoE visibility, fit-to-screen, scene-restore actions, etc.) was a real right-click — which a tablet doesn't have. Most VTT users on iPad / Surface had to either plug in a mouse or rely on the toolbar / palette workarounds. This phase closes that gap by reusing the standard mobile-OS gesture (long-press = secondary click) without any of the OS-level pop-overs (text-select, image-callout) interfering — those were already suppressed by the canvas's `touch-action: none` + the existing pointer-event capture.
+
+### Architecture
+- **`src/input/long-press.ts`** (new, ~175 lines) — pure helper. `attachLongPress(target, opts)` returns a `{destroy}` handle. Listens for `pointerdown` with `pointerType === 'touch'`, starts a 500 ms timer, and cancels on:
+  - `pointerup` / `pointercancel` (lifted before hold)
+  - `pointermove` beyond `LONGPRESS_MOVE_THRESHOLD_PX` (the gesture turned into a pan / draw)
+  - A second `pointerdown` (gesture upgraded to pinch — first finger's tracking is dropped immediately)
+  Tests stub the timer via injected `setTimer` / `clearTimer` seams so timing assertions don't depend on real `setTimeout`. Mouse and pen pointers are filtered by `pointerType` at the top of every handler — those have native right-click / barrel-button alternatives.
+  - Exports a `dispatchSyntheticContextMenu(target, x, y)` convenience that fires a `MouseEvent('contextmenu', { button: 2 })` so the existing right-click handler picks it up unchanged. Also exports `dispatchPointerCancel(target, pointerId)` that mirrors the `cancelPointerForTools` helper in `pan-zoom.ts`, kept for forward-compat (currently unused but ready when a tool needs to be force-aborted before the menu opens).
+- **Move tracking is start-anchored, not previous-anchored.** The threshold check compares against the original touchdown coords every time, so steady drift past 10 px cancels the press even if each individual move was a few-px nudge. This matches the user expectation of "if I'm not holding still, don't fire" — the alternative (per-frame deltas) would let the user inch outward indefinitely.
+- **Cleanup races**: the timer callback re-checks `trackedPointerId` before firing because the JS event loop can dispatch a stale timer right after a `pointerup` cleared it. The reset call zeroes `trackedPointerId` BEFORE invoking `onLongPress` so the callback is free to dispatch synthetic events without re-entering the detector mid-call.
+- **`src/entries/gm.ts`** — single `attachLongPress(canvas, …)` call right after the existing `contextmenu` listener. The callback dispatches a synthetic `MouseEvent('contextmenu', …)` at the touchdown coords; the existing canvas handler does the rest (hit-test, build the items array, position + show the menu). No changes to the right-click handler itself — it already knows how to position the menu inside viewport bounds, so the touch path inherits all of that behavior for free.
+- **Test setup polyfill**: `tests/setup.ts` grew a minimal `MockPointerEvent` class (subclass of `MouseEvent`) since jsdom doesn't ship `PointerEvent`. Mirrors the existing `MockImageData` polyfill (Phase 101) — the typeof guard keeps the polyfill from clobbering a real implementation when jsdom eventually ships one.
+
+### UX details
+- **Hold duration is 500 ms** — the OS standard (iOS / Android both fire their long-press menus at this threshold). Faster would interfere with single-finger panning; slower would feel sluggish.
+- **Move slop is 10 px in viewport coordinates** — large enough to absorb finger jitter on a high-DPI tablet but small enough to feel responsive. Configurable via `moveThresholdPx` if a future tool wants a tighter / looser threshold.
+- **No haptic / audio feedback** — relying on the OS's standard contextmenu rendering as the visual confirmation. A future polish phase could add a `navigator.vibrate(20)` on successful long-press for an iOS-style buzz.
+
+### Tests
+- **+13 unit tests** in `src/input/long-press.test.ts` (new): success path with custom hold-ms; cancel on pointerup / pointercancel / second pointerdown / move past threshold (start-anchored, not delta-anchored); jitter within threshold doesn't cancel; mouse + pen pointers are filtered out; unrelated pointer ids' moves / ups are ignored; destroy mid-press cancels the timer + removes listeners.
+- **+3 Playwright specs** in `e2e/long-press-context-menu.spec.ts` (new): 500 ms hold opens the context menu (`'Fit to screen'` is in the items, asserted by text); moving the finger past the threshold cancels the long-press (menu does NOT appear after the deadline); lifting the finger before the deadline cancels. All three use `Pixel 5` device emulation so `hasTouch: true` matches a real tablet, and dispatch raw `PointerEvent` instances in `page.evaluate` since Playwright's `touchscreen.tap()` only does brief taps.
+- **All 1171 unit tests + 262 Playwright specs pass** locally on the first run — no flake this time, in contrast to Phases 101 + 102 where the parallel `scenes.spec.ts:56` test occasionally needed a retry.
+
+### Bundle
+- 89.21 / 90 KB initial-load brotli (+0.18 KB for the long-press module + the entry wiring). CSS 11.10 / 12 KB. Lazy chunks unchanged. **Comfortably inside the existing limits**, which is the upside of a tiny pure-helper phase.
+
+### Pre-push checklist
+Caught zero issues — full unit suite + full e2e (clean, no flake) + visual-regression spec + size-limit all green before push. Six clean phases in a row now (97 + 99 + 100 + 101 + 102 + 103); the routine is paying off.
 
 ---
 

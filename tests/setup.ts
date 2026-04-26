@@ -67,6 +67,27 @@ if (typeof (globalThis as { ImageData?: unknown }).ImageData === 'undefined') {
     MockImageData;
 }
 
+// jsdom doesn't ship PointerEvent (Phase 103 long-press detector tests
+// + any future pointer-pipeline code that synthesizes PointerEvents in
+// unit tests needs it). Minimal polyfill: a subclass of MouseEvent that
+// captures the pointer-specific fields the detector reads
+// (`pointerId`, `pointerType`). Real jsdom builds may eventually ship
+// this — the typeof guard keeps the polyfill from clobbering a real
+// implementation.
+if (typeof (globalThis as { PointerEvent?: unknown }).PointerEvent === 'undefined') {
+  class MockPointerEvent extends MouseEvent {
+    readonly pointerId: number;
+    readonly pointerType: string;
+    constructor(type: string, init: PointerEventInit = {}) {
+      super(type, init);
+      this.pointerId = init.pointerId ?? 0;
+      this.pointerType = init.pointerType ?? '';
+    }
+  }
+  (globalThis as unknown as { PointerEvent: typeof MockPointerEvent }).PointerEvent =
+    MockPointerEvent;
+}
+
 // jsdom doesn't implement URL.createObjectURL. The app uses it for image
 // previews, so we provide a minimal polyfill that produces unique fake URLs
 // and a matching revoker.

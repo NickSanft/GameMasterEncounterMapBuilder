@@ -199,6 +199,10 @@ import {
   updateBookmark,
 } from '../state/camera-bookmarks.js';
 import { mountCameraBookmarksModal } from '../ui/camera-bookmarks-modal.js';
+import {
+  attachLongPress,
+  dispatchSyntheticContextMenu,
+} from '../input/long-press.js';
 
 const canvasEl = document.getElementById('canvas');
 if (!(canvasEl instanceof HTMLCanvasElement)) {
@@ -1655,6 +1659,20 @@ canvas.addEventListener('contextmenu', (e) => {
     items,
     label,
   });
+});
+
+// Phase 103 — touch long-press → synthetic contextmenu. Tablet GMs
+// don't have a right-click affordance; holding a finger on the
+// canvas for ~500 ms now opens the same context menu desktop GMs
+// reach via right-click. The detector cancels if the user starts
+// to pan / draw (move past 10 px) or if a second finger lands
+// (gesture upgraded to pinch). When the timer expires we just
+// dispatch a synthetic `contextmenu` event at the touchdown point —
+// the existing canvas listener above does the rest.
+attachLongPress(canvas, {
+  onLongPress: (x, y) => {
+    dispatchSyntheticContextMenu(canvas, x, y);
+  },
 });
 
 // Phase 66 — `createSyncChannel` now takes the tab's player id so
