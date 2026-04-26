@@ -87,7 +87,7 @@ _Mobile / tablet ergonomics:_
 
 - **0.103.0** — Long-press → context menu on touch (500 ms hold = right-click, unlocks tablet-only GMs) ✅
 - **0.104.0** — Two-finger rotate for AoE preview (touch-friendly rotation for cone / line templates) ✅
-- **0.105.0** — Larger touch targets in toolbar (≥44 px hit area in narrow viewports per Apple touch-target guidance)
+- **0.105.0** — Larger touch targets in toolbar (≥44 px hit area in narrow viewports per Apple touch-target guidance) ✅
 
 _Polish:_
 
@@ -96,6 +96,55 @@ _Polish:_
 - **0.108.0** — Recent backgrounds quick switcher (mirrors the Phase 75 recent-scenes pattern but for backgrounds)
 - **0.109.0** — Per-spectator token visibility (extend Phase 82's permissions to "GM hides individual tokens from individual players")
 - **0.110.0** — Persistent player names across reloads (stable cross-session player IDs — flagged in Phase 82 as future)
+
+---
+
+## [0.105.0] — 2026-04-26 — Larger touch targets across the app
+
+### Added
+- **Every interactive surface a tablet GM might tap during play is now ≥44 × 44 CSS pixels** when the device is touch-only (`hover: none` + `pointer: coarse`). The 44 px floor is Apple's iOS HIG touch-target standard; below it, fingers reliably miss. Phase 47 set the floor for the toolbar + zoom controls + dice + help button; Phase 105 broadens it to **every other tappable surface** in the app — context menus, modal action buttons, settings panels (AoE / Draw / Ruler / Fog), per-row actions in the various list modals (camera bookmarks, conflict-loser archive), the combat-log toolbar, the initiative bar, status-banner Action / Dismiss buttons, the command palette items, the scene indicator, and the save-status / remote-status chips.
+
+### Why this matters
+Touch tablets reliably mis-tap targets smaller than 44 px (some studies put it closer to 48–50 px for the 95th-percentile fingertip). Pre-105, a tablet GM trying to right-click → *Edit token* would tap the menu, then have to peck at sub-30 px context-menu items half the time — the menu either wouldn't dismiss correctly or the wrong item would fire. Same story for the camera-bookmark Jump button (Phase 102), the wall editor's Save / Delete (Phase 85), and the combat-log Clear (Phase 94). Phase 105 unifies everything under the same 44 px floor with no JS changes — pure CSS broadening of the existing Phase 47 media query.
+
+### Architecture
+- **`src/ui/styles.css`** — extended the existing `@media (hover: none) and (pointer: coarse)` block to add ~25 new selectors covering every panel + modal added between Phase 47 (where the original list was set) and Phase 104. Kept the same pattern: `min-height: 44px`, `font-size: 0.95rem`, `padding: 0.55rem 0.85rem` for text buttons; a separate icon-only block adds `min-width: 44px` for the close-x style buttons (modal close, combat-log close, notes-panel close).
+- **Modal labels get a 36 px floor** so the surrounding label-wraps-input pattern (every Settings checkbox row) gets a generous tap area without requiring custom layout per row. Checkboxes / radios themselves stay at the OS default visual size — only the click-target grows.
+- **Pure CSS, no behavior change.** The 44 px floor only applies under the touch media query, so desktop layouts (where every visual-regression baseline is captured) are pixel-identical to pre-105. No baseline drift.
+
+### What was already in the 44 px floor (Phase 47)
+- `.gm-toolbar button` (Select / Token / Walls / Draw / Fog / Measure / AoE / etc.)
+- `.gm-toolbar-actions button` (Save / Undo / Redo)
+- `.session-menu button` (top-level menu)
+- `.zoom-controls button` (+ / − / Fit / Reset)
+- `.dice-button` + `.help-button`
+- `.modal-close` (44 × 44 square)
+
+### What Phase 105 adds
+- `.context-menu button` — right-click + long-press menu items (Phase 103 made them tablet-reachable; this makes them tap-reliable)
+- `.modal-footer button` + `.modal-body button` — Save / Cancel / Delete in every modal
+- `.scenes-toolbar button` + `.scene-card button` — scene CRUD controls
+- `.aoe-settings`, `.draw-settings`, `.ruler-settings`, `.fog-settings` button — tool-options panel buttons
+- `.notes-panel button`, `.combat-log-export`, `.combat-log-clear`, `.combat-log-close`
+- `.initiative-bar button`
+- `.camera-bookmark-jump`, `.camera-bookmark-rename`, `.camera-bookmark-delete`, `.camera-bookmarks-save-btn` (Phase 102)
+- `.conflict-loser-restore`, `.conflict-loser-discard` (Phase 99)
+- `.first-use-hint button` (Phase 96)
+- `.command-palette-item` (Phase 95)
+- `.status-banner-action`, `.status-banner-dismiss`
+- `.scene-indicator`, `.save-status-pill`, `.remote-status-chip`
+- `.notes-panel-close`, `.combat-log-close` (44 × 44 icon squares)
+- `.modal label` (36 px floor for label-wraps-input rows)
+
+### Tests
+- **+9 Playwright specs** in `e2e/touch-target-sizes.spec.ts` (new) using Pixel-5 device emulation: toolbar buttons, toolbar actions, zoom controls (asserts ≥44 in BOTH dimensions for the icon-square ones), session-menu, AoE settings panel, context-menu items (right-click → assert), camera-bookmark Save button + row actions (creates a bookmark mid-test to populate the rows), command palette items, modal close button. Each test reads the rendered `boundingBox` and asserts `height >= 44`. Helper `assertMinTapHeight` walks every visible match of a selector + counts so a future selector rename that silently matches nothing won't pass.
+- **All 1182 unit tests + 273 Playwright specs pass** locally on the first run.
+
+### Bundle
+- 89.63 / 90 KB initial-load brotli (no JS change). CSS 11.20 / 12 KB (+0.10 KB for the broader selector list). Lazy chunks unchanged. **Comfortable headroom on both budgets.**
+
+### Pre-push checklist
+Caught zero issues — full unit suite + full e2e + visual-regression spec (no baseline drift since the 44px floor only fires under the touch media query, not on the desktop browsers that capture baselines) + size-limit all green before push. Eight clean phases in a row now (97 + 99 + 100 + 101 + 102 + 103 + 104 + 105).
 
 ---
 

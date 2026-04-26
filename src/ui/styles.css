@@ -4697,22 +4697,65 @@ body.reduced-motion .dice-tray-die-settled {
    wider but primarily touched).
    ───────────────────────────────────────────────────────────────────── */
 @media (hover: none) and (pointer: coarse) {
-  /* Bigger default hit targets across the app — buttons, inputs, etc. */
+  /* Bigger default hit targets across the app — buttons, inputs, etc.
+     Phase 47 set the original list (toolbar + zoom + dice + help +
+     session menu); Phase 105 broadens it to every interactive surface
+     a tablet GM might tap during play. The 44 × 44 floor is Apple's
+     touch-target standard from the iOS HIG. */
   .gm-toolbar button,
   .gm-toolbar-actions button,
   .session-menu button,
   .zoom-controls button,
   .dice-button,
-  .help-button {
+  .help-button,
+  /* Phase 105 — broaden coverage. Every list below is a button that
+     a GM might need to tap mid-encounter from a tablet, and that
+     wasn't already in the 44px floor. */
+  .context-menu button,
+  .modal-footer button,
+  .modal-body button,
+  .scenes-toolbar button,
+  .scene-card button,
+  .aoe-settings button,
+  .draw-settings button,
+  .ruler-settings button,
+  .fog-settings button,
+  .notes-panel button,
+  .combat-log-export,
+  .combat-log-clear,
+  .initiative-bar button,
+  .camera-bookmark-jump,
+  .camera-bookmark-rename,
+  .camera-bookmark-delete,
+  .camera-bookmarks-save-btn,
+  .conflict-loser-restore,
+  .conflict-loser-discard,
+  .first-use-hint button,
+  .command-palette-item,
+  .status-banner-action,
+  .status-banner-dismiss,
+  .scene-indicator,
+  .save-status-pill,
+  .remote-status-chip {
     min-height: 44px;
     font-size: 0.95rem;
     padding: 0.55rem 0.85rem;
   }
-  /* Modal close button easier to hit. */
-  .modal-close {
+  /* Modal close button easier to hit. Same 44 × 44 floor as the icon-
+     only zoom-controls for symmetric square targets. */
+  .modal-close,
+  .combat-log-close,
+  .notes-panel-close {
     min-width: 44px;
     min-height: 44px;
     font-size: 1.5rem;
+  }
+  /* Checkboxes + radios in modal forms — tap-target floor for the
+     hit area without changing the visual indicator size. The label
+     wraps the input on most settings rows, so bumping `label`'s
+     min-height also enlarges the surrounding tap area. */
+  .modal label {
+    min-height: 36px;
   }
 }
 
