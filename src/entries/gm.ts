@@ -61,6 +61,7 @@ import {
 } from '../state/snapshot-history.js';
 import { mountSnapshotHistoryModal } from '../ui/snapshot-history-modal.js';
 import { mountConflictLoserArchiveModal } from '../ui/conflict-loser-archive-modal.js';
+import { mountUploadDropZone } from '../ui/upload-drop-zone.js';
 import { exportScene } from '../state/scene-export.js';
 import {
   createConflictLoserArchive,
@@ -595,6 +596,30 @@ async function applyBackgroundBlob(blob: Blob, mimeType: string) {
     changes: { imageId: id, offsetX: 0, offsetY: 0, scaleX, scaleY },
   });
 }
+
+// Phase 100 — drag-and-drop + paste-to-upload for the GM background.
+// Wires to the same `applyBackgroundBlob` path the session-menu
+// "Upload Map" button uses, so IDB write + background-update patch
+// flow + LoS recompute all stay identical. The overlay is full-
+// viewport so a near-miss release doesn't trigger the browser's
+// default "open image in new tab" — which would destroy the session.
+mountUploadDropZone({
+  canvas,
+  onUpload: async (blob, mimeType) => {
+    try {
+      await applyBackgroundBlob(blob, mimeType);
+      announcer.announce('Background image set from drop / paste.');
+    } catch (err) {
+      console.warn('[upload-drop-zone] failed to apply background', err);
+      window.alert('Failed to set background from the dropped / pasted image.');
+    }
+  },
+  onRejectedNonImage: () => {
+    announcer.announce(
+      'Only image files are accepted as backgrounds. Try a PNG, JPG, or GIF.',
+    );
+  },
+});
 
 const presetBackgroundsModal = mountPresetBackgroundsModal({
   onPick: async (preset) => {

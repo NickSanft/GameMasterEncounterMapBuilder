@@ -79,7 +79,7 @@ _Data lifecycle:_
 
 _Content authoring:_
 
-- **0.100.0** — Drag-and-drop / paste-to-upload backgrounds (drop a file onto the canvas / paste from clipboard sets the BG)
+- **0.100.0** — Drag-and-drop / paste-to-upload backgrounds ✅
 - **0.101.0** — Auto-grid detection on background upload (edge-detect the map's grid + offer to snap to it)
 - **0.102.0** — Named camera bookmarks (save positions like "throne room"; Ctrl+1..9-style jump)
 
@@ -96,6 +96,38 @@ _Polish:_
 - **0.108.0** — Recent backgrounds quick switcher (mirrors the Phase 75 recent-scenes pattern but for backgrounds)
 - **0.109.0** — Per-spectator token visibility (extend Phase 82's permissions to "GM hides individual tokens from individual players")
 - **0.110.0** — Persistent player names across reloads (stable cross-session player IDs — flagged in Phase 82 as future)
+
+---
+
+## [0.100.0] — 2026-04-26 — Drag-and-drop / paste-to-upload backgrounds
+
+### Added
+- **Drag a file onto the page** to set it as the GM map background. A full-viewport overlay reads "Drop to set as background" while a file is being dragged over the window; releasing applies the file.
+- **Paste an image from the clipboard** (Ctrl+V / Cmd+V) anywhere outside an editable input. Same pipeline as the drop path — useful for screenshots, browser-copied images, etc., without going through Save → Open.
+- **Both routes wire to the existing `applyBackgroundBlob` path** that the session-menu "Upload Map" button has used since Phase 32 — IDB image write, `background-update` patch, LoS recompute all flow through the same code. The new entry surface is purely additional.
+
+### How it works
+- **`src/ui/upload-drop-zone.ts`** (new) — wires window-level `dragenter` / `dragover` / `dragleave` / `drop` and `paste` listeners. Detection:
+  - **File drag**: `dataTransfer.types` includes `'Files'`. Required for Chrome / Firefox / Safari to expose the drop intent during dragenter (the `files` list itself is empty until `drop`).
+  - **Image extraction**: `dataTransfer.files[]` for drops, `clipboardData.items[]` for pastes. Filters by `file.type.startsWith('image/')` so non-image drops fall through silently.
+- **Counter-based dragenter / dragleave tracking** so the overlay doesn't flicker as the cursor moves over child elements (every child transition fires both events; counting keeps the "is the file currently over the window" boolean stable).
+- **Window-level (not canvas-level)** binding so a near-miss release (releasing slightly off-canvas) still drops onto the app instead of triggering Chrome's default "open this image in a new tab" — which would destroy the in-progress session.
+- **Editable-focus skip** on paste: pasting into a Settings textarea or the slash-command input still pastes text normally, not the image. Re-uses the existing `isEditableFocus` helper from `util/focus.ts`.
+
+### UX details
+- **Reduced-motion respect**: the 120 ms fade-in animation on the overlay is disabled under `prefers-reduced-motion` + the in-app `body.reduced-motion` class. The overlay just appears without animation.
+- **GM-only**: not wired into `spectator.ts` — Spectator can't author backgrounds.
+- **Non-image drop** announces a hint via the live-region: *"Only image files are accepted as backgrounds. Try a PNG, JPG, or GIF."* Distinguishes "I dropped something but it didn't work" from "I dropped something and it succeeded silently".
+
+### Tests
+- **+4 Playwright specs** in `e2e/upload-drop-zone.spec.ts` (new): drop-zone overlay element exists in the DOM (hidden by default); synthesized image-file dragover reveals the overlay; non-image dragenter does NOT reveal the overlay (text drag, no `Files` type); paste of an image blob fires the background-upload announcer (verified via the announcer text). Drag-drop synthesis uses native `DragEvent` + a `DataTransfer` with `items.add(file)` since Playwright doesn't have a first-class OS-style drag API.
+- **All 1123 unit tests + 253 Playwright specs pass** locally. The pre-push full-e2e run flagged one parallel-test flake (`aoe-tool.spec.ts:49`) that we've seen before in parallel runs and which passes in isolation; CI runs serially with retries=2, absorbed.
+
+### Bundle
+- 86.58 / 88 KB initial-load brotli (+0.35 KB for the drop-zone module + the entry wiring). CSS 10.92 / 12 KB. Lazy chunks unchanged. **No budget bump needed** this phase — comfortably inside the existing limits.
+
+### Pre-push checklist
+Caught zero issues this time — full unit suite + full e2e + visual-regression spec + size-limit all came back clean before push. Three phases in a row now (97 + 99 + 100) shipping without a follow-up fix commit; the post-94 process improvement is paying off.
 
 ---
 

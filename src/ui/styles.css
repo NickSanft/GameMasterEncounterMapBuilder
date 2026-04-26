@@ -3015,6 +3015,75 @@ body.notes-open .mini-map {
   flex: 1 1 auto;
 }
 
+/* ───── Phase 100 — Drag-drop / paste-to-upload background ────────
+   Full-viewport overlay shown while the user is dragging an image
+   from their desktop / file manager onto the page. Pointer-events
+   pass through (the overlay doesn't intercept the actual drop —
+   the document handles that), but visually it darkens + centers a
+   "Drop to set as background" card so the user knows the action
+   is recognized. Hidden by default; visibility toggled by the
+   drag-enter / drag-leave counter in `upload-drop-zone.ts`. */
+
+.upload-drop-zone {
+  position: fixed;
+  inset: 0;
+  background: rgba(10, 12, 18, 0.65);
+  z-index: 80;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  animation: upload-drop-zone-in 0.12s ease-out;
+}
+
+.upload-drop-zone[hidden] {
+  display: none;
+}
+
+.upload-drop-zone-card {
+  background: var(--bg-elev);
+  color: var(--fg);
+  border: 2px dashed var(--accent);
+  border-radius: 10px;
+  padding: 1.6rem 2.2rem;
+  text-align: center;
+  box-shadow: 0 12px 38px rgba(0, 0, 0, 0.5);
+  max-width: 80vw;
+}
+
+.upload-drop-zone-icon {
+  margin: 0 0 0.4rem;
+  font-size: 2.4rem;
+  color: var(--accent);
+  line-height: 1;
+}
+
+.upload-drop-zone-title {
+  margin: 0 0 0.3rem;
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+
+.upload-drop-zone-hint {
+  margin: 0;
+  color: var(--fg-muted);
+  font-size: 0.85rem;
+}
+
+@keyframes upload-drop-zone-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .upload-drop-zone {
+    animation: none;
+  }
+}
+body.reduced-motion .upload-drop-zone {
+  animation: none;
+}
+
 /* ───── Phase 99 — Conflict-loser archive modal ────────────────────
    Recovery UI listing the about-to-be-overwritten states captured
    when the GM resolved a conflict by adopting another tab. 1-hour
