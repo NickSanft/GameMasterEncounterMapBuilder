@@ -53,7 +53,7 @@ it announces).
 
 _Accessibility:_
 
-- **0.86.0** — Keyboard-navigable canvas selection (Tab cycles entities; arrow keys nudge; Esc clears)
+- **0.86.0** — Keyboard-navigable canvas selection (Tab cycles entities; arrow keys nudge; Esc clears) ✅
 - **0.87.0** — Per-entity ARIA outline panel (hidden region listing every entity + its current state for screen readers)
 - **0.88.0** — Focus-visible audit per theme (consistent 2 px focus rings across all 5 themes)
 - **0.89.0** — WCAG contrast verification across themes (formal AA+ pass; fix `.fg-muted` secondary-label colors that fail contrast)
@@ -96,6 +96,44 @@ _Polish:_
 - **0.108.0** — Recent backgrounds quick switcher (mirrors the Phase 75 recent-scenes pattern but for backgrounds)
 - **0.109.0** — Per-spectator token visibility (extend Phase 82's permissions to "GM hides individual tokens from individual players")
 - **0.110.0** — Persistent player names across reloads (stable cross-session player IDs — flagged in Phase 82 as future)
+
+---
+
+## [0.86.0] — 2026-04-26 — Keyboard-navigable canvas selection
+
+### Added
+- **Tab / Shift+Tab cycle through every selectable canvas entity** (tokens, walls, AoE templates, annotations) in a deterministic reading order — top-to-bottom, left-to-right within a small vertical band. Pre-86 a keyboard-only or screen-reader user had no way to acquire selection without a mouse; the existing arrow-key nudge only worked on already-selected entities. Tab from an empty selection grabs the first entity; tabbing past the last wraps back to the first.
+- **Per-entity description announced via the existing aria-live region.** Every cycle fires a `Selected: <description>` announcement so screen-reader users hear what they just landed on without needing to read canvas pixel data:
+  - Tokens: `"Goblin at column 5, row 7, 3 of 7 HP"` (HP omitted when not tracked).
+  - Walls: `"Wall, 3 squares long"` plus modifiers — `"does not block sight"`, `"does not block movement"`, `"GM-only"`.
+  - AoE: `"Cone AoE template"` / `"Sphere AoE template"` / etc., plus `"GM-only"` when applicable.
+  - Annotations: `"Note: <text>"`.
+- **Esc clears the canvas selection** (with announcement: `"Selection cleared."` or `"Selection cleared (N items)."` for multi-select). Empty-selection Esc falls through unchanged so existing handlers still work — closing modals, ending the walls chain, canceling measurement.
+- **"Canvas is empty" announcement** on Tab when no entities exist — distinguishes "I pressed Tab and nothing happened" from "I pressed Tab and the selection moved silently".
+
+### How it works
+- **`src/state/canvas-nav.ts`** (new) — pure helpers, zero DOM or store coupling:
+  - `entitiesInReadingOrder(state)` — returns one `{id, kind, sortY, sortX}` entry per token / wall / AoE / annotation, sorted by row band (snapped to 32 px so visually-on-the-same-row entities sort by x), then x, then a stable kind / id tiebreaker.
+  - `nextEntityId(state, currentSelection, direction)` — returns the next id in cycle order. Multi-select collapses to "the entity after the last selected" (`next`) or "before the first" (`prev`) so keyboard users have a predictable "step out of multi-select" path. Stale ids in selection (e.g. a deleted token) are ignored.
+  - `describeEntity(state, id)` — builds the announcer-friendly description string. Returns `null` if the id no longer resolves.
+- **`src/entries/gm.ts`** — wires Tab / Shift+Tab / Esc into the existing window-level keydown handler (skipped when an editable input has focus, so Tab still navigates form fields normally). Ctrl/Alt/Meta+Tab pass through unchanged for browser / OS shortcuts.
+
+### Why a window-level handler instead of canvas focus
+Considered making the canvas itself focusable (`tabindex="0"`) so Tab cycling only fired when the canvas had focus, mirroring how rich-text editors trap navigation. Rejected because:
+- The "Skip to battle map" link already exists and lands users on the canvas region. Forcing them to first focus the canvas before Tab does anything would add a step.
+- Tab in an empty document body should naturally fall through to the next focusable element — but our toolbar / session menu already do that on-screen, so claiming Tab globally means screen-reader users can step from "browse the toolbar" to "navigate the canvas" without an explicit hand-off.
+- The `isEditableFocus` guard means Tab still works inside any input, so we're not stealing it from form contexts.
+
+### Tests
+- **+22 unit tests** in `src/state/canvas-nav.test.ts` covering: empty-state empty-array, row-band-then-column ordering, mixed-entity intermixing by visual position, same-row x-sort, deterministic stable order, null-on-empty, first-on-empty-selection-next, last-on-empty-selection-prev, single-step cycling, end-wrap, multi-select collapse (next + prev), stale-id fallback, mixed-stale-id ignore-ghost, token description with HP + position, "Token" fallback for empty label, wall length in squares (singular + plural), wall flag annotations (sight / movement / GM-only), AoE description by kind + GM-only, annotation description, null on unknown id.
+- **+4 Playwright specs** in `e2e/keyboard-canvas-nav.spec.ts` (new): Tab on empty selection grabs the first entity; Tab cycles forward + Shift+Tab cycles back + Esc clears (verified via the announcer text); Tab on an empty canvas announces "Canvas is empty"; Esc on empty selection is a no-op (does NOT announce "cleared", so existing modal-close Esc isn't blocked).
+- **All 921 unit tests + 205 Playwright specs pass.**
+
+### Bundle
+- 77.46 / 78 KB initial-load brotli (+0.7 KB for the new module + handler wiring + announcer hooks). CSS unchanged. Lazy chunks unchanged.
+
+### What this unlocks for follow-up phases
+Phase 87 (per-entity ARIA outline panel) becomes meaningful now — a screen-reader user can read the outline AND act on what they hear, since Tab actually changes selection. Pre-86 the panel would have been a read-only summary because there was no keyboard path to the entities it described.
 
 ---
 

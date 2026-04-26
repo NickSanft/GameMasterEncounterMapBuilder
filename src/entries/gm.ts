@@ -35,6 +35,7 @@ import { createAoeTool, createAoeToolOptionsRef } from '../input/tool-aoe.js';
 import { createDrawTool, createDrawToolOptionsRef } from '../input/tool-draw.js';
 import { createWallsTool } from '../input/tool-walls.js';
 import { hitTestWalls } from '../state/walls.js';
+import { nextEntityId, describeEntity } from '../state/canvas-nav.js';
 import { DEFAULT_STROKE_COLOR, DEFAULT_STROKE_WIDTH, hitTestStrokes } from '../state/draw.js';
 import { mountDrawSettings } from '../ui/draw-settings.js';
 import { hitTestAoe } from '../input/hit-test-aoe.js';
@@ -2217,8 +2218,77 @@ function setFogArea(gx: number, gy: number, size: number, value: 0 | 1) {
   if (cells.length > 0) store.applyPatch({ kind: 'fog-set', cells });
 }
 
+/**
+ * Phase 86 — keyboard cycle through canvas entities + Esc clear.
+ *
+ * Tab / Shift+Tab call into `nextEntityId` (a pure helper over the
+ * current state) and replace `selection.ids` with a single-entity
+ * set. The new selection is announced via the existing aria-live
+ * announcer so screen-reader users hear what they just landed on
+ * without needing to read the canvas pixel data.
+ *
+ * Esc with a non-empty selection clears it (and announces). Esc
+ * with an empty selection falls through to whatever tool / modal
+ * had its own Esc handler — important for "Esc closes the open
+ * modal" and "Esc ends the walls chain" not to break.
+ *
+ * Wired BEFORE the `?` / `/` global shortcuts because Tab is also
+ * a normal browser focus key and we want to claim it on the canvas
+ * before the browser moves focus to the next focusable element.
+ *
+ * Skipped when an editable input has focus (the early-return below)
+ * so Tab still navigates form fields normally.
+ */
+function cycleCanvasSelection(direction: 'next' | 'prev'): boolean {
+  const state = store.getState();
+  const id = nextEntityId(state, selection.ids, direction);
+  if (!id) {
+    announcer.announce('Canvas is empty.');
+    return false;
+  }
+  selection.ids = new Set([id]);
+  renderer.requestRender();
+  const desc = describeEntity(state, id);
+  if (desc) announcer.announce(`Selected: ${desc}.`);
+  return true;
+}
+
+function clearCanvasSelectionFromEsc(): boolean {
+  if (selection.ids.size === 0) return false;
+  const count = selection.ids.size;
+  selection.ids = new Set();
+  renderer.requestRender();
+  announcer.announce(
+    count === 1 ? 'Selection cleared.' : `Selection cleared (${count} items).`,
+  );
+  return true;
+}
+
 window.addEventListener('keydown', (e) => {
   if (isEditableFocus(e.target)) return;
+
+  // Phase 86 — Tab / Shift+Tab cycle the canvas selection. Done here
+  // rather than in the Select tool because the cycle works regardless
+  // of which tool is active (a screen-reader user shouldn't have to
+  // first activate a tool to "find their place" on the canvas).
+  // Ctrl/Alt/Meta+Tab are reserved for browser / OS shortcuts — we
+  // pass them through unchanged.
+  if (e.key === 'Tab' && !e.ctrlKey && !e.altKey && !e.metaKey) {
+    if (cycleCanvasSelection(e.shiftKey ? 'prev' : 'next')) {
+      e.preventDefault();
+      return;
+    }
+  }
+
+  // Phase 86 — Esc with a non-empty selection clears it. Empty-selection
+  // Esc falls through so the existing modal / tool handlers (close
+  // dialog, end walls chain, cancel measurement) keep working.
+  if (e.key === 'Escape' && !e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey) {
+    if (clearCanvasSelectionFromEsc()) {
+      e.preventDefault();
+      return;
+    }
+  }
 
   if (e.key === '?') {
     shortcutOverlay.toggle();
