@@ -36,6 +36,10 @@ import { createDrawTool, createDrawToolOptionsRef } from '../input/tool-draw.js'
 import { createWallsTool } from '../input/tool-walls.js';
 import { hitTestWalls } from '../state/walls.js';
 import { nextEntityId, describeEntity } from '../state/canvas-nav.js';
+import {
+  planQuickHpAdjust,
+  summarizeQuickHpResults,
+} from '../state/quick-hp-adjust.js';
 import { DEFAULT_STROKE_COLOR, DEFAULT_STROKE_WIDTH, hitTestStrokes } from '../state/draw.js';
 import { mountDrawSettings } from '../ui/draw-settings.js';
 import { hitTestAoe } from '../input/hit-test-aoe.js';
@@ -2272,6 +2276,60 @@ function cycleCanvasSelection(direction: 'next' | 'prev'): boolean {
   return true;
 }
 
+/**
+ * Phase 92 — quick-HP adjust on selected HP-bearing tokens.
+ *
+ * Bound to `+` / `-` (and the bracket-less variants of `=` / `-`).
+ * `Shift` modifier multiplies by 5 — fast nudge for big hits without
+ * opening the Damage / Heal dialog. Skipped when no HP-bearing token
+ * is in selection (silent no-op).
+ *
+ * Convention: `+` heals (positive delta), `-` damages (negative delta).
+ *
+ * Re-uses the dialog's death-save automation via the shared
+ * `planQuickHpAdjust` helper, so a heal that wakes a downed token
+ * resets the saves tracker just like the dialog does.
+ *
+ * Fires the same Phase 77 damage-fx broadcast (local + remote) so
+ * the floating number animation appears on both GM and Spectator.
+ */
+function quickHpAdjust(delta: number): boolean {
+  if (delta === 0) return false;
+  const state = store.getState();
+  const targets = state.tokens.filter(
+    (t) => selection.ids.has(t.id) && t.hp !== null,
+  );
+  if (targets.length === 0) return false;
+  const { patches, results } = planQuickHpAdjust(targets, delta);
+  if (patches.length === 0) {
+    // All targets already at the clamp — give a hint instead of silence.
+    announcer.announce(
+      delta > 0 ? 'Already at full HP.' : 'Already at 0 HP.',
+    );
+    return true;
+  }
+  store.batch(() => {
+    for (const p of patches) {
+      store.applyPatch({ kind: 'token-update', id: p.id, changes: p.changes });
+    }
+  });
+  // Phase 77 — fire the floating-number effect for every result.
+  // Convention there is positive-amount = damage, so flip our delta.
+  for (const r of results) {
+    const fxAmount = -r.delta;
+    damageFxManager.add(r.token.id, fxAmount);
+    channel?.send({
+      type: 'damage-fx',
+      tokenId: r.token.id,
+      amount: fxAmount,
+      id: Date.now() + Math.floor(Math.random() * 1000),
+    });
+  }
+  const summary = summarizeQuickHpResults(results);
+  if (summary) announcer.announce(summary);
+  return true;
+}
+
 function clearCanvasSelectionFromEsc(): boolean {
   if (selection.ids.size === 0) return false;
   const count = selection.ids.size;
@@ -2407,6 +2465,24 @@ window.addEventListener('keydown', (e) => {
       };
       rulerSettings.sync();
       renderer.requestRender();
+      e.preventDefault();
+      return;
+    }
+  }
+
+  // Phase 92 — `+` / `-` adjust HP on selected HP-bearing tokens
+  // BEFORE the zoom shortcut takes them. Shift modifier = ±5. With no
+  // HP-bearing token selected, fall through to the zoom binding so the
+  // pre-92 behavior is preserved when the keys are pressed without a
+  // selection.
+  if (
+    (e.key === '+' || e.key === '=' || e.key === '-' || e.key === '_') &&
+    !e.ctrlKey && !e.altKey && !e.metaKey
+  ) {
+    const isHeal = e.key === '+' || e.key === '=';
+    const magnitude = e.shiftKey ? 5 : 1;
+    const delta = isHeal ? magnitude : -magnitude;
+    if (quickHpAdjust(delta)) {
       e.preventDefault();
       return;
     }

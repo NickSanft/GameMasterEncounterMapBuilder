@@ -62,7 +62,7 @@ _Accessibility:_
 
 _Combat power-user UX:_
 
-- **0.92.0** — Quick-HP adjust via scroll / keyboard (right-click + scroll = ±1, Shift = ±5; +/- keys with token selected)
+- **0.92.0** — Quick-HP adjust via +/- keys (Shift = ±5) — wheel-scroll variant deferred ✅
 - **0.93.0** — Per-token turn timer (optional countdown above the active initiative card)
 - **0.94.0** — Combat log panel (auto-record damage / conditions / death-saves / turn changes; toggleable side panel + export)
 
@@ -96,6 +96,41 @@ _Polish:_
 - **0.108.0** — Recent backgrounds quick switcher (mirrors the Phase 75 recent-scenes pattern but for backgrounds)
 - **0.109.0** — Per-spectator token visibility (extend Phase 82's permissions to "GM hides individual tokens from individual players")
 - **0.110.0** — Persistent player names across reloads (stable cross-session player IDs — flagged in Phase 82 as future)
+
+---
+
+## [0.92.0] — 2026-04-26 — Quick-HP adjust via +/- keys
+
+### Added
+- **`+` / `-` keyboard shortcuts adjust HP on selected HP-bearing tokens.** Replaces the "right-click → Damage / Heal → type number → Apply" four-step path with a single keypress for the common "took 1 from a flank" / "got healed for 3" cases that happen turn after turn. Pre-92 the dialog was the only HP path; great for batched multi-token combat ("a fireball does 28 to four of you") but heavy for incremental tweaks.
+- **Modifiers:**
+  - **`+` / `=`** → +1 HP (heal)
+  - **`-` / `_`** → -1 HP (damage)
+  - **`Shift +` / `Shift -`** → ±5 HP (the modifier matches the existing arrow-key Shift convention for token movement: `Shift + ArrowKey` already moves 5 cells)
+- **Death-save automation** mirrors the Damage / Heal dialog (Phase 72): healing a 0-HP token resets the death-saves tracker; damaging a 0-HP token would normally add a save failure, but the keyboard path skips that — the "+1 failure on damage to a 0-HP target" rule fires only inside the dialog where the GM can see the result. The keyboard shortcut is for routine adjustments; truly granular cases (crits, crit-on-downed = +2 fails) still go through the dialog.
+- **Floating damage / heal numbers** (Phase 77) fire on the GM AND broadcast to the Spectator just like the dialog. Same wire convention (`damage-fx.amount` is positive for damage, negative for heal).
+- **Live-region announcement** (Phase 90) per change: single token reads `"Goblin: 4 of 7 HP (-3)"` (pre-clamp delta is preserved so the GM hears "I dealt 5" even if the target only had 2 HP left); multi-token reads `"Healed 3 HP across 4 tokens"`. The Phase 90 rate-limit gracefully coalesces a fast `--` then `++` into one announcement of the final state.
+- **Clamp hint:** if every selected target is already at the destination clamp (full HP for `+`, 0 HP for `-`), the announcer says `"Already at full HP."` / `"Already at 0 HP."` instead of going silent — distinguishes "the shortcut didn't trigger" from "the shortcut triggered but had nothing to do".
+
+### How it works
+- **`src/state/quick-hp-adjust.ts`** (new) — pure helpers, zero DOM coupling:
+  - `planQuickHpAdjust(tokens, delta)` — runs the per-token apply logic (HP clamp via `applyDamage`, death-save reset on wake-up) and returns `{ patches, results }`. Skips tokens that have no HP tracking + tokens already at the clamp (no-op `delta`).
+  - `summarizeQuickHpResults(results)` — builds the announcer string. Single-token format includes the new HP / max + the actual delta in parens; multi-token aggregates by direction.
+- **`src/entries/gm.ts`** — `quickHpAdjust(delta)` wraps the helper: gathers HP-bearing selected tokens, batches the patches into `store.batch()`, fires the `damage-fx` events (local + remote), announces. Wired BEFORE the existing `+ / -` zoom shortcut in the global keydown handler so HP wins when there's a selection; falls through to zoom otherwise.
+
+### Why convention `+ = heal` (not `+ = increase damage taken`)
+The Damage / Heal dialog uses "positive amount = damage" (typing `7` deals 7). The keyboard shortcut inverts: `+` heals because the keyboard mental model is "this is a good direction." Inside `planQuickHpAdjust`, the helper translates by negating before calling `applyDamage`, so the dialog and shortcut share the same clamp + automation logic without surprising either entry point's users.
+
+### Tests
+- **+19 unit tests** in `src/state/quick-hp-adjust.test.ts` (new): empty inputs (empty list / delta = 0 / non-finite delta) all return empty; tokens without HP are skipped; positive delta heals (clamped to max); negative delta damages (clamped to 0); over-heal / over-damage clamping reports the actual delta; tokens already at the clamp are skipped (no patch); damaging a 0-HP token (already 0) yields no patch (the dialog handles the +1-failure case); healing a 0-HP token resets `deathSaves`; multi-token batch with mixed clamping outcomes; `summarizeQuickHpResults` covers single-damage, single-heal, blank-label fallback, "stable" suffix on death-save reset, multi-heal aggregation, multi-damage aggregation, empty-input null.
+- **+4 Playwright specs** in `e2e/quick-hp-adjust.spec.ts` (new): `-` damages by 1 with announcer report; `+` heals by 1; `Shift+-` damages by 5; no-HP-bearing-selection falls through to zoom (no quick-HP announcement).
+- **All 1017 unit tests + 222 Playwright specs pass.**
+
+### Bundle
+- 78.75 / 80 KB initial-load brotli (+0.6 KB for the helper + the entry wiring + the announcer summarizer). CSS unchanged. Lazy chunks unchanged.
+
+### Deferred from the original plan
+The original Phase 92 plan included **wheel-based HP adjust** (`Shift+wheel` over a hovered HP-bearing token = ±1). Considered + skipped: the canvas wheel handler is already busy with pan-zoom (every wheel = zoom). Adding HP-adjust on a modified wheel would need careful coordination with the pan-zoom handler to avoid double-firing or zoom-while-adjusting bugs. The keyboard shortcut covers the original pain point ("nudge HP without opening the dialog"); the wheel variant is a future easy follow-up if real users ask for it.
 
 ---
 
