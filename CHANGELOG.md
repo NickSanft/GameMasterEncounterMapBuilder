@@ -81,7 +81,7 @@ _Content authoring:_
 
 - **0.100.0** — Drag-and-drop / paste-to-upload backgrounds ✅
 - **0.101.0** — Auto-grid detection on background upload (edge-detect the map's grid + offer to snap to it) ✅
-- **0.102.0** — Named camera bookmarks (save positions like "throne room"; Ctrl+1..9-style jump)
+- **0.102.0** — Named camera bookmarks (save positions like "throne room"; Alt+1..9 jump) ✅
 
 _Mobile / tablet ergonomics:_
 
@@ -96,6 +96,44 @@ _Polish:_
 - **0.108.0** — Recent backgrounds quick switcher (mirrors the Phase 75 recent-scenes pattern but for backgrounds)
 - **0.109.0** — Per-spectator token visibility (extend Phase 82's permissions to "GM hides individual tokens from individual players")
 - **0.110.0** — Persistent player names across reloads (stable cross-session player IDs — flagged in Phase 82 as future)
+
+---
+
+## [0.102.0] — 2026-04-26 — Named camera bookmarks
+
+### Added
+- **Save the current camera as a named bookmark** (e.g. "Throne room", "Tavern interior"). Bookmarks are scoped to the current scene — saving "Throne room" in the castle scene doesn't pollute the tavern scene's list. Each scene gets up to 32 bookmarks before the oldest one is evicted.
+- **Camera bookmarks modal** (`Ctrl+K → "camera bookmarks"`) lists every saved viewpoint with **Jump** / **Rename** / **Delete** actions per row. The first nine rows show their `Alt+N` hotkey in a slot column so it's discoverable without opening the shortcut overlay.
+- **Two new command-palette entries**: *"Open camera bookmarks…"* and *"Save current camera as bookmark…"* (group: **Camera**). The save command is the fastest path — one keystroke (`Ctrl+K`), one prompt, done.
+- **`Alt+1..9` quick-jump** — hops the camera to the Nth bookmark for the active scene (newest-first ordering, matching the modal's slot column). Empty slot announces *"No camera bookmark in slot N."* through the polite live region; never silently no-ops.
+- **Bookmark jumps respect the existing camera-broadcast preference** — if "broadcast camera" is on, the Spectator's view follows when the GM hops via `Alt+N`. Same channel as `fitToContent` and `resetCamera`.
+
+### Why this matters
+The Phase 75 `Ctrl+1..9` shortcut hops *between scenes*. That's a different axis from "I want to flip back to the boss-fight overview without scrolling." Camera bookmarks fill the within-scene gap: the GM can frame three or four interesting viewpoints (encounter overview, NPC close-up, secret room) at session prep time and toggle between them on a single keystroke during play. No more "let me find that again — pan, pan, zoom, scroll" mid-combat.
+
+### Architecture
+- **`src/state/camera-bookmarks.ts`** (new, ~225 lines) — pure helpers + a versioned localStorage-backed store. CRUD: `addBookmark`, `updateBookmark`, `removeBookmark`, `forgetScene`, `listBookmarks`, `pickBookmarkSlot`. Wire format: `{version: 1, entries: CameraBookmark[]}` keyed by `gm-encounter-maps-camera-bookmarks`. Bookmarks are scoped via a `sceneId` field on each entry; `listBookmarks(sceneId)` filters + sorts newest-first.
+  - Defensive against malformed persisted state: drops entries missing required fields, drops wrong-version blobs, falls back to empty on parse failure.
+  - **Per-scene cap** (`MAX_BOOKMARKS_PER_SCENE = 32`) protects localStorage quota when a long-lived session accumulates dozens of named viewpoints. Eviction is per-scene + oldest-first so other scenes are never touched.
+  - **Forget-on-delete** — `handleDeleteActiveScene` calls `forgetScene(activeId)` before switching away. The cap eviction would eventually clear orphans anyway, but explicit cleanup keeps localStorage tidy + avoids ghost bookmarks reappearing if a scene id ever recurs (e.g. via JSON-import round trips).
+- **`src/ui/camera-bookmarks-modal.ts`** (new, ~210 lines) — modal listing the active scene's bookmarks. Each row: a "slot" column showing `Alt+1..9` for the first nine entries, the bookmark name (truncated with ellipsis for long names), and Jump / Rename / Delete buttons. Save button at the top of the body opens a `window.prompt` for the name + captures the live camera in one click.
+- **`src/entries/gm.ts`** — mounts the modal with `getCurrentCamera: () => ({ ...renderer.camera })` (defensive copy so modifying the bookmark later doesn't mutate the live camera) and an `onJump` handler that does `renderer.camera = { ...entry.camera }; sendCameraIfBroadcasting(); renderer.requestRender();` — same three-step pattern as `resetCamera` + the existing keyboard shortcuts. Adds the `Alt+1..9` keyboard handler in the top-level keydown listener, gated on `e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey` so it doesn't collide with the existing `Ctrl+1..9` (recent scenes) or browser tab-switching modifiers.
+
+### UX details
+- **Hotkey choice** — `Alt+1..9` was picked over `Ctrl+Shift+1..9` to keep the muscle memory short (one modifier) and over plain `1..9` to leave the digits free for ruler presets / future tool selection. `Alt` is a clean choice since the GM page only uses Alt for one other binding (none today; this is the first).
+- **Promp-based naming** uses `window.prompt` rather than an inline edit-in-place input — same pattern as the Scenes modal's rename, so the muscle memory is consistent. (A future polish phase could swap both to inline editors at once.)
+- **Live-region announcements** — every save / jump / empty-slot fires a polite announce so screen-reader users don't have to peek at the canvas to know what happened.
+
+### Tests
+- **+23 unit tests** in `src/state/camera-bookmarks.test.ts` (new): starts empty per scene; persists + returns new entries; orders newest-first; scopes by scene; defaults to "Untitled bookmark" on blank; trims whitespace; renames; updates camera; keeps existing name on whitespace; update/remove on unknown id is a no-op; `removeBookmark` drops the entry; `forgetScene` drops only the matching scene's entries (no-op when nothing matches); `pickBookmarkSlot` returns the Nth newest, returns null for empty / invalid slots; per-scene cap evicts oldest first + doesn't touch other scenes; defensive parsing for malformed JSON, version mismatch, and entries missing required fields.
+- **+4 Playwright specs** in `e2e/camera-bookmarks.spec.ts` (new): palette opens the modal; empty-state copy is shown; saving via the modal persists across close + re-open; `Alt+1` jumps to the first bookmark + announces the jump; `Alt+1` with no bookmarks announces the empty slot.
+- **All 1158 unit tests + 259 Playwright specs pass** locally. The same `scenes.spec.ts:56` parallel flake from Phase 101 reappeared (passes in isolation, has been seen before in heavily-parallel runs); CI runs serially with retries=2, absorbed.
+
+### Bundle
+- **JS budget bumped 88 → 90 KB.** Phase 102 added ~1.4 KB brotli (modal + store + 2 palette commands + Alt+N handler), landing at 89.03 / 88 KB which would have been 1.03 KB over. CSS 11.10 / 12 KB. Lazy chunks unchanged.
+
+### Pre-push checklist
+Caught the bundle-budget overage locally before push (would have been a CI red); same routine as the last four phases. Full unit suite + full e2e (with one absorbed flake) + visual-regression spec + size-limit all green pre-push. Five clean phases in a row now (97 + 99 + 100 + 101 + 102) with the pre-push checklist covering for the ones that needed limit bumps before they hit CI.
 
 ---
 

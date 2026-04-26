@@ -190,6 +190,15 @@ import FogWorker from '../render/fog-worker.js?worker';
 import { collectLights, collectSightWalls, collectViewers } from '../state/los-compose.js';
 import { cellsToReveal } from '../state/auto-reveal.js';
 import { detectGridFromBlob } from '../state/grid-detect-blob.js';
+import {
+  addBookmark,
+  forgetScene as forgetSceneBookmarks,
+  listBookmarks,
+  pickBookmarkSlot,
+  removeBookmark,
+  updateBookmark,
+} from '../state/camera-bookmarks.js';
+import { mountCameraBookmarksModal } from '../ui/camera-bookmarks-modal.js';
 
 const canvasEl = document.getElementById('canvas');
 if (!(canvasEl instanceof HTMLCanvasElement)) {
@@ -996,6 +1005,58 @@ const conflictLoserArchiveModal = mountConflictLoserArchiveModal({
   onClearAll: () => conflictLoserArchive.clear(),
 });
 
+// Phase 102 — named camera bookmarks. The modal lists per-scene
+// bookmarks with Jump / Rename / Delete actions; the host wires
+// the data getters + action callbacks to `camera-bookmarks.ts` and
+// drives the actual camera move through the renderer. Slot
+// numbers (1..9) on the first nine entries match the Alt+N hotkey
+// handler below.
+const cameraBookmarksModal = mountCameraBookmarksModal({
+  getEntries: () => {
+    const sceneId = getActiveSceneId();
+    return sceneId ? listBookmarks(sceneId) : [];
+  },
+  getCurrentCamera: () => ({ ...renderer.camera }),
+  onSave: (name, camera) => {
+    const sceneId = getActiveSceneId();
+    if (!sceneId) return;
+    addBookmark(sceneId, name, camera);
+    announcer.announce(`Saved camera bookmark: ${name}.`);
+  },
+  onJump: (id) => {
+    const sceneId = getActiveSceneId();
+    if (!sceneId) return;
+    const entry = listBookmarks(sceneId).find((b) => b.id === id);
+    if (!entry) return;
+    renderer.camera = { ...entry.camera };
+    sendCameraIfBroadcasting();
+    renderer.requestRender();
+    announcer.announce(`Jumped to bookmark: ${entry.name}.`);
+  },
+  onRename: (id, name) => updateBookmark(id, { name }),
+  onDelete: (id) => removeBookmark(id),
+});
+
+/**
+ * Phase 102 — Alt+N quick-jump. Looks up the Nth bookmark for the
+ * active scene (newest-first, matching the modal's slot column) and
+ * snaps the camera to it. Silently no-ops when the slot is empty
+ * (e.g. user presses Alt+5 on a scene with two bookmarks).
+ */
+function jumpToBookmarkSlot(slot: number): void {
+  const sceneId = getActiveSceneId();
+  if (!sceneId) return;
+  const entry = pickBookmarkSlot(sceneId, slot);
+  if (!entry) {
+    announcer.announce(`No camera bookmark in slot ${slot}.`);
+    return;
+  }
+  renderer.camera = { ...entry.camera };
+  sendCameraIfBroadcasting();
+  renderer.requestRender();
+  announcer.announce(`Jumped to bookmark: ${entry.name}.`);
+}
+
 // Phase 97 — restore-from-snapshot modal. Surfaces the rotating
 // per-scene snapshot history captured by the persist debounce
 // (see `recordSnapshot` invocation lower down). On Restore, swap
@@ -1182,6 +1243,14 @@ async function handleDeleteActiveScene(): Promise<void> {
   // another scene to become active, or create a blank one.
   const list = await listScenes();
   const activeId = getActiveSceneId();
+  // Phase 102 — drop the deleted scene's camera bookmarks now that
+  // it's gone. The per-scene cap would eventually evict orphans
+  // anyway, but cleaning up explicitly keeps localStorage tidy +
+  // avoids ghost bookmarks reappearing if a scene id ever recurs
+  // (e.g. via JSON-import round trips).
+  if (activeId) {
+    forgetSceneBookmarks(activeId);
+  }
   const others = list.filter((s) => s.id !== activeId);
   if (others.length > 0) {
     await switchToScene(others[0]!.id);
@@ -2701,6 +2770,35 @@ function slugForFilename(name: string): string {
     group: 'Modals',
     run: () => conflictLoserArchiveModal.open(),
   });
+  // Phase 102 — camera bookmarks. Two palette entries: one to open
+  // the modal (manage / rename / delete) and one to save the live
+  // camera in one shot without going through the modal.
+  reg.register({
+    id: 'open-camera-bookmarks',
+    label: 'Open camera bookmarks…',
+    hint: 'Named viewpoints for the current scene (Alt+1..9)',
+    group: 'Camera',
+    run: () => cameraBookmarksModal.open(),
+  });
+  reg.register({
+    id: 'save-camera-bookmark',
+    label: 'Save current camera as bookmark…',
+    hint: 'Capture the live x / y / zoom under a name',
+    group: 'Camera',
+    run: () => {
+      const sceneId = getActiveSceneId();
+      if (!sceneId) {
+        announcer.announce('Cannot save a bookmark — no active scene.');
+        return;
+      }
+      const name = window.prompt('Name for this bookmark:', '');
+      if (name === null) return;
+      const trimmed = name.trim();
+      if (!trimmed) return;
+      addBookmark(sceneId, trimmed, { ...renderer.camera });
+      announcer.announce(`Saved camera bookmark: ${trimmed}.`);
+    },
+  });
   // Phase 98 — per-scene JSON export / import. The export reads the
   // CURRENTLY-ACTIVE scene's name + state; the import opens the
   // scenes modal where the user can drop a file (centralizes the
@@ -2964,6 +3062,26 @@ window.addEventListener('keydown', (e) => {
   if (e.key === '/') {
     slashInput.open();
     e.preventDefault();
+    return;
+  }
+
+  // Phase 102 — Alt+1..9 jumps to the Nth camera bookmark for the
+  // current scene (newest-first). Bookmarks are scene-scoped so the
+  // target changes when the user switches scenes. We pick Alt over
+  // Ctrl because Ctrl+1..9 is already taken by the Phase 75
+  // recent-scenes quick-switch — same ergonomic family ("hop to a
+  // remembered place") but a different axis (place WITHIN a scene
+  // vs ACROSS scenes).
+  if (
+    e.altKey &&
+    !e.ctrlKey &&
+    !e.metaKey &&
+    !e.shiftKey &&
+    /^[1-9]$/.test(e.key)
+  ) {
+    const slot = parseInt(e.key, 10);
+    e.preventDefault();
+    jumpToBookmarkSlot(slot);
     return;
   }
 
