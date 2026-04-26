@@ -35,6 +35,11 @@ export interface SessionMenuActions {
    * Phase 94 — toggle the combat log side panel. Optional; GM-only.
    */
   onToggleCombatLog?: () => void;
+  /**
+   * Phase 97 — open the snapshot-history restore modal. Optional;
+   * GM-only.
+   */
+  onOpenSnapshotHistory?: () => void;
 }
 
 export function mountSessionMenu(
@@ -217,6 +222,22 @@ export function mountSessionMenu(
     });
   }
 
+  // Phase 97 — "Snapshots…" opens the rotating per-scene snapshot
+  // history. GM-only; up to 8 auto-saved snapshots per scene.
+  const snapshotsBtn = actions.onOpenSnapshotHistory
+    ? createButton(
+        'Snapshots…',
+        'Restore from an auto-saved snapshot of this scene',
+      )
+    : null;
+  if (snapshotsBtn && actions.onOpenSnapshotHistory) {
+    const handler = actions.onOpenSnapshotHistory;
+    snapshotsBtn.addEventListener('click', () => {
+      snapshotsBtn.blur();
+      handler();
+    });
+  }
+
   menu.appendChild(uploadBtn);
   menu.appendChild(presetBtn);
   menu.appendChild(scenesBtn);
@@ -228,6 +249,7 @@ export function mountSessionMenu(
   menu.appendChild(importBtn);
   menu.appendChild(notesBtn);
   if (combatLogBtn) menu.appendChild(combatLogBtn);
+  if (snapshotsBtn) menu.appendChild(snapshotsBtn);
   menu.appendChild(clearDrawingsBtn);
   menu.appendChild(shortcutsBtn);
   if (replayTourBtn) menu.appendChild(replayTourBtn);

@@ -55,6 +55,11 @@ import { createCommandRegistry } from '../state/command-registry.js';
 import { advanceInitiative, retreatInitiative } from '../state/initiative.js';
 import { createFirstUseHintsStore } from '../state/first-use-hints.js';
 import { mountFirstUseHintToast } from '../ui/first-use-hint.js';
+import {
+  recordSnapshot,
+  type Snapshot,
+} from '../state/snapshot-history.js';
+import { mountSnapshotHistoryModal } from '../ui/snapshot-history-modal.js';
 import { mountTokenEditor } from '../ui/token-editor.js';
 import { mountAnnotationEditor } from '../ui/annotation-editor.js';
 import { mountWallEditor } from '../ui/wall-editor.js';
@@ -783,6 +788,8 @@ mountSessionMenu(document.body, {
   onToggleNotes: () => notesPanel.toggle(),
   // Phase 94 — combat log panel toggle.
   onToggleCombatLog: () => combatLogPanel.toggle(),
+  // Phase 97 — snapshot history modal.
+  onOpenSnapshotHistory: () => snapshotHistoryModal.open(),
   onShortcuts: () => shortcutOverlay.open(),
   onInitiative: () => initiativeModal.open(),
   onTokenLibrary: () => tokenLibraryModal.open(),
@@ -849,6 +856,29 @@ const combatLogPanel = mountCombatLogPanel({ log: combatLog });
 // Reference once so the unused-binding lint stays happy; the handle
 // lives for the lifetime of the page.
 void combatLogObserver;
+
+// Phase 97 — restore-from-snapshot modal. Surfaces the rotating
+// per-scene snapshot history captured by the persist debounce
+// (see `recordSnapshot` invocation lower down). On Restore, swap
+// the store's state to the snapshot + flush a save so the change
+// survives a reload race.
+const snapshotHistoryModal = mountSnapshotHistoryModal({
+  getActiveSceneId: () => getActiveSceneId(),
+  onRestore: (snap: Snapshot) => {
+    try {
+      store.loadState(deserializeState(snap.state));
+      store.clearHistory();
+      void saveState(store.getState());
+      announcer.announce(
+        `Restored snapshot from ${new Date(snap.takenAt).toLocaleTimeString()}.`,
+        'assertive',
+      );
+    } catch (err) {
+      console.warn('[snapshot-history] restore failed', err);
+      announcer.announce('Failed to restore snapshot.', 'assertive');
+    }
+  },
+});
 
 const damageHealDialog = mountDamageHealDialog({
   store,
@@ -1957,11 +1987,27 @@ const timeOfDayPicker = mountTimeOfDayPicker({
 // Phase 76 — wraps the save in status updates so the pill reflects
 // the persist lifecycle ('saving' → 'saved' or 'error'). Failures
 // don't propagate (callers `void` the promise).
+//
+// Phase 97 — after each successful save, push a snapshot into the
+// rotating per-scene history. The snapshot module enforces its own
+// 30 s rate-limit + state-dedup, so calling it on every persist is
+// cheap; most calls are no-ops. Snapshot failures are swallowed
+// with a console warning — a missed snapshot doesn't block the user.
 const persist = debounce(async () => {
   saveStatusPill.setStatus('saving');
   try {
     const ok = await saveState(store.getState());
     saveStatusPill.setStatus(ok ? 'saved' : 'error');
+    if (ok) {
+      const sceneId = getActiveSceneId();
+      if (sceneId) {
+        try {
+          await recordSnapshot(sceneId, serializeState(store.getState()));
+        } catch (snapErr) {
+          console.warn('[snapshot-history] record failed', snapErr);
+        }
+      }
+    }
   } catch (err) {
     console.warn('[persist] save threw unexpectedly', err);
     saveStatusPill.setStatus('error');
@@ -2463,6 +2509,13 @@ const commandPalette = mountCommandPalette({ registry: commandRegistry });
     label: 'Open Permissions',
     group: 'Modals',
     run: () => permissionsModal.open(),
+  });
+  reg.register({
+    id: 'open-snapshot-history',
+    label: 'Restore from snapshot…',
+    hint: 'Auto-saved scene history',
+    group: 'Modals',
+    run: () => snapshotHistoryModal.open(),
   });
   reg.register({
     id: 'toggle-notes',

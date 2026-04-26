@@ -73,7 +73,7 @@ _Onboarding & discoverability:_
 
 _Data lifecycle:_
 
-- **0.97.0** — Auto-save snapshot history (5–10 rotating IDB snapshots; "restore from N minutes ago" panel)
+- **0.97.0** — Auto-save snapshot history (8 rotating IDB snapshots per scene; "restore from N minutes ago" modal) ✅
 - **0.98.0** — Per-scene JSON export / import (share a single encounter without bundling the whole session)
 - **0.99.0** — Conflict-merge history (keep the losing tab's snapshot for an hour after Phase 84 resolves a conflict)
 
@@ -96,6 +96,45 @@ _Polish:_
 - **0.108.0** — Recent backgrounds quick switcher (mirrors the Phase 75 recent-scenes pattern but for backgrounds)
 - **0.109.0** — Per-spectator token visibility (extend Phase 82's permissions to "GM hides individual tokens from individual players")
 - **0.110.0** — Persistent player names across reloads (stable cross-session player IDs — flagged in Phase 82 as future)
+
+---
+
+## [0.97.0] — 2026-04-26 — Auto-save snapshot history
+
+### Added
+- **Rotating per-scene snapshot history.** Every successful autosave now also pushes a snapshot into a per-scene rotating ring (cap **8 snapshots per scene**, oldest evicted FIFO). Surfaced via a new "Snapshots…" entry in the session menu + a "Restore from snapshot…" command in the Phase 95 palette. The restore modal lists each snapshot with a relative timestamp ("5 minutes ago"), a quick summary (token count, fog %), and a Restore button that swaps the live state to the snapshot + persists immediately so the change survives a reload race.
+- **Smart capture rate.** A 30-second `MIN_INTERVAL_MS` rate-limit per scene keeps the ring from being spammed by the existing 200 ms persist debounce — so a busy combat round doesn't burn the entire history on near-identical states inside a single minute. Same-state consecutive saves are also deduped (compared via `JSON.stringify` on the serialized state) so leaving a scene idle doesn't snapshot a duplicate.
+- **Per-scene scoping.** `clearSnapshots(sceneId)` is exposed for future use when a scene is deleted (the existing scene-delete path doesn't call it yet — that's a small follow-up). Snapshots indexed by `sceneId` for cheap lookup; up to ~8 scenes × 8 snapshots × ~50 KB each = ~3.2 MB worst-case IDB usage.
+
+### Why per-scene (not per-session)
+- A multi-scene session has each scene's history scoped to that scene — restoring the throne-room snapshot doesn't accidentally erase the goblin-cave you saved 5 minutes earlier.
+- The user's mental model is "I want to undo what I did in THIS scene", which matches the per-scene scoping naturally.
+
+### Why an 8-snapshot cap
+- 8 × 30s = 4 minutes of useful history at full save rate. Long enough to undo "I deleted the wrong thing 2 minutes ago"; short enough to keep IDB usage bounded.
+- Each snapshot carries the full `SerializedSessionState` (~10–100 KB depending on scene size). 8 keeps the per-scene cost well inside browser quota even with image-heavy sessions.
+
+### Architecture
+- **`src/state/idb.ts`** — bumped `DB_VERSION` to v5 + added `SNAPSHOTS_STORE = 'snapshots'`. The new store has a `sceneId` index (for cheap per-scene lookup) + a `takenAt` index (reserved for future range queries). Idempotent `onupgradeneeded` — existing data unaffected.
+- **`src/state/snapshot-history.ts`** (new) — pure-ish module:
+  - `recordSnapshot(sceneId, state, { now? })` — rate-limited + deduped capture. Returns the recorded snapshot or `null` if suppressed. Uses an in-process `Map<sceneId, RateLimitEntry>` for the rate-limit/dedup memo (cleared via `clearSnapshots` + a test helper).
+  - `listSnapshots(sceneId)` — newest-first via the IDB index.
+  - `getSnapshot(id)` / `deleteSnapshot(id)` / `clearSnapshots(sceneId)` — straightforward CRUD.
+  - `formatRelativeTime(takenAt, now)` — pure helper for the modal: "just now", "30 seconds ago", "5 minutes ago", "2 hours ago", "3 days ago".
+- **`src/ui/snapshot-history-modal.ts`** (new) — the restore modal. Lazy-loads the snapshot list on `open()` (so opening on a scene with many snapshots doesn't block boot); each row's summary precomputes `tokenCount` + fog `%` from the snapshot's state without rehydrating the full `SessionState`.
+- **`src/entries/gm.ts`** — wired the persist debounce to call `recordSnapshot(sceneId, serializeState(state))` after each successful save. The snapshot module's own rate-limit + dedup means most calls are no-ops; the call cost is negligible. Restore path: `store.loadState(deserializeState(snap.state))` + `clearHistory()` + `void saveState(...)` synchronously off the debounce path so a beforeunload race doesn't blow the restore away. Same pattern as Phase 84's `gm-takeover` apply.
+- **`src/ui/session-menu.ts`** — extended with optional `onOpenSnapshotHistory` callback; menu only mounts the button when wired (GM only).
+
+### Tests
+- **+20 unit tests** in `src/state/snapshot-history.test.ts` (new, fake-indexeddb): records first snapshot, rate-limits within MIN_INTERVAL_MS, records again past the interval, dedups byte-identical state, rate-limits per-scene independently, evicts oldest past MAX_SNAPSHOTS_PER_SCENE; listSnapshots empty / sorted-newest-first / per-scene scoped; getSnapshot null on missing id, round-trips put + get + delete; clearSnapshots wipes per-scene + clears rate-limit memo; formatRelativeTime "just now" / seconds / minutes / hours / days / future-and-NaN-clamp.
+- **+4 Playwright specs** in `e2e/snapshot-history.spec.ts` (new): GM session menu has a "Snapshots…" entry that opens an empty modal; Esc closes the modal; command palette has a "Restore from snapshot…" entry; Spectator session menu does NOT include "Snapshots…".
+- **All 1100 unit tests + 242 Playwright specs pass.**
+
+### Bundle
+- **Initial-load brotli budget bumped 84 → 86 KB.** Phase 97 added ~1.2 KB (snapshot module + modal + entry wiring); landed at 84.35 / 84 KB which would have been 352 B over. CSS 10.63 / 12 KB. Lazy chunks unchanged.
+
+### Visual-regression baseline regen
+The new "Snapshots…" entry shifted the session-menu height by 40 px (10 px / row × the new row). Regenerated `session-menu-light-chromium-{win32,linux}.png` as part of this commit — same workflow as Phase 94's combat-log entry. The pre-push visual-regression check (lesson from 0.94.1) caught the drift locally before push, so no broken-CI cycle this time.
 
 ---
 
