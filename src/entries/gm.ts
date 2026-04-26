@@ -97,7 +97,7 @@ import { createPreferences } from '../state/preferences.js';
 import { loadCamera, saveCamera, clearCamera } from '../state/camera-persistence.js';
 import { debounce, rafThrottle } from '../util/debounce.js';
 import { createImageLoader } from '../images/loader.js';
-import { putImage } from '../images/store.js';
+import { putImage, getImageURL, getImage } from '../images/store.js';
 import { hitTestToken } from '../input/hit-test.js';
 import { screenToWorld } from '../render/coords.js';
 import { duplicateTokens } from '../state/token-clipboard.js';
@@ -203,6 +203,12 @@ import {
   attachLongPress,
   dispatchSyntheticContextMenu,
 } from '../input/long-press.js';
+import {
+  recordBackground,
+  forgetBackground,
+  listRecent,
+} from '../state/recent-backgrounds.js';
+import { mountRecentBackgroundsModal } from '../ui/recent-backgrounds-modal.js';
 
 const canvasEl = document.getElementById('canvas');
 if (!(canvasEl instanceof HTMLCanvasElement)) {
@@ -603,7 +609,11 @@ const settingsModal = mountSettingsModal({
   store,
 });
 
-async function applyBackgroundBlob(blob: Blob, mimeType: string) {
+async function applyBackgroundBlob(
+  blob: Blob,
+  mimeType: string,
+  name?: string,
+) {
   const { width, height } = await readBlobImageDimensions(blob);
   const id = await putImage(blob, mimeType);
   imageLoader.invalidate(id);
@@ -616,6 +626,9 @@ async function applyBackgroundBlob(blob: Blob, mimeType: string) {
     kind: 'background-update',
     changes: { imageId: id, offsetX: 0, offsetY: 0, scaleX, scaleY },
   });
+  // Phase 108 — record this background as just-applied so the recent-
+  // backgrounds picker can re-apply it later without re-uploading.
+  recordBackground(id, mimeType, name ? { name } : {});
   // Phase 101 — fire-and-forget grid auto-detection. The detector
   // pulls the blob through a downsampled canvas + autocorrelation
   // pass; on a confident match (and only when the answer differs
@@ -623,6 +636,36 @@ async function applyBackgroundBlob(blob: Blob, mimeType: string) {
   // Detection is async + non-blocking so the upload UX stays
   // identical for users who don't care.
   void runGridDetectionForBackground(blob, width, height);
+}
+
+/**
+ * Phase 108 — re-apply a background that's already in IDB. Used by
+ * the recent-backgrounds picker: the blob already exists, so we
+ * skip `putImage` (no duplicate IDB record) and just dispatch the
+ * `background-update` patch + bump the recents entry to the front.
+ *
+ * Returns false when the IDB record is missing (the picker uses this
+ * to surface a "broken entry — was it deleted?" hint to the user).
+ */
+async function applyBackgroundFromIdb(imageId: string): Promise<boolean> {
+  const record = await getImage(imageId);
+  if (!record) return false;
+  const { width, height } = await readBlobImageDimensions(record.blob);
+  imageLoader.invalidate(imageId);
+  const { grid } = store.getState();
+  const gridW = grid.cols * grid.cellSize;
+  const gridH = grid.rows * grid.cellSize;
+  const scaleX = gridW / width;
+  const scaleY = gridH / height;
+  store.applyPatch({
+    kind: 'background-update',
+    changes: { imageId, offsetX: 0, offsetY: 0, scaleX, scaleY },
+  });
+  // No name override — preserve any name already in the recents entry
+  // (the user uploaded "castle.png" originally; we don't want to lose
+  // that label just because a re-application doesn't have a file name).
+  recordBackground(imageId, record.mimeType);
+  return true;
 }
 
 /**
@@ -705,7 +748,14 @@ mountUploadDropZone({
   canvas,
   onUpload: async (blob, mimeType) => {
     try {
-      await applyBackgroundBlob(blob, mimeType);
+      // Drag-drop / paste blobs may carry a `name` if they came in
+      // as Files; falling back to mimeType-derived extension so the
+      // recents list still has SOMETHING readable.
+      const name =
+        blob instanceof File && blob.name
+          ? blob.name
+          : friendlyNameFromMime(mimeType);
+      await applyBackgroundBlob(blob, mimeType, name);
       announcer.announce('Background image set from drop / paste.');
     } catch (err) {
       console.warn('[upload-drop-zone] failed to apply background', err);
@@ -726,12 +776,50 @@ const presetBackgroundsModal = mountPresetBackgroundsModal({
       const res = await fetch(url);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const blob = await res.blob();
-      await applyBackgroundBlob(blob, blob.type || 'image/svg+xml');
+      // Use the preset's display name as the recents label so the
+      // picker shows e.g. "Tavern (Preset)" instead of "(unnamed map)".
+      await applyBackgroundBlob(
+        blob,
+        blob.type || 'image/svg+xml',
+        `${preset.name} (Preset)`,
+      );
     } catch (err) {
       console.error('[gm] preset background load failed', err);
       window.alert('Failed to load preset map.');
     }
   },
+});
+
+// Phase 108 — recent backgrounds quick switcher. Lists the up-to-12
+// most recent background images (across upload paths) so the GM can
+// re-apply a previously-used map in one click without re-uploading.
+const recentBackgroundsModal = mountRecentBackgroundsModal({
+  getEntries: () => listRecent(),
+  getThumbnailURL: (id) => getImageURL(id),
+  onPick: async (entry) => {
+    try {
+      const ok = await applyBackgroundFromIdb(entry.imageId);
+      if (!ok) {
+        // The IDB record is gone — the modal already removes the row
+        // when its thumbnail load fails, but a click on a stale row
+        // could land before that fires. Surface a non-fatal hint and
+        // forget the entry so future opens don't show the broken row.
+        forgetBackground(entry.imageId);
+        announcer.announce(
+          'That recent background is no longer in storage.',
+          'assertive',
+        );
+        return;
+      }
+      announcer.announce(
+        `Applied recent background: ${entry.name ?? 'unnamed map'}.`,
+      );
+    } catch (err) {
+      console.error('[gm] re-apply recent background failed', err);
+      window.alert('Failed to re-apply that background.');
+    }
+  },
+  onForget: (id) => forgetBackground(id),
 });
 
 function viewportCenterGrid(): { gx: number; gy: number } | null {
@@ -820,7 +908,7 @@ mountSessionMenu(document.body, {
   },
   onUploadBackground: async (file) => {
     try {
-      await applyBackgroundBlob(file, file.type || 'image/png');
+      await applyBackgroundBlob(file, file.type || 'image/png', file.name);
     } catch (err) {
       console.error('[gm] upload background failed', err);
       window.alert('Failed to upload background image.');
@@ -2795,6 +2883,15 @@ function slugForFilename(name: string): string {
     group: 'Modals',
     run: () => conflictLoserArchiveModal.open(),
   });
+  // Phase 108 — recent backgrounds. Lists the up-to-12 most recently
+  // applied background images for one-click re-application.
+  reg.register({
+    id: 'open-recent-backgrounds',
+    label: 'Open recent backgrounds…',
+    hint: 'Re-apply a recent map without re-uploading',
+    group: 'Backgrounds',
+    run: () => recentBackgroundsModal.open(),
+  });
   // Phase 102 — camera bookmarks. Two palette entries: one to open
   // the modal (manage / rename / delete) and one to save the live
   // camera in one shot without going through the modal.
@@ -3401,6 +3498,22 @@ function applyPrefsToBody(prefs: {
   document.body.classList.toggle('reduced-motion', prefs.reducedMotion);
   document.body.classList.toggle('high-contrast', prefs.highContrast);
   applyTheme(prefs.theme);
+}
+
+/**
+ * Phase 108 — derive a readable label from a MIME type when no
+ * filename is available. The drag-drop / paste path receives
+ * `Blob` not `File` for clipboard pastes, so we substitute a
+ * timestamped pseudo-name that's still meaningfully unique in the
+ * recents list ("Pasted PNG · 4:32 PM").
+ */
+function friendlyNameFromMime(mimeType: string): string {
+  const subtype = mimeType.split('/')[1]?.toUpperCase() ?? 'IMAGE';
+  const time = new Date().toLocaleTimeString([], {
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+  return `Pasted ${subtype} · ${time}`;
 }
 
 function readBlobImageDimensions(blob: Blob): Promise<{ width: number; height: number }> {

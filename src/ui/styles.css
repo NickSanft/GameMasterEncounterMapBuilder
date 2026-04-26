@@ -5386,6 +5386,127 @@ body.reduced-motion .tour-popover {
   color: var(--accent);
 }
 
+/* ───── Phase 108 — Recent backgrounds modal ────────────────────────
+   List-view of recently-applied background images with a small
+   thumbnail per row, the friendly name (or "(unnamed map)"), and a
+   relative-time stamp. Clicking the row re-applies; the row's × button
+   forgets the entry without deleting the underlying IDB image. */
+
+.recent-backgrounds-modal {
+  min-width: 480px;
+  max-width: 600px;
+}
+
+.recent-backgrounds-modal .recent-backgrounds-hint {
+  margin: 0 0 0.7rem;
+  color: var(--fg-muted);
+  font-size: 0.82rem;
+  text-transform: none;
+  letter-spacing: 0;
+  line-height: 1.4;
+}
+
+.recent-backgrounds-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.recent-backgrounds-modal .recent-backgrounds-empty {
+  margin: 0.6rem 0 0;
+  color: var(--fg-muted);
+  font-style: italic;
+  font-size: 0.85rem;
+  line-height: 1.4;
+}
+
+.recent-background-row {
+  display: flex;
+  align-items: stretch;
+  gap: 0.4rem;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.recent-background-pick {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.45rem 0.55rem;
+  background: transparent;
+  color: var(--fg);
+  border: none;
+  font-family: inherit;
+  font-size: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.recent-background-pick:hover {
+  background: var(--hover-overlay);
+}
+
+.recent-background-thumb {
+  width: 56px;
+  height: 56px;
+  flex-shrink: 0;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background-size: cover;
+  background-position: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--fg-muted);
+  font-size: 0.78rem;
+}
+
+.recent-background-meta {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.18rem;
+  min-width: 0;
+}
+
+.recent-background-name {
+  font-size: 0.9rem;
+  color: var(--fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.recent-background-time {
+  font-size: 0.78rem;
+  color: var(--fg-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.recent-background-forget {
+  flex-shrink: 0;
+  appearance: none;
+  background: transparent;
+  color: var(--fg-muted);
+  border: none;
+  border-left: 1px solid var(--border);
+  width: 2rem;
+  font-size: 1.1rem;
+  cursor: pointer;
+}
+
+.recent-background-forget:hover {
+  background: var(--hover-overlay);
+  color: var(--fg);
+}
+
 /* ───── Phase 102 — Camera bookmarks modal ──────────────────────────
    Lists per-scene named camera positions with Jump / Rename / Delete
    actions. Slot column shows the Alt+N hotkey for the first 9 rows.

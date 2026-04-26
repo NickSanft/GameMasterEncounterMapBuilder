@@ -93,9 +93,53 @@ _Polish:_
 
 - **0.106.0** — Scene search / filter ✅ (text filter in the Scenes modal once the catalog grows past ~10)
 - **0.107.0** — Dice expression history recall (up-arrow in the slash-command input cycles previous rolls) ✅
-- **0.108.0** — Recent backgrounds quick switcher (mirrors the Phase 75 recent-scenes pattern but for backgrounds)
+- **0.108.0** — Recent backgrounds quick switcher (mirrors the Phase 75 recent-scenes pattern but for backgrounds) ✅
 - **0.109.0** — Per-spectator token visibility (extend Phase 82's permissions to "GM hides individual tokens from individual players")
 - **0.110.0** — Persistent player names across reloads (stable cross-session player IDs — flagged in Phase 82 as future)
+
+---
+
+## [0.108.0] — 2026-04-26 — Recent backgrounds quick switcher
+
+### Added
+- **Recent backgrounds modal** (`Ctrl+K` → "recent backgrounds") lists the up-to-12 most recently applied background images with thumbnails, friendly names, and "5 minutes ago"-style timestamps. Click a row to re-apply the map without re-uploading. The list is newest-first and capped at 12 entries.
+- **Re-application is single-IDB-record**: clicking a row dispatches `background-update` with the EXISTING IDB image id rather than creating a duplicate via `putImage`. So "I uploaded the same map four times by accident" used to leave four IDB records; now it leaves one.
+- **Friendly labels** — file uploads (drop / paste of a `File`, session-menu Upload) record the file name; clipboard pastes (`Blob` only, no name) get a timestamped pseudo-name like *"Pasted PNG · 4:32 PM"*; preset backgrounds get *"Tavern (Preset)"*-style labels.
+- **Per-row × forget button** drops an entry from the picker without deleting the underlying IDB image (which may still be referenced by another scene). Useful for clearing experimental uploads from the list without losing them entirely.
+- **Broken-row recovery**: if the modal opens and the IDB record for a recents entry has been deleted (e.g. via devtools storage clear), the row's thumbnail load fails + the entry is silently forgotten so future opens stay accurate.
+
+### Why this matters
+Phase 100 added drag-and-drop / paste-to-upload backgrounds; Phase 101 added auto-grid detection. But once you'd uploaded a map and then switched to a different scene, jumping back to the original required either re-uploading (re-doing the file picker, re-doing the grid snap) or duplicate-scene workflows. The Phase 75 recent-scenes Ctrl+1..9 covers "switch BETWEEN scenes," but a single scene can have many backgrounds over its lifetime (different floors of a dungeon, different times of day, etc.). Phase 108 fills that gap with a per-image quick-switcher that mirrors the recents pattern.
+
+### Architecture
+- **`src/state/recent-backgrounds.ts`** (new, ~150 lines) — pure helper + a versioned localStorage envelope (`{version: 1, entries: RecentBackground[]}`). API: `recordBackground(imageId, mimeType, options?)`, `listRecent()`, `forgetBackground(imageId)`, `_resetAll()` (test-only).
+  - **Move-to-front dedupe**: re-applying a background already in the list bumps it to position 0 + refreshes `lastUsedAt`. Existing names are preserved if the new call doesn't supply one (so re-applying via the picker doesn't lose the friendly label from the original upload).
+  - **Cap-and-truncate** at `MAX_RECENT_BACKGROUNDS = 12` via `next.length = MAX_RECENT_BACKGROUNDS` after unshift. 12 is generous for a session, bounded so the localStorage blob stays small even after a long campaign.
+  - **Defensive parsing**: drops entries missing required fields (imageId / mimeType / lastUsedAt), drops wrong-version blobs, falls back to empty on JSON parse failure. Same defensive pattern Phases 99/102/107 use.
+- **`src/ui/recent-backgrounds-modal.ts`** (new, ~210 lines) — modal listing the entries with row pattern: thumbnail (lazy-hydrated via `getImageURL(id)`), name (or "(unnamed map)"), relative-time stamp. Each row has a main pick button + a separate × forget button. Broken-thumbnail rows self-remove and call `onForget` so the list stays in sync with what's actually applicable.
+- **`src/ui/styles.css`** — new `.recent-backgrounds-modal` block with the 56 × 56 thumbnail squares, ellipsis-truncating name column, and the right-edge × button styled as a vertical-divider button (matches the snapshot-history modal's row pattern).
+- **`src/entries/gm.ts`** changes:
+  - `applyBackgroundBlob(blob, mimeType, name?)` — accepts an optional `name`; calls `recordBackground(id, mimeType, {name})` after the patch lands so every upload path automatically populates the recents list.
+  - **New `applyBackgroundFromIdb(imageId)`** — for the picker. Skips `putImage` entirely; reads the existing IDB record, computes dimensions from the cached blob, dispatches the `background-update` patch, and re-bumps the recents entry to the front. Returns `false` when the IDB record is missing so the picker can surface a "no longer in storage" hint.
+  - **New `friendlyNameFromMime(mimeType)`** helper — used when a clipboard paste arrives as a bare `Blob` (no `File.name`). Generates *"Pasted PNG · 4:32 PM"*-style labels.
+  - **All three upload paths now pass a name**: drag-drop / paste (file name, falling back to `friendlyNameFromMime`); preset backgrounds (`${preset.name} (Preset)`); session-menu Upload Map (file.name).
+  - **New palette command** *"Open recent backgrounds…"* (group: **Backgrounds**).
+
+### UX details
+- **Forget vs Delete distinction**: the × button forgets the entry from the recents picker but does NOT delete the underlying IDB image (which may still be the active background of some other scene). This matches the principle "the recents list is a personal index, not the source of truth." A future "garbage-collect orphaned images" maintenance task could be a separate phase.
+- **No replication into the existing scene-recents Ctrl+1..9 hotkey range**: backgrounds are scene-agnostic (the same map can be the background of three different scenes), so a single key chord per recent doesn't make sense the way it does for scenes. The picker is one extra keystroke (Ctrl+K + click) but it scales to 12 entries without exhausting the digit row.
+- **Thumbnail load is async** — rows render with a `—` placeholder, then hydrate in parallel as `getImageURL(id)` resolves. The image-store cache means repeated opens are instant.
+
+### Tests
+- **+15 unit tests** in `src/state/recent-backgrounds.test.ts` (new): starts empty; records single + multiple entries; orders newest-first; returns a fresh array; records without name when none supplied; move-to-front dedupe with timestamp refresh; preserves existing name when re-recording without a new one; overrides existing name when a new one is supplied; cap eviction at MAX_RECENT_BACKGROUNDS (oldest first); forgetBackground drops the matching entry / no-op for unknown ids; ignores empty imageId; defensive parsing for malformed JSON / version mismatch / entries missing required fields (incl. non-string name).
+- **+4 Playwright specs** in `e2e/recent-backgrounds.spec.ts` (new): palette opens the modal + empty state; uploaded background appears as a row with the file name; clicking a row re-applies + announces; × forget button drops the row + restores the empty state.
+- **All 1222 unit tests + 289 Playwright specs pass** locally. The same `scenes.spec.ts:56` parallel flake from earlier phases reappeared once (passes in isolation, has been seen before in heavily-parallel runs); CI runs serially with retries=2, absorbed.
+
+### Bundle
+- 91.39 / 92 KB initial-load brotli (+1.12 KB for the recents store + the modal + the gm-entry wiring + the new palette command). CSS 11.42 / 12 KB (+0.16 KB for the modal styles). Lazy chunks unchanged.
+
+### Pre-push checklist
+Caught zero issues — full unit suite + full e2e + visual-regression spec + size-limit all green before push. Eleven clean phases in a row now (97 + 99 + 100 + 101 + 102 + 103 + 104 + 105 + 106 + 107 + 108).
 
 ---
 
