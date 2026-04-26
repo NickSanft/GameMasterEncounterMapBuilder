@@ -99,6 +99,24 @@ _Polish:_
 
 ---
 
+## [0.86.1] — 2026-04-26 — Fix: Phase 86 Esc no longer wipes selection inside an open menu / modal
+
+### Fixed
+- **Esc dismisses the open context menu / modal without also clearing the canvas selection.** Caught by CI on the original Phase 86 commit — `walls-selection.spec.ts`'s "Shift+click two walls then Delete removes both" test does an explicit Esc-to-close-menu then Delete-to-remove flow. Pre-fix, that Esc went through TWO handlers in the bubble path: the menu's own Esc (close + preventDefault) AND the new Phase 86 window-level handler that clears selection unconditionally. Result: the menu closed but selection was wiped, so the follow-up Delete had nothing to delete.
+
+### The fix
+- Added `e.defaultPrevented` early-return to the Phase 86 Esc handler. Anything that ran before us in the bubble path (open context menu, open modal, mid-walls-chain Esc, mid-measurement Esc) calls `preventDefault()`; we now respect that and skip the clear. Empty-selection Esc still falls through unchanged so unhandled Escs are a true no-op.
+- This is the standard "Esc closes the topmost active surface" UX pattern — Esc with a menu open targets the menu; Esc with no menu / no modal targets the next layer down (selection).
+
+### Tests
+- Existing `walls-selection.spec.ts:115` ("Shift+click two walls then Delete removes both") now passes again — that's the regression check.
+- All 921 unit tests + 205 Playwright specs pass.
+
+### Bundle
+- Unchanged from 0.86.0 (the fix is a 4-line guard).
+
+---
+
 ## [0.86.0] — 2026-04-26 — Keyboard-navigable canvas selection
 
 ### Added

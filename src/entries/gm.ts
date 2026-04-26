@@ -2280,10 +2280,23 @@ window.addEventListener('keydown', (e) => {
     }
   }
 
-  // Phase 86 — Esc with a non-empty selection clears it. Empty-selection
-  // Esc falls through so the existing modal / tool handlers (close
-  // dialog, end walls chain, cancel measurement) keep working.
-  if (e.key === 'Escape' && !e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey) {
+  // Phase 86 — Esc with a non-empty selection clears it. Skipped when
+  // something else already claimed the Esc this tick — checked via
+  // `e.defaultPrevented`. Examples that prevent ahead of us:
+  //   - Open context menu's Esc handler (closes the menu)
+  //   - Open modal's Esc handler (closes the dialog)
+  //   - Walls-tool mid-chain Esc (ends the chain)
+  //   - Measurement-tool Esc (cancels the measurement)
+  // Without this guard, pressing Esc to dismiss a wall context menu
+  // would ALSO wipe the multi-wall selection mid-flow — exactly the
+  // regression the existing `walls-selection.spec.ts` Shift+click +
+  // Delete test caught on the original Phase 86 commit. Empty-selection
+  // Esc still falls through so unhandled Escs are a true no-op.
+  if (
+    e.key === 'Escape' &&
+    !e.defaultPrevented &&
+    !e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey
+  ) {
     if (clearCanvasSelectionFromEsc()) {
       e.preventDefault();
       return;
