@@ -44,6 +44,40 @@ chat history for the full breakdown:
 
 ---
 
+## [0.84.1] — 2026-04-26 — Fix: animated GIF tokens + walls leak through Spectator fog
+
+### Fixed
+- **Animated GIF token portraits no longer show through fog the Spectator can't actually see.** Reported by a user immediately after Phase 84. Pre-0.84.1 the overlay's visibility check only consulted the raw `state.fog` buffer (the GM's "I clicked Reveal here" mask). The Spectator's actual visible-fog is `state.fog AND-masked with LoS visibility AND lights` — so a cell the GM revealed but the player has no line-of-sight to should be hidden. Canvas-rendered tokens DID hide correctly because the canvas-fog overlay is drawn over them; DOM `<img>` elements (which is how GIFs render — see 0.81.1) sit ABOVE the canvas, so the canvas-fog couldn't mask them.
+- **Walls no longer show through the Spectator's fog either.** Same root cause class, different rendering path: walls were drawn AFTER the fog overlay in the canvas pipeline, so the LoS-derived fog couldn't mask them — players could see the dungeon outline in cells they had no line-of-sight to. Tokens (and other "should be hidden" canvas content) were already drawn BEFORE fog and worked correctly. **Fix: split the wall pass by mode** — Spectator draws walls before fog (so the fog overlay masks them); GM still draws walls after fog (so authoring affordances — selection glow, in-progress chain preview, vertex dots — sit crisp on top of the semi-transparent GM fog tint instead of being washed out by it).
+
+### Why 0.81.1's fog check wasn't enough
+The 0.81.1 rewrite added a top-left-cell-only check against `state.fog`. Two gaps:
+- **Wrong fog buffer.** Should have used the LoS-derived effective fog, which is what the canvas's fog overlay actually paints. A GM-revealed cell with no viewer line-of-sight to it would pass the `state.fog === 1` check but still be covered on the rendered canvas.
+- **Top-left cell only.** A size-2 token whose top-left cell happened to be revealed but other cells were in fog would show the GIF "poking out". Canvas tokens hide ONLY when `isTokenFullyHidden(t, state)` (every footprint cell is fog) — but that's because the canvas can mask partial visibility via the fog overlay layer. The DOM `<img>` can't be partially masked by a canvas operation, so for animated tokens we lean stricter: ANY hidden cell hides the GIF entirely.
+
+### The fix (animated tokens)
+- **`getEffectiveFog?(): Uint8Array | null`** — new optional callback on the overlay's mount options. When provided AND `mode === 'spectator'`, the overlay reads visibility from this buffer instead of `state.fog`. Returning `null` falls back to `state.fog` (pre-0.84.1 behavior).
+- **Spectator entry wires it through** `spectatorEffectiveFog(state, polygons, losOn, lightPolygons)` — the same function `refreshFogRects` uses to derive the canvas's fog overlay buffer. So overlay visibility now matches canvas-fog visibility exactly, frame-perfect.
+- **Footprint scan instead of top-left-only.** The overlay now iterates every cell the token covers (`floor(x)..ceil(x+size)` × `floor(y)..ceil(y+size)`) and hides if ANY cell is fog OR off-grid. Tokens straddling the map edge no longer leak GIFs into the void.
+- **GM mode unchanged** — GMs see all tokens regardless of fog (it's their tool for occluding the players).
+
+### The fix (walls)
+- **Renderer split the wall pass by mode.** The Spectator's `drawWalls(state.walls)` call now fires BEFORE `drawFog`, so the canvas-fog overlay paints over wall segments in unrevealed cells. Spectator-side authoring affordances are pre-empty (selection / drag overlay / chain preview are GM-only anyway) so the fast paths in `layer-walls` skip them. The GM's wall pass stays where it was (after fog) so selection glow / vertex dots / rubber-band chain stay readable on top of the GM's fog tint.
+- This is the same z-order trick `drawTokens` has always used — tokens have always rendered before fog and worked correctly. Walls were the outlier; the original Phase 0.72.3 fix that made walls visible to the Spectator missed this z-order subtlety.
+
+### Tests
+- **+9 unit tests** in `src/ui/animated-token-overlay.test.ts` (new): renders when revealed, hides on raw `state.fog === 0`, uses `getEffectiveFog` to override raw fog (both directions — hides revealed-but-no-LoS cells AND reveals lit-but-not-explicitly-revealed cells), size-2 token hides if any footprint cell is hidden, size-2 token shows only when all four cells are revealed, off-grid cells count as hidden, GM mode ignores fog entirely, fallback to `state.fog` when callback returns `null`.
+- **No new tests for the wall z-order swap.** The change is a straight-line renderer reorder — asserting "this canvas pixel is fog-colored" via Vitest's jsdom canvas (which is a no-op stub) doesn't work, and Playwright pixel-asserting on a fog-masked wall is fragile. Verified manually + the existing `walls-tool.spec.ts` continues to pass (so GM authoring is unbroken).
+- **All 874 unit tests + 197 Playwright specs pass.**
+
+### Bundle
+- 75 / 76 KB initial-load brotli (+0.06 KB for the wall reorder + footprint scan + effective-fog plumbing combined). CSS unchanged. Lazy chunks unchanged.
+
+### Known gap
+- `drawStrokes` and `drawAnnotations` also render after fog and would have the same leak — but they're player-visible communication tools where the GM controls when to draw them. If a future report surfaces them as a leak, the same z-order split applies (Spectator before fog, GM after).
+
+---
+
 ## [0.84.0] — 2026-04-26 — Conflict-merge UI
 
 ### Added

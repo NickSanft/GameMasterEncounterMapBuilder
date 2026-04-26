@@ -36,6 +36,16 @@
  *     a hidden cell would still be visible to the Spectator. The
  *     overlay hides the `<img>` for tokens whose center cell is in
  *     un-revealed fog (Spectator only) to preserve fog semantics.
+ *
+ * 0.84.1 — Spectator fog masking now consults the EFFECTIVE fog
+ * (state.fog AND-masked with LoS visibility AND lights), not the raw
+ * `state.fog`. Pre-0.84.1 a GM-revealed cell that the Spectator
+ * couldn't see (no viewer / no light) would still show its animated
+ * token: the canvas correctly draws the token + then covers it with
+ * the LoS-derived fog overlay, but the DOM `<img>` floats above the
+ * canvas so the canvas-fog couldn't mask it. Plumbing the effective
+ * fog through `getEffectiveFog?()` lets the overlay match the canvas's
+ * computed visibility exactly.
  */
 
 import type { ID, SessionState, Camera } from '../state/types.js';
@@ -58,6 +68,14 @@ export interface AnimatedTokenOverlayOptions {
   getUrl(id: ID): string | null;
   /** Optional drag overlay so a dragging animated token follows the cursor. */
   getDragOverlay?(): DragOverlay | null;
+  /**
+   * 0.84.1 — Spectator-side effective fog (state.fog AND-masked with
+   * LoS visibility AND lights). When provided AND `mode === 'spectator'`,
+   * the overlay uses this buffer for the cell-visibility check instead
+   * of the raw `state.fog`. Returning `null` falls back to `state.fog`
+   * (the pre-0.84.1 behavior). GM mode ignores this entirely.
+   */
+  getEffectiveFog?(): Uint8Array | null;
 }
 
 export interface AnimatedTokenOverlayHandle {
@@ -100,23 +118,44 @@ export function mountAnimatedTokenOverlay(
       const url = opts.getUrl(t.imageId);
       if (!url) continue;
 
-      // Spectator fog hide — canvas fog covers a hidden cell so the
-      // token shouldn't peek through the overlay. Center-cell check
-      // is a coarse approximation; tokens straddling cells where the
-      // center happens to land in fog still hide. Matches the
-      // Spectator's existing visibility check in the canvas layer.
+      // Spectator fog hide — the canvas-side fog overlay covers
+      // hidden cells so the token shouldn't peek through. Without
+      // this guard a DOM <img> would float above the canvas (z-index
+      // 5) and the fog overlay couldn't mask it.
+      //
+      // 0.84.1 — Hide if ANY cell of the token's footprint is in fog,
+      // not just the top-left. Pre-0.84.1 a size>1 token whose
+      // top-left cell happened to be revealed but other cells were in
+      // fog would show the GIF poking out. Stricter than the canvas's
+      // `isTokenFullyHidden` check (which hides only when ALL cells
+      // are in fog) — for animated tokens we lean on the side of "if
+      // any of you is in fog, you don't render at all", since the DOM
+      // <img> can't be partially masked by the canvas fog overlay
+      // the way a canvas-rendered token can.
+      //
+      // Uses the effective fog (LoS-masked) when the entry provides
+      // it, falls back to raw state.fog otherwise.
       if (opts.mode === 'spectator') {
-        const gx = Math.floor(t.x);
-        const gy = Math.floor(t.y);
-        if (
-          gx >= 0 &&
-          gy >= 0 &&
-          gx < state.grid.cols &&
-          gy < state.grid.rows
-        ) {
-          const fogIdx = gy * state.grid.cols + gx;
-          if (state.fog[fogIdx] !== 1) continue;
+        const fog = opts.getEffectiveFog?.() ?? state.fog;
+        const cols = state.grid.cols;
+        const rows = state.grid.rows;
+        const x0 = Math.floor(t.x);
+        const y0 = Math.floor(t.y);
+        const x1 = Math.max(x0 + 1, Math.ceil(t.x + t.size));
+        const y1 = Math.max(y0 + 1, Math.ceil(t.y + t.size));
+        let anyHidden = false;
+        for (let cy = y0; cy < y1 && !anyHidden; cy++) {
+          for (let cx = x0; cx < x1 && !anyHidden; cx++) {
+            if (cx < 0 || cy < 0 || cx >= cols || cy >= rows) {
+              // Off-grid cells count as hidden — a token half-off the
+              // map shouldn't have its GIF render in the void.
+              anyHidden = true;
+              break;
+            }
+            if (fog[cy * cols + cx] !== 1) anyHidden = true;
+          }
         }
+        if (anyHidden) continue;
       }
 
       seen.add(t.id);

@@ -149,8 +149,15 @@ const renderer = createRenderer({
 
 // Phase 81 (revisit) — animated-token DOM overlay. Mounted AFTER
 // the renderer so we can subscribe to onFrame. Spectator also
-// hides imgs for tokens whose center cell is in un-revealed fog
-// (matches the canvas-side fog masking that the spectator sees).
+// hides imgs for tokens whose footprint touches any un-revealed
+// cell (matches the canvas-side fog masking that the spectator
+// sees).
+//
+// 0.84.1 — `getEffectiveFog` plumbs through the LoS-AND-light masked
+// fog (`spectatorEffectiveFog`) so a token in a GM-revealed cell that
+// the player can't actually see (no nearby viewer / no light) hides
+// its GIF too. Pre-0.84.1 the overlay only checked raw `state.fog`,
+// causing GIF tokens to leak through the LoS fog overlay.
 const animatedTokenOverlay = mountAnimatedTokenOverlay({
   canvas,
   mode: 'spectator',
@@ -158,6 +165,13 @@ const animatedTokenOverlay = mountAnimatedTokenOverlay({
   getCamera: () => renderer.camera,
   isAnimated: (id) => imageLoader.isAnimated(id),
   getUrl: (id) => imageLoader.getUrl(id),
+  getEffectiveFog: () => {
+    const state = store.getState();
+    const losOn = preferences.get().losMode !== 'off';
+    const polygons = fogWorkerClient.getLatestPolygons();
+    const lightPolygons = fogWorkerClient.getLatestLightPolygons();
+    return spectatorEffectiveFog(state, polygons, losOn, lightPolygons);
+  },
 });
 renderer.onFrame(() => animatedTokenOverlay.update());
 

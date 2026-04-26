@@ -260,6 +260,26 @@ export function createRenderer(opts: CreateRendererOptions): Renderer {
       preview: getAoePreview ? getAoePreview() : null,
       dragOverlay,
     });
+    // 0.84.1 — Spectator walls render BEFORE fog so the canvas-fog
+    // overlay can mask wall segments in cells the player can't see.
+    // Pre-0.84.1 walls drew after fog (same code path the GM uses)
+    // and floated above the LoS-derived fog overlay, leaking the
+    // dungeon layout to the player. The GM's wall pass STILL runs
+    // after fog (below) so GM authoring affordances (selection glow,
+    // in-progress chain preview, vertex dots) stay crisp on top of
+    // the semi-transparent GM fog tint.
+    if (mode === 'spectator') {
+      drawWalls(ctx, state.walls, {
+        mode,
+        // Spectator never has selection / drag / authoring chain
+        // (those are GM-only) — pass empty inputs so the layer's own
+        // fast paths kick in.
+        overlay: null,
+        highlightIds: EMPTY_HIGHLIGHT,
+        dragOverlay: null,
+        zoom: camera.zoom,
+      });
+    }
     const precomputedFogRects = getFogRects ? getFogRects() : null;
     drawFog(ctx, state, mode, {
       gmColor: gmFogColor,
@@ -291,16 +311,22 @@ export function createRenderer(opts: CreateRendererOptions): Renderer {
       highlightIds: highlights,
       dragOverlay,
     });
-    // Walls render above annotations but below the live interaction
-    // overlays (fog preview, measurement, pings). GM-only — the layer
-    // no-ops on the Spectator canvas.
-    drawWalls(ctx, state.walls, {
-      mode,
-      overlay: getWallsOverlay ? getWallsOverlay() : null,
-      highlightIds: highlights,
-      dragOverlay,
-      zoom: camera.zoom,
-    });
+    // GM walls render above annotations but below the live interaction
+    // overlays (fog preview, measurement, pings). The 0.84.1 reorder
+    // moved the SPECTATOR's wall pass to before the fog overlay (see
+    // above) so canvas-fog properly masks them; the GM's pass stays
+    // here so authoring affordances (selection glow, in-progress chain
+    // preview, vertex dots) sit crisp on top of the semi-transparent
+    // GM fog tint instead of being washed out by it.
+    if (mode === 'gm') {
+      drawWalls(ctx, state.walls, {
+        mode,
+        overlay: getWallsOverlay ? getWallsOverlay() : null,
+        highlightIds: highlights,
+        dragOverlay,
+        zoom: camera.zoom,
+      });
+    }
     // LoS visibility polygons — GM-only yellow outline so the GM sees
     // what each viewer can see. Spectator consumes these via fog
     // masking upstream, not by drawing outlines.
