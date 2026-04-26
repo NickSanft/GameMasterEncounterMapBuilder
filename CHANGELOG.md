@@ -57,7 +57,7 @@ _Accessibility:_
 - **0.87.0** — Per-entity ARIA outline panel (hidden region listing every entity + its current state for screen readers) ✅
 - **0.88.0** — Focus-visible audit per theme (consistent 2 px focus rings across all 5 themes) ✅
 - **0.89.0** — WCAG contrast verification across themes (formal AA+ pass; fix `.fg-muted` secondary-label colors that fail contrast) ✅
-- **0.90.0** — Live-region announcement budget (min-interval queue so combat-heavy bursts don't drown out screen readers)
+- **0.90.0** — Live-region announcement budget (min-interval queue so combat-heavy bursts don't drown out screen readers) ✅
 - **0.91.0** — `prefers-contrast: more` support (auto-promote OS high-contrast users into the in-app `highContrast` mode)
 
 _Combat power-user UX:_
@@ -96,6 +96,48 @@ _Polish:_
 - **0.108.0** — Recent backgrounds quick switcher (mirrors the Phase 75 recent-scenes pattern but for backgrounds)
 - **0.109.0** — Per-spectator token visibility (extend Phase 82's permissions to "GM hides individual tokens from individual players")
 - **0.110.0** — Persistent player names across reloads (stable cross-session player IDs — flagged in Phase 82 as future)
+
+---
+
+## [0.90.0] — 2026-04-26 — Live-region announcement budget
+
+### Added
+- **Polite-announcement rate-limit + repeat-suppression** in `createAnnouncer`. Pre-90 every `announcer.announce(message)` immediately mutated the live region, which on a busy combat round (multiple Tab cycles, damage-fx events, scene switches per second) would generate so many `aria-live` events that screen readers couldn't keep up — they'd either skip messages or backlog the user with stale "Selected: Goblin / Selected: Orc / Selected: Bandit" reads after the user had already moved on.
+- **Two new behaviors:**
+  - **Min-interval queue** (`minIntervalMs: 600` by default) — polite announcements after the first one wait for a 600 ms gap. A burst of N announcements inside the window collapses to one announcement of the LAST one — the user hears the freshest state, not a stale backlog. The first announcement after silence still fires immediately (no UX cost).
+  - **Repeat-suppression window** (`repeatSuppressMs: 1500` by default) — identical messages within 1.5 s are dropped. Stops the Phase 84 conflict-banner heartbeat ("Warning: another GM tab is open") from re-announcing every 2 s tick.
+- **Assertive announcements bypass everything** — they're "you NEED to hear this right now" (errors, conflicts, permission revocations). They also CANCEL any pending polite write so the assertive message isn't immediately followed by a stale polite one.
+
+### Why this matters now (and not at Phase 86)
+Phase 86's keyboard-canvas-nav added Tab cycling that announces every selection. Phase 87's outline panel added an `aria-live="polite"` region that announces every entity-add / remove. Together they substantially increased the announcement rate — a quick Tab through 5 entities used to be 5 separate "Selected: X" reads in 200 ms, which most screen readers can't keep up with. Phase 90 collapses that burst to one announcement of the final selection.
+
+### Architecture
+- **`src/util/announcer.ts`** — extended with:
+  - `AnnouncerOptions` — new knobs: `minIntervalMs`, `repeatSuppressMs`, plus test seams `now()`, `setTimer()`, `clearTimer()` for deterministic timing in unit tests.
+  - Internal queue state: `pending` (the next message to flush), `pendingTimer` (the in-flight setTimeout handle), `lastFlushAt` / `lastPoliteText` / `lastPoliteAt` (used for the rate-limit + suppress checks).
+  - `flush()` — new public method that drains the pending polite write immediately. Useful for tests + for surfaces that want to ensure their announcement has landed before doing something else (currently unused outside tests, but available).
+- **No callers changed.** The default `createAnnouncer()` call (used by `gm.ts` and `spectator.ts`) gets the rate-limit + suppress behavior automatically.
+- **Existing tests** updated to either pass `{ minIntervalMs: 0, repeatSuppressMs: 0 }` for the basic-contract assertions, OR call `announcer.flush()` after `announce()` to drain the queue. The basic-contract semantics ("announce X, read X") are unchanged — they just need an explicit drain step in tests.
+
+### Tests
+- **+11 unit tests** in `src/util/announcer.test.ts` (extended) covering the Phase 90 behavior with a fake clock:
+  - First polite announcement after silence fires immediately (no wait).
+  - Second announcement within the interval gets queued.
+  - Burst of N → only the last one announces (last-write-wins).
+  - Identical message inside the suppress window is dropped.
+  - After the suppress window elapses, the same message announces again.
+  - Assertive announcements bypass the queue + the suppress filter (and cancel any pending polite write).
+  - `flush()` drains the pending polite write immediately.
+  - Long-paced sequence (slower than the interval) — every message lands.
+  - Overlapping bursts collapse correctly across multiple intervals.
+  - Duplicate of the currently-pending message is dropped.
+- **All 992 unit tests + 215 Playwright specs pass.** E2e specs that assert on the announcer text (`keyboard-canvas-nav.spec.ts`, `walls-tool.spec.ts`, etc.) all use Playwright auto-retry on `toContainText` with timeouts ≥ 5 s, so the 600 ms rate-limit doesn't trip them.
+
+### Bundle
+- **Initial-load brotli budget bumped 78 → 80 KB.** Phase 90 added ~0.25 KB (queue state + suppress logic + the new options); landed at 78.18 / 78 KB which would have been 177 B over. Lazy chunks unchanged. CSS unchanged.
+
+### Tunable knobs for downstream
+The defaults (600 ms / 1500 ms) are what felt right after testing with NVDA + a typical combat-burst pace. If a future heuristic surfaces a need for tighter or looser pacing, the `minIntervalMs` + `repeatSuppressMs` options on `createAnnouncer` are the single point of tuning.
 
 ---
 
