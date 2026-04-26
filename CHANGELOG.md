@@ -92,10 +92,52 @@ _Mobile / tablet ergonomics:_
 _Polish:_
 
 - **0.106.0** — Scene search / filter ✅ (text filter in the Scenes modal once the catalog grows past ~10)
-- **0.107.0** — Dice expression history recall (up-arrow in the slash-command input cycles previous rolls)
+- **0.107.0** — Dice expression history recall (up-arrow in the slash-command input cycles previous rolls) ✅
 - **0.108.0** — Recent backgrounds quick switcher (mirrors the Phase 75 recent-scenes pattern but for backgrounds)
 - **0.109.0** — Per-spectator token visibility (extend Phase 82's permissions to "GM hides individual tokens from individual players")
 - **0.110.0** — Persistent player names across reloads (stable cross-session player IDs — flagged in Phase 82 as future)
+
+---
+
+## [0.107.0] — 2026-04-26 — Dice expression history recall
+
+### Added
+- **Up / Down arrow in the `/` slash-command input** cycles through previously-rolled expressions, shell-style. Up walks toward older entries; Down walks back toward newer; Down past the newest restores whatever the user had typed BEFORE pressing Up (the live draft). Per-session muscle memory: re-roll your last attack with `/`+`Up`+`Enter`, three keystrokes, no need to re-type `1d20+5`.
+- **History persists across sessions** via localStorage so the GM's most-frequent rolls stay one Up press away on Monday's session even if the tab was closed Friday.
+- **Smart deduplication**: re-rolling an expression already in history MOVES it to the front instead of stacking duplicates. The history shows your distinct recent expressions, not "1d20 1d20 1d20 1d20" 14 times.
+- **30-entry cap** with oldest-first eviction so localStorage stays bounded over a long-running campaign.
+
+### Why this matters
+The slash-command input (Phase 74) was a fire-and-forget power-user shortcut, but every rolled expression vanished the moment the input closed. In active combat, the same character's same attack roll comes up several times per round (1d20+5 on attack, then 1d8+3 on damage, then 1d20+5 again next turn), and re-typing them is friction that adds up. The dice panel's own history (Phase 73) records the parsed roll *result*, not the *expression* — useful for "what did I roll?" but not for "let me re-roll that." Phase 107 adds the missing recall for the expression itself.
+
+### Architecture
+- **`src/state/dice-history.ts`** (new, ~95 lines) — pure helper + a versioned localStorage envelope (`{version: 1, entries: string[]}`). API: `recordExpression(expr)`, `listHistory()`, `_resetAll()` (test-only). Newest-first ordering. The `recordExpression` path:
+  - Trims whitespace + drops empty inputs (no-op).
+  - Looks up the trimmed expression by exact match; if found, removes it from its current position before unshift-ing to the front (move-to-front dedupe).
+  - Trims to `MAX_HISTORY = 30` entries via array length truncation.
+  - Defensive against malformed persisted state: drops entries that aren't strings, drops wrong-version blobs, falls back to empty on parse failure.
+- **`src/ui/slash-command-input.ts`** — added Up / Down arrow handlers + an `input` listener that resets the history cursor:
+  - `historySnapshot: string[]` is captured once per `open()` so a roll dispatched later (mid-recall) doesn't shift the cursor underneath the user.
+  - `historyCursor: number` starts at `-1` (showing the live draft); Up increments toward `historySnapshot.length - 1` (oldest); Down decrements back toward `-1`.
+  - `liveDraft: string` snapshots whatever the user had typed before pressing Up the first time, so Down past the newest entry restores it. Updated on every `input` event so editing a recalled entry doesn't lose the user's edits when they next press Up.
+  - `showHistoryAt(index)` updates the cursor + the input value; sets the caret to the end so the next keystroke appends rather than overwriting (matches shell history-recall ergonomics).
+- **`dispatch()` records on success only for `roll` actions.** `/init`, `/help`, and unknown / failed commands are deliberately NOT recorded — cycling through `/init` makes no sense, and recall should give the GM what they'd want to re-run, not every keystroke they ever pressed. The recorded value is the user's RAW input (e.g. `2d6+3` not `/r 2d6+3`) so Up restores exactly what they typed.
+
+### UX details
+- **Per-open history snapshot.** If the GM presses `/`, then runs `2d6`, then opens `/` again — the second open reads a fresh history including `2d6`. But if they're mid-recall (cursor at index 2) and a roll is dispatched in another tab via sync, the cursor stays valid for the current snapshot.
+- **Editing a recalled entry preserves it for next Up.** Type Up to restore `1d20+5`, then add `+1` to make `1d20+5+1` — the `input` listener notices the value diverged and resets the cursor + saves the edited string as the new live draft. Pressing Up again starts from the newest history entry (`1d20+5`), not from where you left off mid-recall — same behavior as bash + zsh.
+- **Up at the oldest entry is a no-op**, not an error or wrap-around. Wrap-around would silently lose the user's place; an error message would clutter the input. Silent no-op matches every other CLI's history behavior.
+
+### Tests
+- **+13 unit tests** in `src/state/dice-history.test.ts` (new): starts empty; records single + multiple expressions; orders newest-first; returns a fresh array (not the store reference); move-to-front dedupe (with whitespace-trimmed comparison); different expressions are not deduped; cap eviction at MAX_HISTORY (oldest first); whitespace trim on store; empty / whitespace-only ignored; defensive parsing for malformed JSON, version mismatch, and non-string entries within a valid blob.
+- **+6 Playwright specs** in `e2e/dice-history-recall.spec.ts` (new): Up restores the most recent expression after a successful roll; Up cycles to older entries + Down walks back + Down past newest restores live draft; typing after a recall resets the cursor so next Up starts from newest; Up with no history yet is a silent no-op; non-roll commands (`/help`) are NOT recorded; duplicate rolls move to the front rather than stacking.
+- **All 1207 unit tests + 285 Playwright specs pass** locally on the first run after fixing one helper that incorrectly used `/init` (fails without tokens placed) — switched to `/help` which always succeeds.
+
+### Bundle
+- 90.27 / 92 KB initial-load brotli (+0.35 KB for the history helper + the slash-input wiring). CSS 11.26 / 12 KB. Lazy chunks unchanged. Comfortable headroom under the limit bumped in Phase 106.
+
+### Pre-push checklist
+Caught zero issues — full unit suite + full e2e + visual-regression spec + size-limit all green before push. Ten clean phases in a row now (97 + 99 + 100 + 101 + 102 + 103 + 104 + 105 + 106 + 107).
 
 ---
 
