@@ -279,7 +279,20 @@ export type SyncMessage =
       type: 'permissions';
       targetId: string;
       permissions: { canRoll: boolean };
-    };
+    }
+  /**
+   * Phase 83 — round-trip-time probe. The local entry sends one of
+   * these every ~5s while a remote peer is connected; the receiver
+   * immediately echoes back via `latency-probe-reply` carrying the
+   * same `id`. The sender computes RTT = `now - sentAt` on reply
+   * receipt + feeds it to the latency tracker that drives the chip.
+   *
+   * `id` is monotonic per sender so reply matching is unambiguous;
+   * the BroadcastChannel self-echo guard prevents the sender from
+   * receiving their own probe back.
+   */
+  | { type: 'latency-probe'; id: number }
+  | { type: 'latency-probe-reply'; id: number };
 
 export function serializeState(s: SessionState): SerializedSessionState {
   return {

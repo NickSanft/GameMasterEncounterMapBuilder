@@ -54,6 +54,10 @@ import { mountStatusBanners } from '../ui/status-banners.js';
 import { mountSaveStatusPill } from '../ui/save-status-pill.js';
 import { mountWeatherOverlay } from '../ui/weather-overlay.js';
 import { mountAnimatedTokenOverlay } from '../ui/animated-token-overlay.js';
+import {
+  createLatencyTracker,
+  PROBE_INTERVAL_MS,
+} from '../state/latency-tracker.js';
 import { applyTheme } from '../util/theme.js';
 import { createFogWorkerClient } from '../render/fog-worker-client.js';
 import FogWorker from '../render/fog-worker.js?worker';
@@ -435,12 +439,51 @@ const remotePlayModal = channel
 if (remotePlayModal) {
   remotePlayRef.current = () => remotePlayModal.open();
 }
+// Phase 83 — latency tracker passed to the chip so it can render
+// the RTT suffix when connected. The probe loop below feeds it.
+const latencyTracker = createLatencyTracker();
 if (channel) {
   mountRemoteStatusChip({
     session: remoteSession,
     onClick: () => remotePlayModal?.open(),
+    latency: latencyTracker,
   });
 }
+
+// Phase 83 — same RTT probe loop as the GM side. Spectator initiates
+// probes when its remote peer is connected; the GM (or other side)
+// echoes back via `latency-probe-reply`. See gm.ts for the
+// architecture rationale.
+const inflightProbes = new Map<number, number>();
+let probeIntervalId = 0;
+let probeIdSeq = 1;
+const PROBE_TIMEOUT_MS = 60_000;
+function sendProbe() {
+  if (!channel) return;
+  if (remoteSession.getState() !== 'connected') return;
+  const id = probeIdSeq++;
+  inflightProbes.set(id, performance.now());
+  const now = performance.now();
+  for (const [k, t] of inflightProbes) {
+    if (now - t > PROBE_TIMEOUT_MS) inflightProbes.delete(k);
+  }
+  channel.send({ type: 'latency-probe', id });
+}
+remoteSession.subscribe(({ state }) => {
+  if (state === 'connected') {
+    if (probeIntervalId === 0) {
+      sendProbe();
+      probeIntervalId = window.setInterval(sendProbe, PROBE_INTERVAL_MS);
+    }
+  } else {
+    if (probeIntervalId !== 0) {
+      window.clearInterval(probeIntervalId);
+      probeIntervalId = 0;
+    }
+    inflightProbes.clear();
+    latencyTracker.reset();
+  }
+});
 // Phase 64 — when the Spectator's connection to a remote GM drops,
 // surface a banner so the user knows they're no longer mirroring
 // a live session. Clicking the chip (top-left) or opening Remote
@@ -555,6 +598,16 @@ if (channel) {
       // filter narrows it.)
       if (msg.targetId === playerId) {
         permissions.canRoll = msg.permissions.canRoll;
+      }
+    } else if (msg.type === 'latency-probe') {
+      // Phase 83 — peer is asking for an RTT measurement; echo
+      // back immediately. See gm.ts for the round-trip math.
+      channel.send({ type: 'latency-probe-reply', id: msg.id });
+    } else if (msg.type === 'latency-probe-reply') {
+      const sentAt = inflightProbes.get(msg.id);
+      if (sentAt !== undefined) {
+        inflightProbes.delete(msg.id);
+        latencyTracker.note(performance.now() - sentAt);
       }
     }
   });

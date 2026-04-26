@@ -128,6 +128,10 @@ import { mountTimeOfDayPicker } from '../ui/time-of-day-picker.js';
 import { mountAnimatedTokenOverlay } from '../ui/animated-token-overlay.js';
 import { mountPermissionsModal } from '../ui/permissions-modal.js';
 import { createSpectatorPermissionsStore } from '../state/spectator-permissions.js';
+import {
+  createLatencyTracker,
+  PROBE_INTERVAL_MS,
+} from '../state/latency-tracker.js';
 import { mountImportOptionsModal } from '../ui/import-options-modal.js';
 import { mergeImportState } from '../state/import-merge.js';
 import { mountMiniMap } from '../ui/mini-map.js';
@@ -1328,12 +1332,56 @@ const remotePlayModal = channel
 // Phase 64 — persistent status chip. Hidden while `remoteSession`
 // is idle; clicking it reopens the Remote Play modal so the user
 // can Disconnect / Reconnect without hunting through the menu.
+// Phase 83 — latency tracker passed in so the chip can show RTT.
+const latencyTracker = createLatencyTracker();
 if (channel) {
   mountRemoteStatusChip({
     session: remoteSession,
     onClick: () => remotePlayModal?.open(),
+    latency: latencyTracker,
   });
 }
+
+// Phase 83 — RTT probe loop. Sends a `latency-probe` every
+// PROBE_INTERVAL_MS while a remote peer is connected; the receiver
+// echoes it back via `latency-probe-reply`. We track sent timestamps
+// in a Map keyed by probe id so a reply can be matched + the RTT
+// computed. The map is pruned of probes older than 60 s so a flaky
+// network doesn't grow it unbounded.
+const inflightProbes = new Map<number, number>();
+let probeIntervalId = 0;
+let probeIdSeq = 1;
+const PROBE_TIMEOUT_MS = 60_000;
+function sendProbe() {
+  if (!channel) return;
+  if (remoteSession.getState() !== 'connected') return;
+  const id = probeIdSeq++;
+  inflightProbes.set(id, performance.now());
+  // Prune stale entries — a missing reply (peer disconnect mid-probe)
+  // shouldn't keep the map growing.
+  const now = performance.now();
+  for (const [k, t] of inflightProbes) {
+    if (now - t > PROBE_TIMEOUT_MS) inflightProbes.delete(k);
+  }
+  channel.send({ type: 'latency-probe', id });
+}
+remoteSession.subscribe(({ state }) => {
+  if (state === 'connected') {
+    if (probeIntervalId === 0) {
+      // Fire one immediately so the chip lights up the RTT suffix
+      // within the first second of connect, not 5 s later.
+      sendProbe();
+      probeIntervalId = window.setInterval(sendProbe, PROBE_INTERVAL_MS);
+    }
+  } else {
+    if (probeIntervalId !== 0) {
+      window.clearInterval(probeIntervalId);
+      probeIntervalId = 0;
+    }
+    inflightProbes.clear();
+    latencyTracker.reset();
+  }
+});
 // Phase 64 — when a remote peer transitions to 'connected' (fresh
 // handshake OR a reconnect), immediately re-broadcast the full
 // state + the GM's identity so the peer starts from a clean sync
@@ -1573,6 +1621,20 @@ if (channel) {
       // self-echoes via senderId, so we don't need a second dedup
       // layer here.
       damageFxManager.add(msg.tokenId, msg.amount);
+    } else if (msg.type === 'latency-probe') {
+      // Phase 83 — peer is asking for an RTT measurement; echo back
+      // immediately. We pass the probe id verbatim so the original
+      // sender can match the reply against its inflight map.
+      channel.send({ type: 'latency-probe-reply', id: msg.id });
+    } else if (msg.type === 'latency-probe-reply') {
+      // Phase 83 — our probe came back; compute RTT + feed the tracker.
+      // A reply for an id we don't recognize (e.g. the probe was
+      // pruned for staleness) is silently ignored.
+      const sentAt = inflightProbes.get(msg.id);
+      if (sentAt !== undefined) {
+        inflightProbes.delete(msg.id);
+        latencyTracker.note(performance.now() - sentAt);
+      }
     }
   });
 }

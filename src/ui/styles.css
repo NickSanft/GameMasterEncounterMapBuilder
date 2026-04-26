@@ -4224,6 +4224,39 @@ body.reduced-motion .tour-popover {
   background: #e57373; /* red — down */
 }
 
+/* ───── Phase 83 — RTT suffix on the status chip ────────────────────
+   Small "(45ms)" appended after the "Connected" label when the
+   latency tracker has at least one sample. Color-coded by the
+   `bandFor` thresholds so a glance tells the user whether the link
+   feels snappy or laggy. */
+
+.remote-status-latency {
+  font-size: 0.7rem;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  margin-left: 0.4rem;
+  padding: 0.05rem 0.35rem;
+  border-radius: 999px;
+  border: 1px solid currentColor;
+  opacity: 0.85;
+}
+
+.remote-status-latency[hidden] {
+  display: none;
+}
+
+.remote-status-latency[data-band='good'] {
+  color: #66bb6a;
+}
+
+.remote-status-latency[data-band='ok'] {
+  color: #ffb74d;
+}
+
+.remote-status-latency[data-band='poor'] {
+  color: #ef5350;
+}
+
 .remote-play-connection-row {
   display: flex;
   align-items: center;
