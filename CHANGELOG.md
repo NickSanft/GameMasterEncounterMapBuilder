@@ -74,7 +74,7 @@ _Onboarding & discoverability:_
 _Data lifecycle:_
 
 - **0.97.0** — Auto-save snapshot history (8 rotating IDB snapshots per scene; "restore from N minutes ago" modal) ✅
-- **0.98.0** — Per-scene JSON export / import (share a single encounter without bundling the whole session)
+- **0.98.0** — Per-scene JSON export / import (share a single encounter without bundling the whole session) ✅
 - **0.99.0** — Conflict-merge history (keep the losing tab's snapshot for an hour after Phase 84 resolves a conflict)
 
 _Content authoring:_
@@ -96,6 +96,55 @@ _Polish:_
 - **0.108.0** — Recent backgrounds quick switcher (mirrors the Phase 75 recent-scenes pattern but for backgrounds)
 - **0.109.0** — Per-spectator token visibility (extend Phase 82's permissions to "GM hides individual tokens from individual players")
 - **0.110.0** — Persistent player names across reloads (stable cross-session player IDs — flagged in Phase 82 as future)
+
+---
+
+## [0.98.0] — 2026-04-26 — Per-scene JSON export / import
+
+### Added
+- **Per-scene "Export" button** on every scene row in the Scenes modal. Downloads the scene as a JSON file named `<slug>.scene.json`, bundling the scene's state + every referenced image as base64 data URLs (same pipeline `exportSession` uses, scoped to one scene).
+- **Top-level "Import scene…" button** in the Scenes modal toolbar. Opens a file picker; the chosen JSON gets parsed, images restored to IDB, and a new scene created with the original name. Switches to the new scene immediately.
+- **Two new command-palette entries** (Phase 95):
+  - `Export current scene as JSON` (group: Scenes) — exports without opening the modal.
+  - `Import scene from JSON…` — opens the Scenes modal where the file picker lives.
+
+### Wire format
+```jsonc
+{
+  "version": 1,
+  "kind": "scene",                       // distinguishes from session export
+  "exportedAt": "2026-04-26T15:00:00Z",
+  "name": "Goblin Cave",
+  "state": { /* SerializedSessionState */ },
+  "images": [{ "id": "...", "mimeType": "image/png", "dataUrl": "..." }]
+}
+```
+
+`kind: 'scene'` is the explicit discriminator from a full-session export (`kind: 'session'`, implicit when absent on pre-98 files for back-compat). The import validates the kind + rejects the wrong type with a clear error: *"Not a scene export (kind: session). Use the regular Import for full sessions."*
+
+### Why a separate format
+Existing session export bundles every scene + the active-scene pointer + miscellaneous global state. A per-scene export is a much smaller transport for the common "share this one encounter on Reddit / with my co-DM" use case. The `kind` field is the future-proof escape hatch: a hypothetical `kind: 'token-pack'` or `kind: 'wall-template'` could ship later with the same import-detection pipeline.
+
+### Architecture
+- **`src/state/scene-export.ts`** (new) — `exportScene(name, state)` + `importScene(json)` mirror the `exportSession` / `importSession` API shape. Image bundling re-uses the existing `blobToDataURL` / `dataURLToBlob` helpers from `images/store.ts`. Image-restore failures are logged + skipped (one bad image doesn't doom the whole import — same defensive pattern as the session importer).
+- **`src/ui/scenes-modal.ts`** — extended with:
+  - "Import scene…" button + hidden `<input type="file">` next to the toolbar's "+ New scene" button.
+  - Per-row "Export" button (next to Rename / Duplicate / Delete) that calls `getSceneState(id)` → `exportScene(name, state)` → triggers a download via a click-driven anchor + a 200 ms deferred `URL.revokeObjectURL`.
+  - `slugFilename(name)` helper that lowercases + collapses non-alphanumeric runs to single hyphens, capped at 60 chars. Falls back to `'scene'` for empty / all-punctuation names.
+- **`src/entries/gm.ts`** — registers the two palette commands. The export path uses the same blob-download pattern as the per-row button; the import path opens the Scenes modal where the file-picker lives (centralizes the picker rather than mounting two separate ones).
+
+### Tests
+- **+9 unit tests** in `src/state/scene-export.test.ts` (new, fake-indexeddb): export round-trip with no images; "Imported scene" fallback for empty / whitespace name; import hydrates the state; import rejects non-JSON; rejects wrong `kind` (`session`); rejects no-`kind` doc; rejects unsupported `version`; rejects missing `state`; "Imported scene" fallback when the imported `name` is missing.
+- **+3 Playwright specs** in `e2e/scene-export.spec.ts` (new): Scenes modal has Export per row + Import scene button; Export downloads a JSON file with the right wire format (verified by parsing the saved file's content); command palette has the Phase 98 entries.
+- **All 1109 unit tests + 245 Playwright specs pass.** Visual-regression baselines unchanged — the new buttons are inside the Scenes modal (not in any current snapshot's region).
+
+### Bundle
+- 85.12 / 86 KB initial-load brotli (+0.77 KB for the export module + scenes-modal wiring + palette commands). CSS unchanged. Lazy chunks unchanged.
+
+### Roundtrip notes
+- Exporting a scene then importing it on the same install **creates a new scene** rather than overwriting. Image ids reuse the originals — if both source + import end up with the same scene, both reference the same IDB image record (efficient; no duplication).
+- Importing a scene whose images already exist in IDB silently overwrites them with the imported copies. Same behavior as the session importer; matters in practice only when the user has manually replaced an image with the same id (vanishingly rare).
+- Pre-98 session-export files are **untouched** by this phase — the existing Import button still loads them via the original session importer.
 
 ---
 

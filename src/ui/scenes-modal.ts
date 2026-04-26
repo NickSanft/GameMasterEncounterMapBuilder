@@ -5,8 +5,12 @@ import {
   renameScene,
   deleteScene,
   duplicateScene,
+  getSceneState,
+  saveScene,
   type SceneSummary,
 } from '../state/scenes.js';
+import { exportScene, importScene } from '../state/scene-export.js';
+import { nid } from '../util/id.js';
 import { attachFocusTrap, rememberFocus, restoreFocus } from '../util/focus.js';
 
 export interface ScenesModalHandle {
@@ -50,6 +54,9 @@ export function mountScenesModal(opts: ScenesModalOptions): ScenesModalHandle {
     <div class="modal-body">
       <div class="scenes-toolbar">
         <button type="button" class="primary" data-action="new-scene">+ New scene</button>
+        <button type="button" data-action="import-scene"
+          title="Import a scene from a JSON file (Phase 98)">Import scene…</button>
+        <input type="file" data-field="import-file" accept="application/json,.json" hidden />
       </div>
       <p class="library-hint">
         Save a scene per encounter, dungeon room, or set piece. Switching scenes persists the one you're leaving and loads the one you pick. Undo history resets per scene.
@@ -110,6 +117,8 @@ export function mountScenesModal(opts: ScenesModalOptions): ScenesModalHandle {
       <div class="scene-actions">
         <button type="button" class="scene-action" data-action="rename" title="Rename scene">Rename</button>
         <button type="button" class="scene-action" data-action="duplicate" title="Duplicate scene">Duplicate</button>
+        <button type="button" class="scene-action" data-action="export"
+          title="Download this scene as a JSON file (Phase 98)">Export</button>
         <button type="button" class="scene-action danger" data-action="delete" title="Delete scene">Delete</button>
       </div>
     `;
@@ -148,6 +157,19 @@ export function mountScenesModal(opts: ScenesModalOptions): ScenesModalHandle {
         await opts.onChanged?.();
       });
 
+    // Phase 98 — Export this scene as a JSON file. The download is
+    // a click-triggered <a> with a blob URL; we revoke the URL after
+    // a beat to free memory without blocking the download dialog.
+    card
+      .querySelector<HTMLButtonElement>('[data-action="export"]')!
+      .addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const state = await getSceneState(s.id);
+        if (!state) return;
+        const json = await exportScene(s.name, state);
+        triggerDownload(`${slugFilename(s.name)}.scene.json`, json);
+      });
+
     card
       .querySelector<HTMLButtonElement>('[data-action="delete"]')!
       .addEventListener('click', async (e) => {
@@ -184,6 +206,45 @@ export function mountScenesModal(opts: ScenesModalOptions): ScenesModalHandle {
     const record = await createScene(trimmed);
     // Close the modal first — the host immediately switches to the new
     // scene, and leaving the modal open would hide the fresh map.
+    close();
+    await opts.onCreated(record.id);
+    await opts.onChanged?.();
+  });
+
+  // Phase 98 — Import scene from a JSON file. The file picker fires
+  // its 'change' event after the user selects a file; we read the
+  // text + run `importScene`, which restores any referenced images
+  // into IDB + returns the hydrated state. Then `saveScene(nid(),
+  // state, { name })` materializes a brand-new scene record. The
+  // host switches to it via `opts.onCreated(id)`.
+  const importBtn = modal.querySelector<HTMLButtonElement>(
+    '[data-action="import-scene"]',
+  )!;
+  const importFileInput = modal.querySelector<HTMLInputElement>(
+    '[data-field="import-file"]',
+  )!;
+  importBtn.addEventListener('click', () => {
+    importFileInput.click();
+  });
+  importFileInput.addEventListener('change', async () => {
+    const file = importFileInput.files?.[0];
+    importFileInput.value = '';
+    if (!file) return;
+    let json: string;
+    try {
+      json = await file.text();
+    } catch (err) {
+      window.alert(`Failed to read file: ${(err as Error).message}`);
+      return;
+    }
+    let imported;
+    try {
+      imported = await importScene(json);
+    } catch (err) {
+      window.alert(`Import failed: ${(err as Error).message}`);
+      return;
+    }
+    const record = await saveScene(nid(), imported.state, { name: imported.name });
     close();
     await opts.onCreated(record.id);
     await opts.onChanged?.();
@@ -238,4 +299,41 @@ function formatTime(ms: number): string {
   if (diffSec < 3600) return `${Math.round(diffSec / 60)} min ago`;
   if (diffSec < 86_400) return `${Math.round(diffSec / 3600)} h ago`;
   return d.toLocaleDateString();
+}
+
+/**
+ * Phase 98 — turn a scene name into a safe filename. Lowercases,
+ * strips diacritics-friendly punctuation, collapses whitespace +
+ * underscores into single hyphens. Keeps it short — long scene
+ * names just get truncated rather than ballooning into a 200-char
+ * filename.
+ */
+function slugFilename(name: string): string {
+  const slug = name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 60);
+  return slug || 'scene';
+}
+
+/**
+ * Phase 98 — trigger a JSON download via a click-driven anchor.
+ * Revokes the blob URL after a short delay so the browser has time
+ * to start the download dialog before we free the URL.
+ */
+function triggerDownload(filename: string, content: string): void {
+  const blob = new Blob([content], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.style.display = 'none';
+  document.body.appendChild(anchor);
+  anchor.click();
+  // Defer revoke so Chrome's "Save as" dialog can read the URL.
+  window.setTimeout(() => {
+    URL.revokeObjectURL(url);
+    anchor.remove();
+  }, 200);
 }

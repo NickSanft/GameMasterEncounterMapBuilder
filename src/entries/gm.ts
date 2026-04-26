@@ -60,6 +60,7 @@ import {
   type Snapshot,
 } from '../state/snapshot-history.js';
 import { mountSnapshotHistoryModal } from '../ui/snapshot-history-modal.js';
+import { exportScene } from '../state/scene-export.js';
 import { mountTokenEditor } from '../ui/token-editor.js';
 import { mountAnnotationEditor } from '../ui/annotation-editor.js';
 import { mountWallEditor } from '../ui/wall-editor.js';
@@ -2448,6 +2449,26 @@ function clearCanvasSelectionFromEsc(): boolean {
 const commandRegistry = createCommandRegistry();
 const commandPalette = mountCommandPalette({ registry: commandRegistry });
 
+// Phase 98 — small helpers for the per-scene export palette command.
+async function currentSceneName(): Promise<string> {
+  const id = getActiveSceneId();
+  if (!id) return 'Untitled scene';
+  try {
+    const list = await listScenes();
+    return list.find((x) => x.id === id)?.name ?? 'Untitled scene';
+  } catch {
+    return 'Untitled scene';
+  }
+}
+function slugForFilename(name: string): string {
+  const slug = name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 60);
+  return slug || 'scene';
+}
+
 (function registerStaticCommands() {
   const reg = commandRegistry;
 
@@ -2516,6 +2537,41 @@ const commandPalette = mountCommandPalette({ registry: commandRegistry });
     hint: 'Auto-saved scene history',
     group: 'Modals',
     run: () => snapshotHistoryModal.open(),
+  });
+  // Phase 98 — per-scene JSON export / import. The export reads the
+  // CURRENTLY-ACTIVE scene's name + state; the import opens the
+  // scenes modal where the user can drop a file (centralizes the
+  // file picker rather than spinning one up here).
+  reg.register({
+    id: 'export-current-scene',
+    label: 'Export current scene as JSON',
+    group: 'Scenes',
+    run: async () => {
+      const sceneId = getActiveSceneId();
+      if (!sceneId) return;
+      const state = await getSceneState(sceneId);
+      if (!state) return;
+      const name = await currentSceneName();
+      const json = await exportScene(name, state);
+      const blob = new Blob([json], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = `${slugForFilename(name)}.scene.json`;
+      anchor.style.display = 'none';
+      document.body.appendChild(anchor);
+      anchor.click();
+      window.setTimeout(() => {
+        URL.revokeObjectURL(url);
+        anchor.remove();
+      }, 200);
+    },
+  });
+  reg.register({
+    id: 'import-scene',
+    label: 'Import scene from JSON…',
+    group: 'Scenes',
+    run: () => scenesModal.open(),
   });
   reg.register({
     id: 'toggle-notes',
