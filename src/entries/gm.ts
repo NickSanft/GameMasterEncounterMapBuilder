@@ -456,7 +456,14 @@ function maybeAutoRevealFromPolygons(
 refreshLos();
 refreshFogRects();
 
-panZoomRef.handle = attachPanZoom(renderer);
+panZoomRef.handle = attachPanZoom(renderer, {
+  // Phase 104 — when an AoE preview is in flight, the second finger is
+  // claimed by the AoE tool's two-finger rotate gesture instead of
+  // engaging pinch-zoom. Predicate is re-evaluated on every
+  // pointerdown so the suppression naturally lifts when the AoE
+  // commit / cancel clears the preview ref.
+  shouldSuppressPinch: () => aoeOverlayRef.current !== null,
+});
 
 const persistCameraDebounced = debounce(() => {
   if (preferences.get().persistCamera) saveCamera('gm', renderer.camera);

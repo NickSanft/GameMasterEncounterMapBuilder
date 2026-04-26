@@ -19,7 +19,26 @@ export interface PanZoomHandle {
   setWheelEnabled(enabled: boolean): void;
 }
 
-export function attachPanZoom(renderer: Renderer): PanZoomHandle {
+export interface PanZoomOptions {
+  /**
+   * Phase 104 — when set, called the moment a second finger lands. If
+   * the predicate returns true, pan-zoom does NOT engage pinch (and
+   * does NOT broadcast pointercancel for the first-finger tool gesture).
+   * Used by the AoE tool to claim the second finger for two-finger
+   * rotation while a cone / line preview is in flight.
+   *
+   * Returning true ALSO opts the second pointer out of touchPoints
+   * tracking — pan-zoom forgets it ever existed and never engages
+   * pinch even if the AoE tool subsequently lifts its veto. The
+   * second finger lifting just clears it from any bookkeeping.
+   */
+  shouldSuppressPinch?(): boolean;
+}
+
+export function attachPanZoom(
+  renderer: Renderer,
+  opts: PanZoomOptions = {},
+): PanZoomHandle {
   const canvas = renderer.canvas;
   let spaceHeld = false;
   let panning = false;
@@ -73,6 +92,19 @@ export function attachPanZoom(renderer: Renderer): PanZoomHandle {
 
   function onPointerDown(e: PointerEvent) {
     if (e.pointerType === 'touch') {
+      // Phase 104 — when a tool wants the second finger for its own
+      // gesture (currently only the AoE tool's two-finger rotate),
+      // we forget the second pointer entirely so pinch never engages
+      // + the first-finger tool gesture is preserved (no
+      // pointercancel broadcast). The veto check happens BEFORE the
+      // touchPoints insert so the second finger never enters our
+      // bookkeeping.
+      if (
+        touchPoints.size === 1 &&
+        opts.shouldSuppressPinch?.() === true
+      ) {
+        return;
+      }
       touchPoints.set(e.pointerId, canvasPoint(e));
       // If the second finger just landed, capture a pinch snapshot and
       // cancel any in-flight single-finger pan/tool gesture.

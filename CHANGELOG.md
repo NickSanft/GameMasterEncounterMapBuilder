@@ -86,7 +86,7 @@ _Content authoring:_
 _Mobile / tablet ergonomics:_
 
 - **0.103.0** — Long-press → context menu on touch (500 ms hold = right-click, unlocks tablet-only GMs) ✅
-- **0.104.0** — Two-finger rotate for AoE preview (touch-friendly rotation for cone / line templates)
+- **0.104.0** — Two-finger rotate for AoE preview (touch-friendly rotation for cone / line templates) ✅
 - **0.105.0** — Larger touch targets in toolbar (≥44 px hit area in narrow viewports per Apple touch-target guidance)
 
 _Polish:_
@@ -96,6 +96,44 @@ _Polish:_
 - **0.108.0** — Recent backgrounds quick switcher (mirrors the Phase 75 recent-scenes pattern but for backgrounds)
 - **0.109.0** — Per-spectator token visibility (extend Phase 82's permissions to "GM hides individual tokens from individual players")
 - **0.110.0** — Persistent player names across reloads (stable cross-session player IDs — flagged in Phase 82 as future)
+
+---
+
+## [0.104.0] — 2026-04-26 — Two-finger rotate for AoE preview
+
+### Added
+- **While placing a cone or line AoE**, drop a second finger and twist it around the first to rotate the preview without changing its length. Lifting either finger ends rotate-mode; lifting the primary finger commits the AoE. Sphere + cube don't have a rotation, so the second finger is ignored for those.
+- **Length stays frozen during rotate-mode** so a tiny finger drift while twisting doesn't also resize the cone. The user gets exactly one degree of freedom (rotation) per gesture, which matches every desktop CAD app's "modify one thing at a time" rule.
+- **Pinch-zoom is automatically suppressed** while an AoE preview is in flight. Without this veto, the second finger landing would trigger pinch-zoom (Phase 53), broadcast `pointercancel` to every active tool, and abandon the AoE preview before rotate-mode could engage. Phase 104 plumbs a `shouldSuppressPinch?` predicate into `attachPanZoom` so the AoE tool can claim two-finger gestures during placement.
+
+### Why this matters
+The AoE tool's single-finger drag derives rotation from the drag direction — point your finger toward the target and the cone follows. That's fast for a desktop mouse where you have pixel-precise control, but on a tablet it's awkward when you want to *fine-tune the angle* without changing the cone's length: every finger move both lengthens and rotates. Phase 104 adds a second-finger gesture that decouples them — your primary finger stays put as the apex, and the second finger orbits to set the angle. Same gesture model as photo-rotate in iOS Photos, the iPad Procreate canvas, and Google Maps map-rotate.
+
+### Architecture
+- **`src/input/two-finger-rotate.ts`** (new, ~70 lines) — pure math. `rotateStart(p1, p2, baseRotation)` snapshots the initial angle between two fingers + the AoE's pre-gesture rotation; `rotateUpdate(snap, p1, p2)` returns `baseRotation + (currentAngle − startAngle)`. The delta-from-baseline shape (rather than absolute) means a small twist becomes a small rotation, not a wholesale jump to the absolute angle. Mirrors the shape of the existing `pinch.ts` (Phase 53) so the two two-finger handlers feel like siblings.
+- **`src/input/pan-zoom.ts`** — added `PanZoomOptions.shouldSuppressPinch?()`. When the predicate returns true at the moment a second finger lands, pan-zoom does NOT engage pinch + does NOT broadcast pointercancel. The veto check happens BEFORE the touchPoints insert so the second finger never enters pan-zoom's bookkeeping — pinch can never accidentally fire later even if the AoE preview clears mid-gesture.
+- **`src/input/tool-aoe.ts`** — the tool now tracks up to two pointers. The first finger drives the standard length / direction drag (unchanged behavior). When the SECOND finger lands while the AoE preview is in flight AND the active kind is `cone` / `line`:
+  - Capture both finger positions in screen space + the current rotation as the rotate snapshot.
+  - Freeze `length` + `width` at their current values so subsequent moves only adjust rotation.
+  - Pointermove for either finger updates the rotation via `rotateUpdate`.
+  - Second finger lifting just drops out of rotate-mode (the primary stays + the user can resume length-adjusting). Primary finger lifting commits as usual.
+- **`src/entries/gm.ts`** — pass `shouldSuppressPinch: () => aoeOverlayRef.current !== null` to `attachPanZoom`. The predicate is re-evaluated on every pointerdown so the suppression naturally lifts when the AoE commit / cancel clears the preview ref. No flag bookkeeping; the existing `aoeOverlayRef` is the source of truth.
+
+### UX details
+- **Sphere + cube ignore the second finger** because their wire format has no rotation field. The second touch is silently dropped (forwarded to pan-zoom, which then engages pinch as normal). So a GM placing a sphere can still pinch-zoom mid-placement to refine the radius — a useful escape hatch.
+- **First finger is the anchor** (where the apex stays). The user's mental model is "this is where the cone starts; my other finger aims it." That maps to the way single-finger drag already works (the touchdown point is always the cone's apex / line's origin).
+- **No visual indicator on the canvas** for "you're now in rotate-mode." The cone preview rotating in real-time IS the indicator; adding a separate badge would clutter the canvas at the exact moment the user wants to focus on the AoE preview.
+
+### Tests
+- **+11 unit tests** in `src/input/two-finger-rotate.test.ts` (new): `angleBetween` for the four cardinal vectors (incl. the +PI / -PI ambiguity at -X); `rotateUpdate` returning the baseRotation when fingers don't move; +PI/2 / -PI/2 twists shifting baseRotation by the right amount; rotating BOTH fingers by the same amount preserving zero delta (pure rotation in the world); the snapshot capturing the initial angle correctly; chained updates composing linearly; negative baseRotation preserved when fingers are unchanged.
+- **+2 Playwright specs** in `e2e/aoe-two-finger-rotate.spec.ts` (new) using Pixel-5 device emulation + raw `PointerEvent` synthesis: second-finger-during-cone-preview rotates without engaging pinch (the AoE survives, proven by "AoE actions" appearing on right-click — pinch would have broadcast pointercancel + abandoned the preview); second-finger-lifting drops out of rotate-mode without committing (primary finger continues to length-adjust normally + commits).
+- **All 1182 unit tests + 264 Playwright specs pass** locally. The same `scenes.spec.ts:56` parallel flake from Phases 101 + 102 reappeared once (passes in isolation, has been seen before in heavily-parallel runs); CI runs serially with retries=2, absorbed.
+
+### Bundle
+- 89.61 / 90 KB initial-load brotli (+0.40 KB for the rotate math + the AoE-tool wiring + the suppress-pinch hook). CSS 11.10 / 12 KB. Lazy chunks unchanged. **Tight under the limit** — the next bundle-budget-touching phase will likely need a 2 KB bump.
+
+### Pre-push checklist
+Caught zero issues — full unit suite + full e2e + visual-regression spec + size-limit all green before push. Seven clean phases in a row now (97 + 99 + 100 + 101 + 102 + 103 + 104).
 
 ---
 
