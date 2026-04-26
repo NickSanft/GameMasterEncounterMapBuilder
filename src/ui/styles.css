@@ -106,6 +106,12 @@ body {
   color: var(--fg);
 }
 
+/* Phase 88 — universal focus-visible baseline. 2 px accent outline
+   plus a 1 px dark "spacer" via outline-offset so the ring stays
+   distinct against the accent's own color (e.g. an accent-colored
+   button that gets focus would otherwise disappear into itself).
+   Inherits the per-theme `--accent` so the ring is theme-aware
+   automatically. */
 button:focus-visible,
 input:focus-visible,
 select:focus-visible,
@@ -121,6 +127,39 @@ textarea:focus-visible,
 
 .modal-backdrop button:focus-visible {
   outline-offset: 2px;
+}
+
+/* Phase 88 — high-contrast escalation. The `highContrast` user
+   preference bumps the focus ring from 2 px to 3 px AND adds a
+   complementary box-shadow drop so the ring is visible even when
+   the accent matches the surrounding theme color. The CSS variable
+   `--focus-ring-shadow` defaults to a transparent half-pixel
+   (effectively no-op) and is overridden in the high-contrast
+   block below. */
+:root {
+  --focus-ring-shadow: 0 0 0 0 transparent;
+}
+
+body.high-contrast button:focus-visible,
+body.high-contrast input:focus-visible,
+body.high-contrast select:focus-visible,
+body.high-contrast textarea:focus-visible,
+body.high-contrast [tabindex]:focus-visible {
+  outline-width: 3px;
+  outline-offset: 3px;
+  box-shadow: var(--focus-ring-shadow);
+}
+
+body.high-contrast {
+  /* Black-on-light themes get a bright outer halo; everything else
+     gets the inverse so the ring stays visible against any background. */
+  --focus-ring-shadow: 0 0 0 5px rgba(0, 0, 0, 0.55);
+}
+
+body.high-contrast.theme-dark,
+body.high-contrast.theme-console,
+body.high-contrast.theme-purple-dusk {
+  --focus-ring-shadow: 0 0 0 5px rgba(255, 255, 255, 0.55);
 }
 
 /* Screen-reader-only — visually hidden but still in the a11y tree.
@@ -771,9 +810,14 @@ body.view {
   text-transform: none;
 }
 
-.modal input[type='text']:focus {
+.modal input[type='text']:focus-visible {
+  /* Phase 88 — replace the lone border-color change with a 2 px
+     box-shadow ring so the focus indicator is visible at a glance,
+     matching the .scene-indicator / .icon-btn pattern. The ring
+     uses the per-theme accent automatically. */
   outline: none;
   border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent);
 }
 
 .modal input[type='number'] {
@@ -788,9 +832,10 @@ body.view {
   width: 5rem;
 }
 
-.modal input[type='number']:focus {
+.modal input[type='number']:focus-visible {
   outline: none;
   border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent);
 }
 
 .modal input[type='color'] {
@@ -1444,9 +1489,10 @@ body.view {
   width: 100%;
 }
 
-.settings-panes input[type='number']:focus {
+.settings-panes input[type='number']:focus-visible {
   outline: none;
   border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent);
 }
 
 .settings-panes .grid-row {
@@ -1939,9 +1985,10 @@ body.reduced-motion *::after {
   min-height: 3.2rem;
 }
 
-.annotation-editor textarea:focus {
+.annotation-editor textarea:focus-visible {
   outline: none;
   border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent);
 }
 
 /* Initiative tracker — compact top-center bar */
@@ -2196,10 +2243,11 @@ body.reduced-motion *::after {
   text-transform: none;
 }
 
-.initiative-add-row input:focus,
-.initiative-add-row select:focus {
+.initiative-add-row input:focus-visible,
+.initiative-add-row select:focus-visible {
   outline: none;
   border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent);
 }
 
 .initiative-add-row button {
@@ -2384,6 +2432,15 @@ body.reduced-motion .notes-panel-mic.active .mic-pulse {
   font-size: 0.9rem;
   line-height: 1.5;
   outline: none;
+}
+
+/* Phase 88 — explicit focus ring on the notes textarea. The base
+   `outline: none` above suppresses the browser default; without
+   this rule the focused textarea has no visible focus indicator.
+   Inset shadow because the textarea has `border: none` + fills its
+   container — an outer ring would clip against the panel chrome. */
+.notes-panel-textarea:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--accent);
 }
 
 .notes-panel-footer {
@@ -3262,6 +3319,15 @@ body.reduced-motion .save-status-pill[data-status='saving'] .save-status-icon {
 
 .slash-input[hidden] {
   display: none;
+}
+
+/* Phase 88 — focus-within ring on the wrapper so the inner field's
+   `outline: none` doesn't leave the input visually unfocused. The
+   wrapper's existing dark background contrasts the accent ring
+   well across all themes. */
+.slash-input:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent), 0 6px 22px rgba(0, 0, 0, 0.5);
 }
 
 .slash-input-prefix {

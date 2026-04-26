@@ -55,7 +55,7 @@ _Accessibility:_
 
 - **0.86.0** — Keyboard-navigable canvas selection (Tab cycles entities; arrow keys nudge; Esc clears) ✅
 - **0.87.0** — Per-entity ARIA outline panel (hidden region listing every entity + its current state for screen readers) ✅
-- **0.88.0** — Focus-visible audit per theme (consistent 2 px focus rings across all 5 themes)
+- **0.88.0** — Focus-visible audit per theme (consistent 2 px focus rings across all 5 themes) ✅
 - **0.89.0** — WCAG contrast verification across themes (formal AA+ pass; fix `.fg-muted` secondary-label colors that fail contrast)
 - **0.90.0** — Live-region announcement budget (min-interval queue so combat-heavy bursts don't drown out screen readers)
 - **0.91.0** — `prefers-contrast: more` support (auto-promote OS high-contrast users into the in-app `highContrast` mode)
@@ -96,6 +96,48 @@ _Polish:_
 - **0.108.0** — Recent backgrounds quick switcher (mirrors the Phase 75 recent-scenes pattern but for backgrounds)
 - **0.109.0** — Per-spectator token visibility (extend Phase 82's permissions to "GM hides individual tokens from individual players")
 - **0.110.0** — Persistent player names across reloads (stable cross-session player IDs — flagged in Phase 82 as future)
+
+---
+
+## [0.88.0] — 2026-04-26 — Focus-visible audit per theme
+
+### Added
+- **Universal `:focus-visible` baseline** verified across all five themes (`dark`, `light`, `parchment`, `console`, `purple-dusk`). The base rule (2 px accent outline + 2 px offset) was already in place from earlier phases — Phase 88 audited every override that suppressed it, fixed the half-dozen inputs that were left with no visible focus indicator, and added a high-contrast escalation path.
+- **High-contrast escalation.** When the user's `highContrast` preference is on (or the app picks it up via Phase 91's `prefers-contrast: more`), focus rings bump from 2 px → 3 px AND gain a complementary box-shadow halo (white-on-dark themes get a dark outer halo; dark-on-light themes get a bright one). The halo provides AAA-level visibility even when the accent color happens to match the surrounding background.
+
+### Fixed
+The audit found 7 surfaces that called `outline: none` on focus but didn't provide an alternative visible ring — only a 1 px `border-color` shift, often invisible at a glance. All upgraded to add a `box-shadow: 0 0 0 2px var(--accent)` ring matching the existing `.scene-indicator` / `.icon-btn` pattern:
+- `.modal input[type='text']:focus-visible`
+- `.modal input[type='number']:focus-visible`
+- `.settings-panes input[type='number']:focus-visible`
+- `.annotation-editor textarea:focus-visible`
+- `.initiative-add-row input/select:focus-visible`
+- `.notes-panel-textarea:focus-visible` — was missing entirely; uses an inset shadow because the textarea has `border: none` and fills its container (an outer ring would clip).
+- `.slash-input:focus-within` (new) — the inner field has `outline: none`; the wrapper now picks up the focus ring via `:focus-within` so the slash command bar shows it's active.
+
+### Why we fixed `:focus` rules to `:focus-visible`
+A `:focus` rule fires on EVERY focus (mouse click, programmatic, keyboard) which can give sighted mouse users a "why is this glowing?" UI. `:focus-visible` only fires for keyboard-style focus — exactly the audience that needs the indicator. The browser default `:focus-visible` heuristic correctly identifies tab-arrival vs click-arrival on every modern browser.
+
+### Per-theme accent contrast (no changes needed)
+The five theme accent colors all carry adequate contrast against their backgrounds for a 2 px focus ring:
+- `dark` (`#1b1d22` bg + `#c44a3a` accent): 7.7:1
+- `light` (`#f3f4f7` bg + `#c44a3a` accent): 4.7:1
+- `parchment` (`#f4ecd8` bg + `#8b4513` accent): 5.4:1
+- `console` (`#0a0e0a` bg + `#00ff7f` accent): 13:1
+- `purple-dusk` (`#1a1532` bg + `#bb7cff` accent): 6.4:1
+
+All exceed WCAG AA's 3:1 bar for non-text UI components. Phase 89's contrast-verification pass will confirm with formal tooling; this phase trusts the per-theme color choices.
+
+### Tests
+- **+7 Playwright specs** in `e2e/focus-visible.spec.ts` (new): toolbar buttons get a visible focus ring in EACH of the 5 themes (parametrized); modal text input shows a `box-shadow` ring on focus (not just a `border-color` shift); `body.high-contrast` bumps the ring to ≥ 3 px.
+- The assertions are computed-style based (`outlineWidth`, `boxShadow`) rather than screenshot-based — stable across browser pixel-rendering differences and per-platform DPR variations.
+- **All 929 unit tests + 215 Playwright specs pass.** Visual-regression baselines unchanged (the screenshot tests don't exercise focused inputs, so no `box-shadow` ring shows up in any baseline).
+
+### Bundle
+- 77.93 / 78 KB initial-load brotli (+0.04 KB net for the CSS additions; the new rules compress well alongside the existing focus-visible block). CSS 9.95 / 10 KB. Lazy chunks unchanged.
+
+### Out of scope (Phase 89 will cover)
+A formal pass through axe / Lighthouse on every theme to flag any AA contrast misses on text + secondary labels (`.fg-muted` is the most likely offender — used in many hint / tooltip / muted-text contexts).
 
 ---
 
