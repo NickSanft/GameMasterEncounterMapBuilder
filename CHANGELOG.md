@@ -38,9 +38,41 @@ chat history for the full breakdown:
 - **0.80.0** — Day / night cycle ✅
 - **0.81.0** — Animated GIF token portraits ✅
 - **0.82.0** — Per-Spectator permissions ✅
-- **0.83.0** — Latency indicator on the status chip
+- **0.83.0** — Latency indicator on the status chip ✅
 - **0.84.0** — Conflict-merge UI
 - **0.85.0** — Wall editing revamp (in-place edit of endpoints, blocksSight / blocksMovement, thickness; live drag-out preview while drawing; chain merging so a corridor edits as one shape; per-wall `visibility: 'shared' | 'gm'` for secret features)
+
+---
+
+## [0.83.0] — 2026-04-25 — Latency indicator on the remote status chip
+
+### Added
+- **Round-trip-time (RTT) suffix on the remote-play status chip.** When connected to a remote peer, the chip now shows `Connected · 45ms`. Color-coded by latency band:
+  - **green** (`#66bb6a`) — < 100 ms (feels instant)
+  - **amber** (`#ffb74d`) — 100–299 ms (you can tell)
+  - **red** (`#ef5350`) — ≥ 300 ms (laggy)
+- Hidden in any non-connected state and until the first sample arrives (so the chip doesn't briefly flash a misleading "0ms" right after the handshake).
+
+### How it works
+- **Probe / reply protocol.** The local entry sends a `latency-probe` SyncMessage every `PROBE_INTERVAL_MS` (5 s) while a remote peer is connected; the receiver echoes back a `latency-probe-reply` with the same monotonic `id`. The sender keeps a `Map<id, sentAt>` and on reply receipt computes `RTT = performance.now() - sentAt`. Probes older than 60 s get pruned to keep the map bounded if a peer drops mid-probe.
+- **Median over the last 5 samples** drives the chip — a single packet-loss spike doesn't push the displayed value to 500 ms.
+- **First probe fires immediately** on the connect transition (rather than waiting the full 5 s for the first interval tick), so the chip shows real RTT within the first second of the handshake.
+- **Reset on disconnect.** The tracker drops all samples + the probe map empties when the peer transitions away from `connected`, so a reconnect starts fresh.
+
+### Architecture
+- **`src/state/latency-tracker.ts`** (new) — pure helpers: `createLatencyTracker()` returns a `{ note, median, reset, subscribe, _samples }` interface. `bandFor(rtt)` maps a measurement to a `'good' | 'ok' | 'poor'` color band. Tested in isolation.
+- **Wire format** — two new SyncMessage variants: `{ type: 'latency-probe'; id }` and `{ type: 'latency-probe-reply'; id }`. Optional / back-compat — pre-83 receivers ignore them, no probe ever returns, and the chip just stays without a suffix.
+- **`src/ui/remote-status-chip.ts`** — new optional `latency` option on the mount handle. Subscribes to the tracker so an RTT update mid-session updates the chip without waiting for a state transition.
+
+### Why a separate probe instead of repurposing Phase 66's envelope timestamp
+The envelope's `timestamp` is the SENDER's clock at send-time. Computing one-way latency as `localNow - envelope.timestamp` requires synchronized clocks between machines, which we don't have. The probe / reply pattern measures RTT against the LOCAL clock only — accurate without any clock-sync trickery.
+
+### Tests
+- **+15 unit tests** in `src/state/latency-tracker.test.ts` covering: empty initial state, single-sample median, 5-sample FIFO cap, odd/even median picking, integer rounding, outlier resilience (single 5000 ms sample doesn't dominate), input validation (negative/NaN/Infinity ignored), reset notify semantics, subscribe / unsubscribe behavior, and `bandFor` boundaries (99/100, 299/300).
+- **All 843 unit tests + 194 Playwright specs continue to pass.** No e2e for the live RTT measurement (asserting `<canvas>`-rendered text under a real WebRTC + BroadcastChannel handshake is fragile); the tracker is the integration boundary worth pinning.
+
+### Bundle
+- 73.80 / 74 KB initial-load brotli (+0.6 KB for the tracker + chip wiring + entry probe loops). CSS unchanged. Lazy chunks unchanged.
 
 ---
 
