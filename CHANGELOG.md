@@ -99,6 +99,16 @@ _Polish:_
 
 ---
 
+## [0.94.2] — 2026-04-26 — Fix: regenerate session-menu visual-regression baseline for Phase 94 combat-log entry
+
+### Fixed
+- **Visual-regression baseline drift.** The Phase 94 "Combat Log" button added a row to the session menu — height grew 676 → 716 px. Caught by `visual-regression.spec.ts:154` ("GM: light theme boot produces the expected pastel chrome"). Regenerated `session-menu-light-chromium-{win32,linux}.png` via the Phase 68 `npm run baselines` tool so both per-platform baselines reflect the new menu layout.
+
+### Why this is 0.94.2 (not folded into 0.94.1)
+0.94.1 was a CSS-budget bump caught at the `npm run size` step. 0.94.2 is a visual-baseline regen caught at the `playwright e2e` step. They're independent root causes — separate commits make the diff easy to read.
+
+---
+
 ## [0.94.1] — 2026-04-26 — Fix: bump CSS bundle limit for Phase 94 combat-log styles
 
 ### Fixed
