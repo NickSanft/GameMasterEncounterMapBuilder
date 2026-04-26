@@ -3015,6 +3015,120 @@ body.notes-open .mini-map {
   flex: 1 1 auto;
 }
 
+/* ───── Phase 95 — Command palette (Ctrl+K) ────────────────────────
+   Spotlight-style modal with a search input + scrollable filtered
+   list. Mounted near the top of the viewport (not vertically
+   centered) so the user's eye + the input cursor stay aligned. */
+
+.command-palette-backdrop {
+  align-items: flex-start;
+  padding-top: 12vh;
+}
+
+.command-palette {
+  width: min(640px, 92vw);
+  max-height: 70vh;
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+}
+
+.command-palette-input-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 0.9rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.command-palette-prefix {
+  color: var(--accent);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 1.1rem;
+}
+
+.command-palette-input {
+  flex: 1;
+  appearance: none;
+  background: transparent;
+  border: none;
+  color: var(--fg);
+  font-family: inherit;
+  font-size: 0.95rem;
+  outline: none;
+  padding: 0.2rem 0;
+}
+
+.command-palette-input::placeholder {
+  color: var(--fg-muted);
+}
+
+.command-palette-list {
+  list-style: none;
+  margin: 0;
+  padding: 0.3rem 0;
+  flex: 1 1 auto;
+  overflow-y: auto;
+}
+
+.command-palette-list[hidden] {
+  display: none;
+}
+
+.command-palette-empty {
+  margin: 0;
+  padding: 1.2rem 0.9rem;
+  text-align: center;
+  color: var(--fg-muted);
+  font-style: italic;
+  font-size: 0.88rem;
+}
+
+.command-palette-item {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.45rem 0.9rem;
+  cursor: pointer;
+  font-size: 0.88rem;
+  border-left: 3px solid transparent;
+}
+
+.command-palette-item[aria-selected='true'] {
+  background: var(--hover-overlay);
+  border-left-color: var(--accent);
+}
+
+.command-palette-item-group {
+  font-size: 0.7rem;
+  color: var(--fg-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  min-width: 5.5em;
+}
+
+.command-palette-item-label {
+  flex: 1;
+  color: var(--fg);
+}
+
+.command-palette-item-hint {
+  color: var(--fg-muted);
+  font-size: 0.78rem;
+  font-style: italic;
+}
+
+.command-palette-item-shortcut {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.72rem;
+  color: var(--fg-muted);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 0.05rem 0.3rem;
+}
+
 /* ───── Phase 94 — Combat log side panel ────────────────────────────
    GM-side complementary panel that mirrors the Notes panel layout
    (right-anchored, fixed width, header + scrollable body + footer).

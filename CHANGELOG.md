@@ -68,7 +68,7 @@ _Combat power-user UX:_
 
 _Onboarding & discoverability:_
 
-- **0.95.0** — Searchable command palette (Ctrl+K opens an action search — "Reveal 5×5", "Switch to scene Foo", "Add Goblin")
+- **0.95.0** — Searchable command palette (Ctrl+K opens an action search) ✅
 - **0.96.0** — Contextual first-use hints (one-time, dismissible tips when a user first hits a new feature surface)
 
 _Data lifecycle:_
@@ -96,6 +96,49 @@ _Polish:_
 - **0.108.0** — Recent backgrounds quick switcher (mirrors the Phase 75 recent-scenes pattern but for backgrounds)
 - **0.109.0** — Per-spectator token visibility (extend Phase 82's permissions to "GM hides individual tokens from individual players")
 - **0.110.0** — Persistent player names across reloads (stable cross-session player IDs — flagged in Phase 82 as future)
+
+---
+
+## [0.95.0] — 2026-04-26 — Searchable command palette (Ctrl+K)
+
+### Added
+- **Spotlight-style command palette** opened by `Ctrl+K` (Cmd+K on Mac). Type a few letters of what you want — "settings", "select", "scene", "init" — pick with `↑↓` + `Enter`, run. Closes with `Esc` or backdrop click. Replaces "open the session menu, scan, click" with a 1-keystroke + a few-letters flow that scales as the action surface grows.
+- **Initial action set (24 commands across 6 groups):**
+  - **Tools**: Switch to Select / Token / Reveal / Hide / Map / Note / Ruler / AoE / Draw / Walls
+  - **Modals**: Open Settings / Scenes / Token Library / Template Library / Initiative tracker / Permissions
+  - **Panels**: Toggle Notes panel / Toggle Combat Log panel
+  - **Help**: Show keyboard shortcuts (`?`) / Replay onboarding tour
+  - **Camera**: Fit content to screen (`F`) / Reset camera (`0`)
+  - **Initiative**: Initiative — next turn / Initiative — previous turn
+  - **Session**: New session (clear everything) — with confirmation
+- Pre-existing keyboard shortcuts (`F`, `0`, `?`) display as `<kbd>` chips next to their entries so the palette doubles as a discoverable shortcut reference.
+
+### How matching works
+- Substring filter on `label + hint`, ranked by:
+  1. **Prefix match on label** ("settings" → "Settings panel" wins)
+  2. **Word-boundary match** ("settings" → "Open Settings" — second-tier)
+  3. **Pure substring** ("etting" → "Resettings indeed" — third-tier)
+- Ties on rank break by match position, then registration order. Empty / whitespace query returns every command in registration order.
+- No fuzzy match (would slow down + complicate the result ordering); the substring approach is fast + predictable + matches what users expect from `cmd+P`-style palettes in editors they already use.
+
+### Architecture
+- **`src/state/command-registry.ts`** (new, ~120 lines) — pure helpers: `Command` type (`{id, label, hint?, group?, shortcut?, run()}`), `createCommandRegistry()` returns `{register, unregister, list, match, clear}`. Idempotent — second `register()` with the same id replaces in-place. Match is rank-aware (3 tiers).
+- **`src/ui/command-palette.ts`** (new, ~190 lines) — modal UI mirroring the focus-trap + restore pattern of the other modals. Mounts a Spotlight-style modal at the top 12vh of the viewport (not vertically centered — keeps the eye + cursor aligned). `ArrowDown/Up/Home/End` navigate; `Enter` runs + closes; click on item runs + closes; `Esc` closes; backdrop click closes. List re-renders on every input change (re-runs `registry.match()`); active index resets to 0 on filter to avoid pointing at a no-longer-visible item.
+- **`src/entries/gm.ts`** — registers the static command set at boot via an IIFE; wires `Ctrl+K` / `Cmd+K` into the existing global keydown handler, BEFORE the other Ctrl shortcuts so the palette claims K even if a future action wanted it.
+
+### Why no Spectator palette
+The Spectator action surface is small enough that the toolbar + session menu cover everything. A future Spectator-side palette could expose "Open Notes", "Toggle dice tray", "Switch theme" if the surface grows; today there's not enough to search through.
+
+### Tests
+- **+13 unit tests** in `src/state/command-registry.test.ts` (new) covering: starts empty, registration order preserved, in-place replace by id, unregister no-op on missing id, clear, match returns all on empty / whitespace query, case-insensitive substring, prefix-vs-word-boundary-vs-substring ranking, hint matching, multi-match sort, no-match empty array, command-object reference preservation.
+- **+6 Playwright specs** in `e2e/command-palette.spec.ts` (new): Ctrl+K opens + focuses input; Esc closes; typing filters the list; Enter runs the highlighted action (verified by Settings dialog appearing); ArrowDown moves the highlight (verified via aria-selected); non-matching query shows the empty state.
+- **All 1070 unit tests + 235 Playwright specs pass.**
+
+### Bundle
+- **Initial-load brotli budget bumped 82 → 84 KB.** Phase 95 added ~1.5 KB (registry + palette UI + 24 action registrations); landed at 82.31 / 82 KB which would have been 310 B over. CSS 10.4 / 12 KB. Lazy chunks unchanged.
+
+### What this unlocks
+With Phase 95 the discoverability of every existing GM action improves dramatically — a user who doesn't remember which menu Notes lives in can just type "notes" and pick. As Phases 96+ add new surfaces (contextual hints, conflict-merge history, drag-drop upload, etc.), each can register its own commands so the palette stays the canonical "everything you can do" view.
 
 ---
 

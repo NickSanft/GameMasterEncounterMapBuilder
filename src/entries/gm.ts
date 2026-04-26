@@ -50,6 +50,9 @@ import { mountSessionMenu } from '../ui/session-menu.js';
 import { mountCombatLogPanel } from '../ui/combat-log-panel.js';
 import { createCombatLog } from '../state/combat-log.js';
 import { attachCombatLogObserver } from '../state/combat-log-observer.js';
+import { mountCommandPalette } from '../ui/command-palette.js';
+import { createCommandRegistry } from '../state/command-registry.js';
+import { advanceInitiative, retreatInitiative } from '../state/initiative.js';
 import { mountTokenEditor } from '../ui/token-editor.js';
 import { mountAnnotationEditor } from '../ui/annotation-editor.js';
 import { mountWallEditor } from '../ui/wall-editor.js';
@@ -2380,6 +2383,172 @@ function clearCanvasSelectionFromEsc(): boolean {
   return true;
 }
 
+/**
+ * Phase 95 — searchable command palette (Ctrl+K / Cmd+K).
+ *
+ * Registers an action per major surface — tool switches, modal opens,
+ * camera resets, scene jumps, initiative steps. The user opens with
+ * Ctrl+K, types a few letters of what they want, picks with Enter.
+ *
+ * The registry + palette are mounted unconditionally; the actions
+ * registered here are static (don't change per session). Dynamic
+ * actions (e.g. "Switch to scene <name>" per scene) re-register on
+ * demand inside their callbacks via the lazy refresh path: every
+ * `palette.open()` re-snapshots `registry.match()`, so adding
+ * commands at any time picks up on the next open.
+ */
+const commandRegistry = createCommandRegistry();
+const commandPalette = mountCommandPalette({ registry: commandRegistry });
+
+(function registerStaticCommands() {
+  const reg = commandRegistry;
+
+  // Tools.
+  const tools: Array<{ id: string; label: string; tool: string }> = [
+    { id: 'tool-select', label: 'Switch to Select tool', tool: 'select' },
+    { id: 'tool-token', label: 'Switch to Token tool', tool: 'token' },
+    { id: 'tool-fog-reveal', label: 'Switch to Reveal tool', tool: 'fog-reveal' },
+    { id: 'tool-fog-hide', label: 'Switch to Hide tool', tool: 'fog-hide' },
+    { id: 'tool-background', label: 'Switch to Map tool', tool: 'background' },
+    { id: 'tool-note', label: 'Switch to Note tool', tool: 'note' },
+    { id: 'tool-measure', label: 'Switch to Ruler tool', tool: 'measure' },
+    { id: 'tool-aoe', label: 'Switch to AoE tool', tool: 'aoe' },
+    { id: 'tool-draw', label: 'Switch to Draw tool', tool: 'draw' },
+    { id: 'tool-walls', label: 'Switch to Walls tool', tool: 'walls' },
+  ];
+  for (const t of tools) {
+    reg.register({
+      id: t.id,
+      label: t.label,
+      group: 'Tools',
+      run: () => toolManager.setActive(t.tool),
+    });
+  }
+
+  // Modals + side panels.
+  reg.register({
+    id: 'open-settings',
+    label: 'Open Settings',
+    group: 'Modals',
+    run: () => settingsModal.open(),
+  });
+  reg.register({
+    id: 'open-scenes',
+    label: 'Open Scenes',
+    group: 'Modals',
+    run: () => scenesModal.open(),
+  });
+  reg.register({
+    id: 'open-token-library',
+    label: 'Open Token Library',
+    group: 'Modals',
+    run: () => tokenLibraryModal.open(),
+  });
+  reg.register({
+    id: 'open-template-library',
+    label: 'Open Template Library',
+    group: 'Modals',
+    run: () => templateLibraryModal.open(),
+  });
+  reg.register({
+    id: 'open-initiative',
+    label: 'Open Initiative tracker',
+    group: 'Modals',
+    run: () => initiativeModal.open(),
+  });
+  reg.register({
+    id: 'open-permissions',
+    label: 'Open Permissions',
+    group: 'Modals',
+    run: () => permissionsModal.open(),
+  });
+  reg.register({
+    id: 'toggle-notes',
+    label: 'Toggle Notes panel',
+    group: 'Panels',
+    run: () => notesPanel.toggle(),
+  });
+  reg.register({
+    id: 'toggle-combat-log',
+    label: 'Toggle Combat Log panel',
+    group: 'Panels',
+    run: () => combatLogPanel.toggle(),
+  });
+  reg.register({
+    id: 'open-shortcuts',
+    label: 'Show keyboard shortcuts',
+    group: 'Help',
+    shortcut: '?',
+    run: () => shortcutOverlay.open(),
+  });
+  reg.register({
+    id: 'replay-tour',
+    label: 'Replay onboarding tour',
+    group: 'Help',
+    run: () => openOnboardingTour(),
+  });
+
+  // Camera.
+  reg.register({
+    id: 'camera-fit',
+    label: 'Fit content to screen',
+    group: 'Camera',
+    shortcut: 'F',
+    run: () => fitToContent(renderer, store.getState(), (id) => imageLoader.get(id)),
+  });
+  reg.register({
+    id: 'camera-reset',
+    label: 'Reset camera',
+    group: 'Camera',
+    shortcut: '0',
+    run: () => resetCamera(renderer),
+  });
+
+  // Initiative steps.
+  reg.register({
+    id: 'initiative-next',
+    label: 'Initiative — next turn',
+    group: 'Initiative',
+    run: () => {
+      const next = advanceInitiative(store.getState().initiative);
+      store.applyPatch({
+        kind: 'initiative-set-active',
+        activeId: next.activeId,
+        round: next.round,
+      });
+    },
+  });
+  reg.register({
+    id: 'initiative-prev',
+    label: 'Initiative — previous turn',
+    group: 'Initiative',
+    run: () => {
+      const next = retreatInitiative(store.getState().initiative);
+      store.applyPatch({
+        kind: 'initiative-set-active',
+        activeId: next.activeId,
+        round: next.round,
+      });
+    },
+  });
+
+  // Session.
+  reg.register({
+    id: 'new-session',
+    label: 'New session (clear everything)',
+    group: 'Session',
+    run: () => {
+      const ok = window.confirm(
+        'Start a new session? All current tokens, fog, and background will be cleared.',
+      );
+      if (ok) {
+        store.resetSession();
+        announcer.announce('New session started.');
+      }
+    },
+  });
+})();
+
 window.addEventListener('keydown', (e) => {
   if (isEditableFocus(e.target)) return;
 
@@ -2437,6 +2606,15 @@ window.addEventListener('keydown', (e) => {
 
   if (e.ctrlKey || e.metaKey) {
     const key = e.key.toLowerCase();
+    // Phase 95 — Ctrl+K / Cmd+K opens the searchable command palette.
+    // Wired before the other Ctrl shortcuts so the palette claims
+    // K even if some future action wanted it (none today; Ctrl+K is
+    // a near-universal convention for "show me actions").
+    if (key === 'k' && !e.shiftKey) {
+      commandPalette.toggle();
+      e.preventDefault();
+      return;
+    }
     if (key === 'z') {
       if (e.shiftKey) store.redo();
       else store.undo();
