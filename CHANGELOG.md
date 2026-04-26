@@ -18,8 +18,10 @@ Every release is an annotated git tag (`vX.Y.Z`) on the commit that introduced t
 
 ## [Unreleased]
 
-Second post-1.0 phase plan (Phases 65 → 85) — see PLAN.md / the
-chat history for the full breakdown:
+Post-1.0 phase plan — see CHANGELOG entries below for shipped
+phases + chat history for full design notes.
+
+**Shipped (Phases 65 → 85):**
 
 - **0.66.0** — SyncMessage envelope with `senderId` + `timestamp`
 - **0.67.0** — Move identity storage off `preferences`
@@ -41,6 +43,59 @@ chat history for the full breakdown:
 - **0.83.0** — Latency indicator on the status chip ✅
 - **0.84.0** — Conflict-merge UI ✅
 - **0.85.0** — Wall editing revamp ✅
+
+**Queued (Phases 86 → 110)** — UX + accessibility expansion plan.
+Grouped by theme; ordering inside a group is roughly "smaller /
+foundational first" so later phases can build on earlier ones (e.g.
+Phase 87's ARIA outline panel is more useful once Phase 86's
+keyboard navigation lets a screen-reader user actually act on what
+it announces).
+
+_Accessibility:_
+
+- **0.86.0** — Keyboard-navigable canvas selection (Tab cycles entities; arrow keys nudge; Esc clears)
+- **0.87.0** — Per-entity ARIA outline panel (hidden region listing every entity + its current state for screen readers)
+- **0.88.0** — Focus-visible audit per theme (consistent 2 px focus rings across all 5 themes)
+- **0.89.0** — WCAG contrast verification across themes (formal AA+ pass; fix `.fg-muted` secondary-label colors that fail contrast)
+- **0.90.0** — Live-region announcement budget (min-interval queue so combat-heavy bursts don't drown out screen readers)
+- **0.91.0** — `prefers-contrast: more` support (auto-promote OS high-contrast users into the in-app `highContrast` mode)
+
+_Combat power-user UX:_
+
+- **0.92.0** — Quick-HP adjust via scroll / keyboard (right-click + scroll = ±1, Shift = ±5; +/- keys with token selected)
+- **0.93.0** — Per-token turn timer (optional countdown above the active initiative card)
+- **0.94.0** — Combat log panel (auto-record damage / conditions / death-saves / turn changes; toggleable side panel + export)
+
+_Onboarding & discoverability:_
+
+- **0.95.0** — Searchable command palette (Ctrl+K opens an action search — "Reveal 5×5", "Switch to scene Foo", "Add Goblin")
+- **0.96.0** — Contextual first-use hints (one-time, dismissible tips when a user first hits a new feature surface)
+
+_Data lifecycle:_
+
+- **0.97.0** — Auto-save snapshot history (5–10 rotating IDB snapshots; "restore from N minutes ago" panel)
+- **0.98.0** — Per-scene JSON export / import (share a single encounter without bundling the whole session)
+- **0.99.0** — Conflict-merge history (keep the losing tab's snapshot for an hour after Phase 84 resolves a conflict)
+
+_Content authoring:_
+
+- **0.100.0** — Drag-and-drop / paste-to-upload backgrounds (drop a file onto the canvas / paste from clipboard sets the BG)
+- **0.101.0** — Auto-grid detection on background upload (edge-detect the map's grid + offer to snap to it)
+- **0.102.0** — Named camera bookmarks (save positions like "throne room"; Ctrl+1..9-style jump)
+
+_Mobile / tablet ergonomics:_
+
+- **0.103.0** — Long-press → context menu on touch (500 ms hold = right-click, unlocks tablet-only GMs)
+- **0.104.0** — Two-finger rotate for AoE preview (touch-friendly rotation for cone / line templates)
+- **0.105.0** — Larger touch targets in toolbar (≥44 px hit area in narrow viewports per Apple touch-target guidance)
+
+_Polish:_
+
+- **0.106.0** — Scene search / filter (text filter in the Scenes modal once the catalog grows past ~10)
+- **0.107.0** — Dice expression history recall (up-arrow in the slash-command input cycles previous rolls)
+- **0.108.0** — Recent backgrounds quick switcher (mirrors the Phase 75 recent-scenes pattern but for backgrounds)
+- **0.109.0** — Per-spectator token visibility (extend Phase 82's permissions to "GM hides individual tokens from individual players")
+- **0.110.0** — Persistent player names across reloads (stable cross-session player IDs — flagged in Phase 82 as future)
 
 ---
 
