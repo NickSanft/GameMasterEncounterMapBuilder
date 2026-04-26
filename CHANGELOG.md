@@ -39,8 +39,52 @@ chat history for the full breakdown:
 - **0.81.0** — Animated GIF token portraits ✅
 - **0.82.0** — Per-Spectator permissions ✅
 - **0.83.0** — Latency indicator on the status chip ✅
-- **0.84.0** — Conflict-merge UI
+- **0.84.0** — Conflict-merge UI ✅
 - **0.85.0** — Wall editing revamp (in-place edit of endpoints, blocksSight / blocksMovement, thickness; live drag-out preview while drawing; chain merging so a corridor edits as one shape; per-wall `visibility: 'shared' | 'gm'` for secret features)
+
+---
+
+## [0.84.0] — 2026-04-26 — Conflict-merge UI
+
+### Added
+- **Resolve… action on the GM-conflict warning banner.** Pre-84 the banner just told you "Another GM tab is open — close one." Now there's a primary action button that opens a dedicated conflict-merge modal listing every detected GM peer with a side-by-side state summary (last edit time, token count, scene name) and three actions per peer:
+  - **Keep this tab** — push our local state to the peer via a directed `gm-takeover` message. The peer applies it via `loadState` + persists immediately, the conflict resolves on the next heartbeat tick.
+  - **Use other tab** — send a `gm-state-request` to the peer; they reply with `gm-takeover { state }` carrying their state; we apply it locally + persist.
+  - **(Cancel)** — close the modal but keep the warning banner up.
+- **Heartbeats now carry an optional state summary** (`{lastModified, tokenCount, sceneName}`) so the modal has real numbers to show without a separate round-trip handshake.
+- **Pre-84 peers degrade gracefully.** A heartbeat without the summary still triggers the conflict-detected branch and the banner — but the modal renders "(no info)" for that peer's column and disables the "Use other tab" button (we can't safely adopt a state we can't see). "Keep this tab" is always enabled — pushing OUR state to a legacy peer is unambiguously safe.
+
+### How the wire format extends
+- **`gm-heartbeat`** gains an optional `summary` field. Fully back-compat — pre-84 senders omit it, pre-84 receivers ignore it.
+- **`gm-takeover { targetTabId, state: SerializedSessionState }`** (new) — directed; the receiver matches `targetTabId === gmTabId` and either applies the state or ignores the message (so a third tab in the room doesn't accidentally adopt a takeover meant for a different peer).
+- **`gm-state-request { targetTabId, fromTabId }`** (new) — directed; the receiver replies with `gm-takeover { targetTabId: fromTabId, state }` if-and-only-if `targetTabId === gmTabId` AND `initialLoadComplete` (so a peer that just booted doesn't reply with the empty default state and wipe the asker's session).
+
+### Architecture
+- **`src/state/conflict-detector.ts`** — extended with `freshPeers(now)` returning per-peer `{tabId, lastSeen, summary}` entries (sorted ascending by tabId for deterministic rendering). The existing `noteHeartbeat(tabId, now, summary?)` captures the summary; passing `undefined` preserves the previous summary (so a pre-84 heartbeat doesn't wipe a freshly-received one), passing `null` explicitly clears it.
+- **`src/ui/conflict-modal.ts`** (new) — pure UI module. Mounts a backdrop + modal at module init, hidden until `open()`. Renders one row per peer, two columns per row (local + peer), three buttons (Keep / Use / implicit Close). Calls back into the entry's `onTakeOver(targetTabId)` / `onAdoptPeer(targetTabId)` so the wire calls live in the entry where the channel does.
+- **`gm.ts` channel handler** gains two new branches (`gm-state-request` reply + `gm-takeover` apply) plus the heartbeat-summary capture. The takeover handler `loadState`s the deserialized state, calls `clearHistory()` (otherwise an undo would silently revert the takeover, surprising), and `void saveState(...)` synchronously off the debounce path so a beforeunload race doesn't blow the takeover away.
+
+### Why a directed message instead of a free-for-all broadcast
+With three GM tabs open (rare but possible), a broadcast `gm-takeover` would have all peers adopt the sender's state — not what the GM wanted if they only meant to resolve the conflict with a specific peer. The `targetTabId` filter scopes the takeover to the addressed peer; the third tab keeps its own state + remains in conflict, surfaceable via the same modal.
+
+### Defensive guards
+- **The "Keep this tab" callback refuses to send if `initialLoadComplete === false`** — otherwise we'd push the empty-default state and wipe the peer's real session. The UI doesn't expose this nuance (the user just sees the action is a no-op + a console warning); 99% of the time the user opens the modal long after initial hydrate has resolved.
+- **The `gm-state-request` reply is also gated on `initialLoadComplete`** for the same reason — a fresh-booted peer being asked for its state mustn't reply with the empty default.
+- **`initialLoadComplete` declaration was hoisted up** in `gm.ts` so the heartbeat closure + modal callbacks can read it at module-init time without a TDZ ReferenceError. Pre-84 the flag was declared after the channel.onMessage block; the new heartbeat builder reads it inside `summary: initialLoadComplete ? ... : undefined` which fires on the first synchronous send, before the original declaration line. Hoisting the declaration to the top of the conflict-detection block keeps the same semantics + the same default value (`false`).
+
+### Tests
+- **+10 unit tests** in `src/state/conflict-detector.test.ts` for the summary extension: capture on noteHeartbeat, update on subsequent heartbeats, stale-peer omission from `freshPeers`, deterministic tabId-asc ordering, defensive copy semantics, summary-omitted-records-null, summary-undefined-preserves-prior, summary-null-clears-prior, reset-clears-summaries, own-tab-heartbeats-still-ignored.
+- **+12 unit tests** in `src/ui/conflict-modal.test.ts` (new): starts-closed, empty-state, one row per peer with both columns + actions, "Keep this tab" callback fires with peer tabId, "Use other tab" callback fires with peer tabId, disabled "Use other tab" + "(no info)" copy for pre-84 peers, setPeers([]) shows the cleared state, Escape closes, lazy local-summary read so late edits show through, plus 3 `formatClock` tests covering the HH:MM:SS path + the `—` fallback for non-finite / non-positive timestamps.
+- **+3 Playwright specs** in `e2e/conflict-merge.spec.ts` (new): banner exposes "Resolve…" action that opens the modal listing the synthetic peer + its summary; "Use other tab" triggers a `gm-state-request` → synthetic peer replies with a `gm-takeover` carrying a single `EchoToken` → canvas aria-label updates to "1 token placed"; pre-84 peer (no summary) disables the "Use other tab" button + shows "(no info)" while keeping "Keep this tab" enabled.
+- **All 865 unit tests + 197 Playwright specs pass.**
+
+### Bundle
+- **Initial-load brotli budget bumped 74 → 76 KB.** Phase 84 added ~1 KB (modal + detector extension + entry wiring); landed at 74.94 / 74 which would have been 60 bytes over. Lazy chunks unchanged. CSS 9.58 / 10 KB (+0.27 KB for the modal styles).
+
+### Limitations + future work
+- The modal does NOT preview WHAT will change (just summarizes count + scene + time). A future polish could render a thumbnail of each peer's active scene so the GM picks visually rather than by metadata alone.
+- The `gm-state-request` has no timeout. If the peer is unreachable (network blip, channel drop), the requesting tab's modal stays open with no feedback. A future add-on could show "(no response from peer — try again)" after ~5 s.
+- The modal handles GM-vs-GM only. GM-vs-Spectator desync (Spectator missed a patch, drifted) is a separate problem the existing `request-full-state` flow already handles automatically.
 
 ---
 

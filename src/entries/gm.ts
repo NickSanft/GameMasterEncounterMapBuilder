@@ -47,7 +47,7 @@ import { mountFogSettings } from '../ui/fog-settings.js';
 import { mountSettingsModal } from '../ui/settings-modal.js';
 import { mountZoomControls } from '../ui/zoom-controls.js';
 import { createSyncChannel } from '../sync/channel.js';
-import { serializeState, toSerializablePatch } from '../sync/messages.js';
+import { serializeState, deserializeState, toSerializablePatch } from '../sync/messages.js';
 import {
   loadPersistedState,
   saveState,
@@ -138,6 +138,7 @@ import { mountMiniMap } from '../ui/mini-map.js';
 import { mountExportImageModal } from '../ui/export-image-modal.js';
 import { renderSnapshot } from '../render/snapshot.js';
 import { createConflictDetector } from '../state/conflict-detector.js';
+import { mountConflictModal } from '../ui/conflict-modal.js';
 import {
   consumeDirtyFlag,
   markDirty,
@@ -832,8 +833,12 @@ async function refreshSceneIndicator(): Promise<void> {
       ? list.find((s) => s.id === activeId) ?? null
       : null;
     sceneIndicator.setName(active?.name ?? null, list.length);
+    // Phase 84 — keep the conflict-merge summary in sync so the modal
+    // shows the right scene name when it opens.
+    localSceneName = active?.name ?? '';
   } catch {
     sceneIndicator.setName(null, 0);
+    localSceneName = '';
   }
 }
 
@@ -1476,34 +1481,130 @@ window.addEventListener('beforeunload', () => {
 // see each other and surface a banner. The dirty flag is atomic: boot
 // reads + sets, beforeunload clears. If boot sees it already set, the
 // previous session wasn't cleanly closed.
+//
+// Phase 84 — heartbeats now also carry an optional state summary
+// (lastModified ms, token count, scene name) so the conflict-merge
+// modal can show a meaningful side-by-side comparison. The banner
+// gets a "Resolve…" action that opens the modal; from there the GM
+// picks "Keep this tab" (push our state to the peer via `gm-takeover`)
+// or "Use other tab" (request the peer's state via `gm-state-request`).
 const statusBanners = mountStatusBanners();
 const gmTabId = nid();
 const conflictDetector = createConflictDetector(gmTabId, { stalenessMs: 6000 });
 const HEARTBEAT_INTERVAL_MS = 2000;
 let conflictBannerVisible = false;
 
+// Phase 84 — track when local state last changed so the heartbeat
+// summary carries an accurate "last edit" timestamp. Bumped from the
+// store-subscribe block lower in the file (see the existing markDirty
+// + persist invocations).
+let localLastModified = Date.now();
+// Mirror the active scene name for the summary. Updated whenever
+// `refreshSceneIndicator` resolves; defaults to '' which the modal
+// renders as "(untitled)".
+let localSceneName = '';
+// Hoisted up here from its original (post-channel) position so the
+// Phase 84 conflict-modal callbacks + heartbeat closure can reference
+// it without hitting a TDZ ReferenceError on module init. The flag
+// flips true inside the `loadPersistedState().then()` block lower
+// down (search "broadcastInitial").
+let initialLoadComplete = false;
+
+function buildLocalSummary() {
+  return {
+    lastModified: localLastModified,
+    tokenCount: store.getState().tokens.length,
+    sceneName: localSceneName,
+  };
+}
+
+const conflictModal = mountConflictModal({
+  getLocalSummary: () => ({
+    label: 'This tab',
+    ...buildLocalSummary(),
+  }),
+  onTakeOver: (targetTabId) => {
+    // "Keep this tab" — push our state to the peer. Not gated by the
+    // initialLoadComplete flag because:
+    //   - The modal can only be opened after we detected a peer, which
+    //     in turn requires we've been answering the channel for a beat.
+    //     If we're still in the pre-load window, the peer is the one
+    //     with the real state — the GM should pick "Use other tab"
+    //     instead, not push our empty default.
+    // We still defensively log if the GM clicks "Keep" while empty.
+    if (!initialLoadComplete) {
+      console.warn(
+        '[conflict] onTakeOver fired before initial load — refusing to push empty state',
+      );
+      return;
+    }
+    channel?.send({
+      type: 'gm-takeover',
+      targetTabId,
+      state: serializeState(store.getState()),
+    });
+    statusBanners.hide();
+    conflictBannerVisible = false;
+    conflictModal.close();
+    announcer.announce('Pushed this tab’s state to the other GM tab.', 'assertive');
+  },
+  onAdoptPeer: (targetTabId) => {
+    // "Use other tab" — request their state. They reply with a
+    // `gm-takeover { targetTabId: us, state }` which our channel
+    // handler applies via `store.loadState`.
+    channel?.send({ type: 'gm-state-request', targetTabId, fromTabId: gmTabId });
+    announcer.announce('Requested the other tab’s state — adopting it now.', 'assertive');
+    // Don't pre-emptively close the modal; we'll close it from the
+    // takeover handler once the state actually lands. That way if the
+    // peer is unreachable the modal stays open + the user can retry.
+  },
+});
+
 function checkConflictBanner() {
   const hasConflict = conflictDetector.hasConflict(Date.now());
   if (hasConflict && !conflictBannerVisible) {
     statusBanners.show({
       message:
-        'Another GM tab is open — changes from both tabs will overwrite each other. Close the other tab, or switch to Spectator.',
+        'Another GM tab is open — changes from both tabs will overwrite each other.',
       variant: 'warn',
       dismissible: false,
+      actionLabel: 'Resolve…',
+      onAction: () => {
+        conflictModal.setPeers(conflictDetector.freshPeers(Date.now()));
+        conflictModal.open();
+      },
     });
     announcer.announce(
-      'Warning: another GM tab is open. Changes may overwrite each other.',
+      'Warning: another GM tab is open. Click Resolve to merge.',
       'assertive',
     );
     conflictBannerVisible = true;
   } else if (!hasConflict && conflictBannerVisible) {
     statusBanners.hide();
     conflictBannerVisible = false;
+    // If the modal is still open when the peer goes away, refresh its
+    // peer list so the empty-state copy ("conflict has cleared") shows.
+    if (conflictModal.isOpen()) {
+      conflictModal.setPeers([]);
+    }
+  } else if (conflictModal.isOpen()) {
+    // Keep the open modal in sync with the latest summaries even when
+    // the conflict was already detected on a previous tick.
+    conflictModal.setPeers(conflictDetector.freshPeers(Date.now()));
   }
 }
 
 if (channel) {
-  const sendHeartbeat = () => channel.send({ type: 'gm-heartbeat', tabId: gmTabId });
+  const sendHeartbeat = () =>
+    channel.send({
+      type: 'gm-heartbeat',
+      tabId: gmTabId,
+      // Only attach the summary once initial load has resolved —
+      // otherwise a peer would see our token count = 0 + a stale
+      // lastModified and might pick the wrong winner. Pre-load we
+      // send the bare heartbeat (back-compat shape).
+      summary: initialLoadComplete ? buildLocalSummary() : undefined,
+    });
   sendHeartbeat();
   window.setInterval(sendHeartbeat, HEARTBEAT_INTERVAL_MS);
   window.setInterval(checkConflictBanner, HEARTBEAT_INTERVAL_MS);
@@ -1520,9 +1621,12 @@ if (consumeDirtyFlag()) {
   });
 }
 // Re-mark dirty on every state change (idempotent after the first) so a
-// mid-session crash leaves the flag set.
+// mid-session crash leaves the flag set. Phase 84 — also bump the
+// local-modified clock so the next outgoing heartbeat carries an
+// accurate "last edit" timestamp for the conflict-merge modal.
 store.subscribe(() => {
   markDirty();
+  localLastModified = Date.now();
 });
 
 function sendCameraIfBroadcasting() {
@@ -1551,8 +1655,12 @@ function sendCameraIfBroadcasting() {
  * load completes, the .then() handler below calls `broadcastInitial()`
  * which sends both messages with the LOADED state. Spectators that
  * connected mid-load receive the broadcast and load it correctly.
+ *
+ * Phase 84 — the actual `let initialLoadComplete = false;` declaration
+ * was hoisted up to the conflict-detection block above (the heartbeat
+ * + modal closures need to read it at module-init time, which would
+ * otherwise hit a TDZ ReferenceError).
  */
-let initialLoadComplete = false;
 
 if (channel) {
   channel.onMessage((msg, env) => {
@@ -1597,8 +1705,49 @@ if (channel) {
         announcer.announce(`${who} rolled ${msg.roll.source}: ${msg.roll.total}.`);
       }
     } else if (msg.type === 'gm-heartbeat') {
-      conflictDetector.noteHeartbeat(msg.tabId, Date.now());
+      // Phase 84 — capture the optional summary so the conflict-merge
+      // modal can show "you vs them" stats. Pre-84 senders omit it,
+      // in which case the detector records summary: null + the modal
+      // shows "(no info)" + disables the "Use other tab" button.
+      conflictDetector.noteHeartbeat(msg.tabId, Date.now(), msg.summary ?? null);
       checkConflictBanner();
+    } else if (msg.type === 'gm-state-request') {
+      // Phase 84 — peer is asking us to be the source of truth so they
+      // can adopt our state. Reply with a `gm-takeover` ONLY if we're
+      // the addressee + we have real state to send. Refusing pre-load
+      // is critical: otherwise we'd push the empty default and wipe
+      // their session.
+      if (msg.targetTabId !== gmTabId) return;
+      if (!initialLoadComplete) return;
+      channel.send({
+        type: 'gm-takeover',
+        targetTabId: msg.fromTabId,
+        state: serializeState(store.getState()),
+      });
+    } else if (msg.type === 'gm-takeover') {
+      // Phase 84 — peer is pushing us their state (either because they
+      // picked "Keep this tab" on their side, or because we asked
+      // them to with a `gm-state-request`). Apply it locally + persist
+      // immediately so a beforeunload race doesn't blow it away.
+      if (msg.targetTabId !== gmTabId) return;
+      try {
+        store.loadState(deserializeState(msg.state));
+        store.clearHistory();
+        // Persist synchronously off the debounce path — we want the new
+        // state on disk before the user does anything else.
+        void saveState(store.getState());
+        announcer.announce('Adopted state from the other GM tab.', 'assertive');
+        // The conflict logically resolves once both tabs share state.
+        // Hide the banner + close the modal optimistically; a fresh
+        // heartbeat on the next tick will re-open the banner if the
+        // peer kept editing AFTER sending the takeover (vanishingly
+        // rare, but the existing `checkConflictBanner` tick handles it).
+        statusBanners.hide();
+        conflictBannerVisible = false;
+        conflictModal.close();
+      } catch (err) {
+        console.warn('[conflict] gm-takeover apply failed', err);
+      }
     } else if (msg.type === 'identity') {
       identityRegistry.update(msg.identity);
       // Phase 82 — push the new Spectator their effective permissions

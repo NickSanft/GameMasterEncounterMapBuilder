@@ -227,8 +227,48 @@ export type SyncMessage =
    * Liveness ping every GM tab broadcasts every few seconds so other
    * GM tabs can detect that they're double-booked. Each tab has a
    * session-random id; two tabs see conflicting ids and can warn.
+   *
+   * Phase 84 — heartbeats now also carry an optional `summary` (last
+   * edit timestamp + token count + scene name) so the conflict-merge
+   * modal can show a meaningful "yours vs theirs" comparison without
+   * a separate round-trip. Optional + back-compat — pre-84 senders
+   * omit the field; the receiver displays "(no info)" for that peer.
    */
-  | { type: 'gm-heartbeat'; tabId: string }
+  | {
+      type: 'gm-heartbeat';
+      tabId: string;
+      summary?: {
+        lastModified: number;
+        tokenCount: number;
+        sceneName: string;
+      };
+    }
+  /**
+   * Phase 84 — directed message: "I'm becoming the source of truth;
+   * replace your state with this." Sent by a GM tab from the conflict-
+   * merge modal when the user picks "Keep this tab's version" or in
+   * response to a `gm-state-request` from another tab. Receivers
+   * compare `targetTabId` against their own `gmTabId` and ignore any
+   * takeover not addressed to them — so a third tab in the room
+   * doesn't accidentally adopt a takeover meant for the second tab.
+   */
+  | {
+      type: 'gm-takeover';
+      targetTabId: string;
+      state: SerializedSessionState;
+    }
+  /**
+   * Phase 84 — directed message: "I want to adopt your state; please
+   * send it back as a `gm-takeover`." Sent when the user picks "Use
+   * other tab's version" in the conflict-merge modal. The recipient
+   * matches `targetTabId` against their own `gmTabId` and replies
+   * with `gm-takeover { targetTabId: msg.fromTabId, state }`.
+   */
+  | {
+      type: 'gm-state-request';
+      targetTabId: string;
+      fromTabId: string;
+    }
   /**
    * Phase 63 — broadcast a tab's player identity so the GM can
    * render a "Connected players" panel + so dice / pings can be
