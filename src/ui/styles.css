@@ -3015,6 +3015,104 @@ body.notes-open .mini-map {
   flex: 1 1 auto;
 }
 
+/* ───── Phase 96 — First-use hint toast ────────────────────────────
+   Bottom-center "by the way" tooltip surfaced one-at-a-time when
+   the user first hits a feature surface. Slides up + fades in;
+   the slide is suppressed under prefers-reduced-motion. Pinned
+   above the page chrome (z-index 60, same tier as the slash-input
+   bar) so modals + the side panels can sit on top if both are
+   visible at once. */
+
+.first-use-hint {
+  position: fixed;
+  left: 50%;
+  bottom: 1.4rem;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: flex-start;
+  gap: 0.8rem;
+  max-width: min(520px, 92vw);
+  padding: 0.7rem 0.95rem;
+  background: var(--bg-elev);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: 6px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
+  z-index: 60;
+  animation: first-use-hint-in 0.22s ease-out;
+}
+
+.first-use-hint[hidden] {
+  display: none;
+}
+
+.first-use-hint-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.first-use-hint-message {
+  margin: 0;
+  font-size: 0.92rem;
+  font-weight: 600;
+}
+
+.first-use-hint-detail {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--fg-muted);
+  line-height: 1.4;
+}
+
+.first-use-hint-detail[hidden] {
+  display: none;
+}
+
+.first-use-hint-actions {
+  display: flex;
+  align-items: center;
+}
+
+.first-use-hint-ok {
+  appearance: none;
+  background: var(--accent);
+  color: var(--bg);
+  border: none;
+  border-radius: 4px;
+  padding: 0.32rem 0.85rem;
+  font-family: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.first-use-hint-ok:hover {
+  background: var(--accent-hover);
+}
+
+@keyframes first-use-hint-in {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(0.5rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .first-use-hint {
+    animation: none;
+  }
+}
+body.reduced-motion .first-use-hint {
+  animation: none;
+}
+
 /* ───── Phase 95 — Command palette (Ctrl+K) ────────────────────────
    Spotlight-style modal with a search input + scrollable filtered
    list. Mounted near the top of the viewport (not vertically

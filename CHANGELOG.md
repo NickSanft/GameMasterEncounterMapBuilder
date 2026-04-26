@@ -69,7 +69,7 @@ _Combat power-user UX:_
 _Onboarding & discoverability:_
 
 - **0.95.0** — Searchable command palette (Ctrl+K opens an action search) ✅
-- **0.96.0** — Contextual first-use hints (one-time, dismissible tips when a user first hits a new feature surface)
+- **0.96.0** — Contextual first-use hints (one-time, dismissible tips for new feature surfaces) ✅
 
 _Data lifecycle:_
 
@@ -96,6 +96,43 @@ _Polish:_
 - **0.108.0** — Recent backgrounds quick switcher (mirrors the Phase 75 recent-scenes pattern but for backgrounds)
 - **0.109.0** — Per-spectator token visibility (extend Phase 82's permissions to "GM hides individual tokens from individual players")
 - **0.110.0** — Persistent player names across reloads (stable cross-session player IDs — flagged in Phase 82 as future)
+
+---
+
+## [0.96.0] — 2026-04-26 — Contextual first-use hints
+
+### Added
+- **One-at-a-time hint toast** that surfaces when the user first hits a feature surface they may not have noticed yet. Dismissed via "Got it" button or Esc; dismissal is persisted to localStorage so each hint shows AT MOST ONCE per install. Pinned bottom-center so it doesn't compete with the existing top-center status banner / conflict-merge banner.
+- **Three starter hints registered:**
+  - **`palette-intro`** — fires ~6 s after boot once the onboarding tour is complete: *"New: press Ctrl+K to find any action."* with a follow-up: *"Tools, modals, scenes, initiative — type a few letters to filter."* The tour-complete guard means new users finish onboarding without competing surfaces.
+  - **`combat-log-intro`** — fires the first time damage is recorded into the combat log (Phase 94): *"Combat log is recording every event."* / *"Open it any time from the session menu — Combat Log."* Subscribes to the log + unsubs after firing.
+  - **`wall-editor-intro`** — fires the first time the GM commits a wall: *"New in 0.85: drag wall endpoints to reshape."* / *"Right-click a wall + pick Edit wall… (or press E) for sight, thickness, and visibility."* Subscribes to the store + unsubs after firing.
+- **One-shot semantics**: `firstUseHints.markShown(id)` records the dismissal in localStorage (key `gm-encounter-maps-first-use-hints`) as a JSON array of seen ids. A future "Reset preferences" path could clear it for users who want the tips back.
+
+### Architecture
+- **`src/state/first-use-hints.ts`** (new) — pure helpers + localStorage-backed shown set. Robust against quota errors, malformed JSON, and missing storage (in-memory fallback).
+- **`src/ui/first-use-hint.ts`** (new) — toast UI with one-at-a-time queueing. `show()` queues if a hint is currently visible; the queue drains on dismiss. The host calls `firstUseHints.markShown(id)` from the toast's `onDismiss` callback.
+- **`src/entries/gm.ts`** — wires the three starter hints. `maybeShowHint(id, message, detail?, durationMs?)` helper checks `wasShown` + `onboardingComplete` before queueing. The combat-log + walls hints subscribe at boot + unsub after firing (or on first check if already shown).
+
+### Why one-at-a-time + queue (not all at once)
+A new GM dropped into a tutorial-empty scene who places a wall would otherwise see palette-intro AND wall-editor-intro overlap. The queue ensures hints land sequentially with the user's full attention on each.
+
+### Why bottom-center (not anchored to the trigger)
+Anchored tooltips (next to the wall they just drew, next to the Ctrl+K shortcut) would be more visually descriptive but require per-hint anchor positioning + collision detection. The bottom-center toast is a robust MVP: every hint reads the same way, never blocks tools, and works regardless of viewport size or scroll position. A future polish could thread an optional `anchor` field through `FirstUseHint` for the cases where anchoring is clearly better.
+
+### Reduced-motion respect
+The toast slides up + fades in over 220 ms by default. `@media (prefers-reduced-motion: reduce)` and `body.reduced-motion` both disable the animation; the toast just appears.
+
+### Tests
+- **+10 unit tests** in `src/state/first-use-hints.test.ts` (new): starts empty; `markShown` persists + survives a fresh store; idempotent (no double-write); `reset` clears + removes from storage; `reset` on empty is a no-op; honors a custom key; drops malformed persisted state (non-array, non-string entries); treats malformed JSON as empty; treats non-array JSON as empty; survives a localStorage write throwing (quota / privacy mode).
+- **+3 Playwright specs** in `e2e/first-use-hints.spec.ts` (new): palette-intro hint surfaces ~6s after boot (with onboardingComplete=true seeded so the tour doesn't race); "Got it" dismisses + persists across reload (tested via reload + waiting past the 6s timer); pre-seeded localStorage with the hint's id keeps it suppressed.
+- **All 1080 unit tests + 238 Playwright specs pass.**
+
+### Bundle
+- 83.17 / 84 KB initial-load brotli (+0.86 KB for the store + toast + 3 hint registrations). CSS 10.55 / 12 KB. Lazy chunks unchanged.
+
+### Process improvement (carried from Phase 94)
+Locally ran the visual-regression spec before pushing — no baseline drift since the toast is hidden by default + doesn't appear in any existing snapshot. Same pre-push check that should have caught Phase 94's session-menu drift; now part of the standard "ship a UI phase" routine.
 
 ---
 

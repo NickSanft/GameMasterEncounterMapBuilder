@@ -53,6 +53,8 @@ import { attachCombatLogObserver } from '../state/combat-log-observer.js';
 import { mountCommandPalette } from '../ui/command-palette.js';
 import { createCommandRegistry } from '../state/command-registry.js';
 import { advanceInitiative, retreatInitiative } from '../state/initiative.js';
+import { createFirstUseHintsStore } from '../state/first-use-hints.js';
+import { mountFirstUseHintToast } from '../ui/first-use-hint.js';
 import { mountTokenEditor } from '../ui/token-editor.js';
 import { mountAnnotationEditor } from '../ui/annotation-editor.js';
 import { mountWallEditor } from '../ui/wall-editor.js';
@@ -2548,6 +2550,95 @@ const commandPalette = mountCommandPalette({ registry: commandRegistry });
     },
   });
 })();
+
+/**
+ * Phase 96 — first-use hints. One-at-a-time toast surfaced when a
+ * user first hits a feature surface. Each hint shows AT MOST ONCE
+ * per install (state persisted to localStorage); dismissing with
+ * "Got it" or Esc marks it shown.
+ *
+ * Today's hints:
+ *   - `palette-intro` — fires ~6 s after boot when the user has
+ *     completed the onboarding tour. Introduces Ctrl+K.
+ *   - `combat-log-intro` — fires the first time damage is recorded
+ *     (via the combat log observer). Mentions the new panel.
+ *   - `wall-editor-intro` — fires the first time the GM draws a
+ *     wall, mentioning the in-place editor + Edit shortcut.
+ *
+ * The hints don't fire while the onboarding tour is open
+ * (`onboardingComplete === false` guard) so first-time users finish
+ * the tour without competing surfaces.
+ */
+const firstUseHints = createFirstUseHintsStore();
+const firstUseHintToast = mountFirstUseHintToast({
+  onDismiss: (id) => firstUseHints.markShown(id),
+});
+
+function maybeShowHint(
+  id: string,
+  message: string,
+  detail?: string,
+  durationMs?: number,
+) {
+  if (firstUseHints.wasShown(id)) return;
+  if (!preferences.get().onboardingComplete) return;
+  const hint = { id, message, ...(detail !== undefined ? { detail } : {}), ...(durationMs !== undefined ? { durationMs } : {}) };
+  firstUseHintToast.show(hint);
+}
+
+// Palette intro — give the boot a beat to settle, then surface
+// the Ctrl+K hint. Skipped if the user dismissed it before, or
+// the onboarding tour is still showing.
+window.setTimeout(() => {
+  maybeShowHint(
+    'palette-intro',
+    'New: press Ctrl+K to find any action.',
+    'Tools, modals, scenes, initiative — type a few letters to filter.',
+  );
+}, 6000);
+
+// Combat log intro — fire after the first damage event is logged.
+// Subscribe to the log; unsub once the hint is shown (or known shown).
+if (!firstUseHints.wasShown('combat-log-intro')) {
+  const unsubCombatLog = combatLog.subscribe(() => {
+    if (firstUseHints.wasShown('combat-log-intro')) {
+      unsubCombatLog();
+      return;
+    }
+    // Only fire on damage-kind entries (skip turn / condition events
+    // that may pre-date any actual combat damage).
+    const last = combatLog.entries().at(-1);
+    if (!last || last.event.kind !== 'damage') return;
+    unsubCombatLog();
+    maybeShowHint(
+      'combat-log-intro',
+      'Combat log is recording every event.',
+      'Open it any time from the session menu — "Combat Log".',
+    );
+  });
+}
+
+// Wall-editor intro — fire after the first wall is committed. Same
+// observe-and-unsub pattern as the combat log hint.
+if (!firstUseHints.wasShown('wall-editor-intro')) {
+  let lastWallCount = store.getState().walls.length;
+  const unsubWalls = store.subscribe(() => {
+    if (firstUseHints.wasShown('wall-editor-intro')) {
+      unsubWalls();
+      return;
+    }
+    const nextWallCount = store.getState().walls.length;
+    if (nextWallCount > lastWallCount) {
+      unsubWalls();
+      maybeShowHint(
+        'wall-editor-intro',
+        'New in 0.85: drag wall endpoints to reshape.',
+        'Right-click a wall + pick "Edit wall…" (or press E) for sight, thickness, and visibility.',
+      );
+    }
+    lastWallCount = nextWallCount;
+  });
+}
 
 window.addEventListener('keydown', (e) => {
   if (isEditableFocus(e.target)) return;
