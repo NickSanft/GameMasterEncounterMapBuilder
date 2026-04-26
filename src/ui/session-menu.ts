@@ -31,6 +31,10 @@ export interface SessionMenuActions {
    * GM-only (Spectator entries pass nothing).
    */
   onPermissions?: () => void;
+  /**
+   * Phase 94 — toggle the combat log side panel. Optional; GM-only.
+   */
+  onToggleCombatLog?: () => void;
 }
 
 export function mountSessionMenu(
@@ -196,6 +200,23 @@ export function mountSessionMenu(
     });
   }
 
+  // Phase 94 — "Combat Log" opens the side-panel auto-recording every
+  // damage / heal, condition change, death-save event, and turn
+  // advance. GM-only.
+  const combatLogBtn = actions.onToggleCombatLog
+    ? createButton(
+        'Combat Log',
+        'Toggle the auto-recorded combat log (damage, conditions, death saves, turns)',
+      )
+    : null;
+  if (combatLogBtn && actions.onToggleCombatLog) {
+    const handler = actions.onToggleCombatLog;
+    combatLogBtn.addEventListener('click', () => {
+      combatLogBtn.blur();
+      handler();
+    });
+  }
+
   menu.appendChild(uploadBtn);
   menu.appendChild(presetBtn);
   menu.appendChild(scenesBtn);
@@ -206,6 +227,7 @@ export function mountSessionMenu(
   menu.appendChild(exportImageBtn);
   menu.appendChild(importBtn);
   menu.appendChild(notesBtn);
+  if (combatLogBtn) menu.appendChild(combatLogBtn);
   menu.appendChild(clearDrawingsBtn);
   menu.appendChild(shortcutsBtn);
   if (replayTourBtn) menu.appendChild(replayTourBtn);

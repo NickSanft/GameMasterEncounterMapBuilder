@@ -64,7 +64,7 @@ _Combat power-user UX:_
 
 - **0.92.0** — Quick-HP adjust via +/- keys (Shift = ±5) — wheel-scroll variant deferred ✅
 - **0.93.0** — Per-turn countdown timer (Settings → Camera; optional, off by default) ✅
-- **0.94.0** — Combat log panel (auto-record damage / conditions / death-saves / turn changes; toggleable side panel + export)
+- **0.94.0** — Combat log panel (auto-record damage / conditions / death-saves / turn changes; toggleable side panel + export) ✅
 
 _Onboarding & discoverability:_
 
@@ -96,6 +96,47 @@ _Polish:_
 - **0.108.0** — Recent backgrounds quick switcher (mirrors the Phase 75 recent-scenes pattern but for backgrounds)
 - **0.109.0** — Per-spectator token visibility (extend Phase 82's permissions to "GM hides individual tokens from individual players")
 - **0.110.0** — Persistent player names across reloads (stable cross-session player IDs — flagged in Phase 82 as future)
+
+---
+
+## [0.94.0] — 2026-04-26 — Combat log panel
+
+### Added
+- **GM-side combat log** mounted as a toggleable side panel (Session Menu → "Combat Log"). Auto-records four event categories as combat unfolds:
+  - **Damage / heal** — fired from the same paths that already trigger Phase 77's damage-fx events: the Damage / Heal dialog Apply, the Phase 92 quick-HP `+/-` shortcut, and the Phase 77 cross-tab broadcast handler. Each entry shows the new HP / max in parens for context: `"Goblin took 7 damage (3/10 HP)"`.
+  - **Condition adds + removes** — diffed from `state.tokens[i].conditions` per store tick. `"Bandit gained Poisoned"` / `"Bandit lost Stunned"`.
+  - **Death-save changes** — diffed from `state.tokens[i].deathSaves`. Classifies each transition: `failure` / `success` / `stable` (3 successes) / `dead` (3 failures) / `reset` (back to {0,0}). Format: `"Bard death save failure (1/3 succ, 2/3 fail)"`.
+  - **Turn advances** — diffed from `state.initiative.activeId / .round`. Fires once per (round, activeId) tuple. Format: `"Round 3 — Goblin's turn"`.
+- **Per-event timestamp** in `[HH:MM:SS]` format on each row + in the export.
+- **Auto-scroll-to-bottom** on new entries when the user is already pinned to the bottom; if they've scrolled up to read history we don't yank them away (chat-log convention).
+- **Per-kind accent stripes** on the left edge of each row — red for damage, amber for condition changes, purple for death saves, theme-accent for turn advances. At-a-glance scannability.
+- **Export to clipboard** — "Copy" button writes the full plain-text log (`[HH:MM:SS] message` per line) to the clipboard. Useful for session recap posts, after-action sharing, "what HP was the boss at when X happened" debugging.
+- **Clear** button empties the log (no confirmation — the log is in-memory and the GM is in the loop, but a future polish could add an "Are you sure?" toggle).
+- **GM-only** — the Spectator session menu omits the entry entirely. The log records GM-side events that wouldn't be useful to a player view.
+
+### Architecture
+- **`src/state/combat-log.ts`** (new, ~150 lines) — pure ring buffer + event types + formatter:
+  - `CombatLogEvent` discriminated union for the four event kinds (`damage`, `condition-added`, `condition-removed`, `death-save`, `turn`).
+  - `createCombatLog({ maxEntries, now })` returns a `{ add, entries, size, clear, subscribe, exportText }` interface. Default cap of 250 entries (FIFO eviction); covers a long combat without unbounded growth.
+  - `formatLogEvent(event)` for the per-row text; `formatClock(ms)` for the `HH:MM:SS` prefix.
+- **`src/state/combat-log-observer.ts`** (new, ~140 lines) — wires the log to the store. Snapshots tokens per subscribe tick + diffs to emit `condition-added/removed`, `death-save`, and `turn` events. Damage / heal events fire EXPLICITLY via `recordDamage(token, amount)` from the dialog + quick-HP code paths so the log only captures intentional combat damage (not Token Editor max-HP edits or imported state-replace events).
+- **`src/ui/combat-log-panel.ts`** (new, ~150 lines) — pure UI module mirroring the Notes panel layout (right-anchored, 360 px wide, header / scrollable body / footer). Live updates via `log.subscribe`. Render uses `replaceChildren()` for one mutation event per update — minimizes screen-reader thrash on the `aria-live="polite"` list.
+- **`src/ui/session-menu.ts`** — extended with optional `onToggleCombatLog` callback; the menu only mounts the button when the caller wires it (GM only — Spectator entries pass nothing).
+- **`src/entries/gm.ts`** — mounts the log + observer + panel on init; the dialog's `onDamageFx` and the quick-HP path both call `combatLogObserver.recordDamage(...)` after the patch lands so `hpAfter` reflects the new HP, not the pre-update value.
+
+### Why an in-memory log (not persisted)
+The combat log is "live commentary" — useful during the session, less useful as a durable record (the GM has scene saves + session export for that). Persisting to localStorage adds complexity around per-scene scoping ("does the log carry across scenes?"), wire-format versioning, and quota management without a clear user need. A future phase could add an opt-in "auto-persist" preference if real users ask.
+
+### Why explicit damage recording (not store-diff)
+The store-diff observer pattern would also fire on Token Editor max-HP edits, imported full-state replacements, and any other `token-update` that touches `hp`. The dialog + quick-HP entry points represent intentional combat damage; routing the log entry through them keeps the recorded events meaningful instead of noisy.
+
+### Tests
+- **+18 unit tests** in `src/state/combat-log.test.ts` (new) covering: starts empty; `add()` records the timestamp from the clock seam; FIFO eviction at `maxEntries`; `clear()` empties + notifies; `clear()` on empty is a no-op; `subscribe` returns an unsubscribe fn; `entries()` returns a copy (caller mutation is local); `exportText()` formats one line per entry oldest-first; `formatLogEvent` covers all five event kinds + the heal / damage / no-HP / blank-label / per-death-save-change variants; `formatClock` HH:MM:SS + non-finite fallback.
+- **+4 Playwright specs** in `e2e/combat-log.spec.ts` (new): GM session menu has a "Combat Log" toggle that opens an empty panel; quick-HP damage records a damage entry; "Clear" button empties the log; Spectator session menu does NOT include the entry.
+- **All 1057 unit tests + 229 Playwright specs pass.**
+
+### Bundle
+- **Initial-load brotli budget bumped 80 → 82 KB.** Phase 94 added ~2 KB (log + observer + panel + session-menu wiring); landed at 80.82 / 80 KB which would have been 818 B over. Lazy chunks unchanged. CSS unchanged in budget terms (the new combat-log styles compress well alongside the existing notes-panel pattern).
 
 ---
 

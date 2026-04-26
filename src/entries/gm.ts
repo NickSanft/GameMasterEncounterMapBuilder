@@ -47,6 +47,9 @@ import { DEFAULT_AOE_COLOR } from '../state/aoe.js';
 import { mountAoeSettings } from '../ui/aoe-settings.js';
 import { mountToolbar } from '../ui/toolbar.js';
 import { mountSessionMenu } from '../ui/session-menu.js';
+import { mountCombatLogPanel } from '../ui/combat-log-panel.js';
+import { createCombatLog } from '../state/combat-log.js';
+import { attachCombatLogObserver } from '../state/combat-log-observer.js';
 import { mountTokenEditor } from '../ui/token-editor.js';
 import { mountAnnotationEditor } from '../ui/annotation-editor.js';
 import { mountWallEditor } from '../ui/wall-editor.js';
@@ -773,6 +776,8 @@ mountSessionMenu(document.body, {
   },
   onSettings: () => settingsModal.open(),
   onToggleNotes: () => notesPanel.toggle(),
+  // Phase 94 — combat log panel toggle.
+  onToggleCombatLog: () => combatLogPanel.toggle(),
   onShortcuts: () => shortcutOverlay.open(),
   onInitiative: () => initiativeModal.open(),
   onTokenLibrary: () => tokenLibraryModal.open(),
@@ -826,6 +831,20 @@ const wallEditor = mountWallEditor({
     renderer.requestRender();
   },
 });
+// Phase 94 — combat log + auto-observer. The log is in-memory only
+// (per-tab session); on reload it starts empty. The observer
+// subscribes to the store + emits `condition-added/removed`,
+// `death-save`, and `turn` events automatically. Damage / heal events
+// fire EXPLICITLY from the dialog + Phase 92 quick-HP paths so the
+// log only records intentional combat damage (not Token Editor
+// max-HP edits which would otherwise look like real combat events).
+const combatLog = createCombatLog();
+const combatLogObserver = attachCombatLogObserver({ store, log: combatLog });
+const combatLogPanel = mountCombatLogPanel({ log: combatLog });
+// Reference once so the unused-binding lint stays happy; the handle
+// lives for the lifetime of the page.
+void combatLogObserver;
+
 const damageHealDialog = mountDamageHealDialog({
   store,
   onAnnounce: (msg) => announcer.announce(msg),
@@ -833,6 +852,10 @@ const damageHealDialog = mountDamageHealDialog({
   // queue it locally (so the GM sees the floating number on their
   // own canvas) AND broadcast it so the Spectator's tab plays the
   // same animation. Monotonic id from `Date.now()` for de-dup.
+  //
+  // Phase 94 — also record into the combat log. We look up the
+  // up-to-date token by id (the dialog passes the id, not the
+  // post-update Token) so `hpAfter` reflects the patched HP.
   onDamageFx: (tokenId, amount) => {
     damageFxManager.add(tokenId, amount);
     channel?.send({
@@ -841,6 +864,8 @@ const damageHealDialog = mountDamageHealDialog({
       amount,
       id: Date.now() + Math.floor(Math.random() * 1000),
     });
+    const token = store.getState().tokens.find((t) => t.id === tokenId);
+    if (token) combatLogObserver.recordDamage(token, amount);
   },
 });
 
@@ -2323,6 +2348,10 @@ function quickHpAdjust(delta: number): boolean {
   });
   // Phase 77 — fire the floating-number effect for every result.
   // Convention there is positive-amount = damage, so flip our delta.
+  // Phase 94 — also record into the combat log. The token returned
+  // by `planQuickHpAdjust` is the PRE-update snapshot; look up the
+  // post-update token so `hpAfter` reflects the new HP.
+  const updatedTokens = store.getState().tokens;
   for (const r of results) {
     const fxAmount = -r.delta;
     damageFxManager.add(r.token.id, fxAmount);
@@ -2332,6 +2361,8 @@ function quickHpAdjust(delta: number): boolean {
       amount: fxAmount,
       id: Date.now() + Math.floor(Math.random() * 1000),
     });
+    const updated = updatedTokens.find((t) => t.id === r.token.id);
+    if (updated) combatLogObserver.recordDamage(updated, fxAmount);
   }
   const summary = summarizeQuickHpResults(results);
   if (summary) announcer.announce(summary);
