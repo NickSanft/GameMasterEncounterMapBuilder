@@ -41,7 +41,11 @@ function buildExportJson(options: {
 }
 
 async function uploadJsonFile(page: Page, json: string, fileName = 'import.json') {
-  const fileInput = page.locator('input[type="file"][accept*="json"]');
+  // Phase 98 added a second JSON file input inside the Scenes modal
+  // ("Import scene…"), so a bare `input[type="file"][accept*="json"]`
+  // now matches two elements. Scope to the session-menu's input,
+  // which is the one this test exercises (full session import).
+  const fileInput = page.locator('.session-menu input[type="file"][accept*="json"]');
   await fileInput.setInputFiles({
     name: fileName,
     mimeType: 'application/json',

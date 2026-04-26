@@ -99,6 +99,17 @@ _Polish:_
 
 ---
 
+## [0.98.1] — 2026-04-26 — Fix: scope partial-import test selector for the new Scenes modal file input
+
+### Fixed
+- **`partial-import.spec.ts` strict-mode violation.** Phase 98's new "Import scene…" button added a second `<input type="file" accept="application/json,.json">` to the page (inside the Scenes modal). The pre-existing partial-import test used a bare `input[type="file"][accept*="json"]` selector, which was unique pre-98 but now matches two inputs and trips Playwright's strict-mode rule.
+- **Fix:** scope the test's selector to the session-menu (`.session-menu input[type="file"][accept*="json"]`). The test specifically exercises the full-session import flow that lives there; the new scoped selector is more precise + future-proof against further file inputs being added elsewhere.
+
+### Why this is 0.98.1 (not folded into 0.98.0)
+0.98.0's CI failed on the partial-import spec; the implementation was correct. The local pre-push run-all-e2e check would have caught it — now part of my standard pre-push routine alongside the visual-regression check (lessons from 0.94.x).
+
+---
+
 ## [0.98.0] — 2026-04-26 — Per-scene JSON export / import
 
 ### Added
