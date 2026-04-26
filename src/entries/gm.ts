@@ -60,7 +60,12 @@ import {
   type Snapshot,
 } from '../state/snapshot-history.js';
 import { mountSnapshotHistoryModal } from '../ui/snapshot-history-modal.js';
+import { mountConflictLoserArchiveModal } from '../ui/conflict-loser-archive-modal.js';
 import { exportScene } from '../state/scene-export.js';
+import {
+  createConflictLoserArchive,
+  type LoserSnapshot,
+} from '../state/conflict-loser-archive.js';
 import { mountTokenEditor } from '../ui/token-editor.js';
 import { mountAnnotationEditor } from '../ui/annotation-editor.js';
 import { mountWallEditor } from '../ui/wall-editor.js';
@@ -857,6 +862,36 @@ const combatLogPanel = mountCombatLogPanel({ log: combatLog });
 // Reference once so the unused-binding lint stays happy; the handle
 // lives for the lifetime of the page.
 void combatLogObserver;
+
+// Phase 99 — conflict-loser archive. Captures the about-to-be-
+// overwritten state when the GM resolves a Phase 84 conflict by
+// adopting the OTHER tab's state (`gm-takeover` apply path). 1-hour
+// TTL + 5-entry cap; localStorage-backed for sync access during the
+// synchronous gm-takeover handler.
+const conflictLoserArchive = createConflictLoserArchive();
+const conflictLoserArchiveModal = mountConflictLoserArchiveModal({
+  getEntries: () => conflictLoserArchive.listFresh(),
+  onRestore: (snap: LoserSnapshot) => {
+    try {
+      store.loadState(deserializeState(snap.state));
+      store.clearHistory();
+      void saveState(store.getState());
+      // Drop the entry — recovery is one-shot. If the user restored
+      // by mistake they can re-trigger the conflict, but there's no
+      // way to re-archive automatically.
+      conflictLoserArchive.remove(snap.id);
+      announcer.announce(
+        `Restored conflict-archive state from ${new Date(snap.recordedAt).toLocaleTimeString()}.`,
+        'assertive',
+      );
+    } catch (err) {
+      console.warn('[conflict-loser-archive] restore failed', err);
+      announcer.announce('Failed to restore archived state.', 'assertive');
+    }
+  },
+  onDiscard: (id) => conflictLoserArchive.remove(id),
+  onClearAll: () => conflictLoserArchive.clear(),
+});
 
 // Phase 97 — restore-from-snapshot modal. Surfaces the rotating
 // per-scene snapshot history captured by the persist debounce
@@ -1863,14 +1898,32 @@ if (channel) {
       // picked "Keep this tab" on their side, or because we asked
       // them to with a `gm-state-request`). Apply it locally + persist
       // immediately so a beforeunload race doesn't blow it away.
+      //
+      // Phase 99 — BEFORE replacing local state, snapshot the
+      // about-to-be-overwritten state into the conflict-loser archive
+      // so the GM can recover if they realize they picked the wrong
+      // winner. The archive is TTL'd to 1 hour + capped to 5 entries
+      // so it doesn't grow unbounded.
       if (msg.targetTabId !== gmTabId) return;
       try {
+        // Capture loser BEFORE the load so we have the right state.
+        // Wrapped in its own try because a serialize failure shouldn't
+        // block the takeover apply — the user already picked their
+        // winner; archive is opportunistic.
+        try {
+          conflictLoserArchive.record(serializeState(store.getState()));
+        } catch (archiveErr) {
+          console.warn('[conflict] loser-archive capture failed', archiveErr);
+        }
         store.loadState(deserializeState(msg.state));
         store.clearHistory();
         // Persist synchronously off the debounce path — we want the new
         // state on disk before the user does anything else.
         void saveState(store.getState());
-        announcer.announce('Adopted state from the other GM tab.', 'assertive');
+        announcer.announce(
+          'Adopted state from the other GM tab. Previous state archived for 1 hour — Ctrl+K → "conflict" to recover.',
+          'assertive',
+        );
         // The conflict logically resolves once both tabs share state.
         // Hide the banner + close the modal optimistically; a fresh
         // heartbeat on the next tick will re-open the banner if the
@@ -2537,6 +2590,13 @@ function slugForFilename(name: string): string {
     hint: 'Auto-saved scene history',
     group: 'Modals',
     run: () => snapshotHistoryModal.open(),
+  });
+  reg.register({
+    id: 'open-conflict-archive',
+    label: 'Open conflict-merge archive…',
+    hint: 'Recover state lost to a takeover (1-hour TTL)',
+    group: 'Modals',
+    run: () => conflictLoserArchiveModal.open(),
   });
   // Phase 98 — per-scene JSON export / import. The export reads the
   // CURRENTLY-ACTIVE scene's name + state; the import opens the

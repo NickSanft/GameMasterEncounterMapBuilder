@@ -75,7 +75,7 @@ _Data lifecycle:_
 
 - **0.97.0** — Auto-save snapshot history (8 rotating IDB snapshots per scene; "restore from N minutes ago" modal) ✅
 - **0.98.0** — Per-scene JSON export / import (share a single encounter without bundling the whole session) ✅
-- **0.99.0** — Conflict-merge history (keep the losing tab's snapshot for an hour after Phase 84 resolves a conflict)
+- **0.99.0** — Conflict-merge history (keep the losing tab's snapshot for an hour after Phase 84 resolves a conflict) ✅
 
 _Content authoring:_
 
@@ -96,6 +96,42 @@ _Polish:_
 - **0.108.0** — Recent backgrounds quick switcher (mirrors the Phase 75 recent-scenes pattern but for backgrounds)
 - **0.109.0** — Per-spectator token visibility (extend Phase 82's permissions to "GM hides individual tokens from individual players")
 - **0.110.0** — Persistent player names across reloads (stable cross-session player IDs — flagged in Phase 82 as future)
+
+---
+
+## [0.99.0] — 2026-04-26 — Conflict-merge history
+
+### Added
+- **Conflict-loser archive** — when the GM resolves a Phase 84 conflict by adopting the OTHER tab's state ("Use other tab" → `gm-takeover` apply), the local tab's about-to-be-overwritten state is now snapshotted into a 1-hour, 5-entry rotating archive. If the GM realizes they picked the wrong winner ("oh, that other tab was missing the wall I drew 5 minutes ago"), the lost edits can be restored.
+- **Recovery affordance** via the Phase 95 palette: `Ctrl+K` → "Open conflict-merge archive…" lists every fresh entry with a "Restore" / "Discard" action per row + a "Clear archive" button at the bottom.
+- **Updated takeover-applied announcer** message points at the recovery path: *"Adopted state from the other GM tab. Previous state archived for 1 hour — Ctrl+K → 'conflict' to recover."*
+
+### Why this matters
+Phase 84 introduced the conflict-merge modal so the GM could pick a winner instead of being told "close one tab." But "Use other tab" was a one-way operation — once you adopted the peer's state, your tab's edits were gone. Phase 99 closes that recovery loop with an opt-in archive that's there if you need it but doesn't clutter the normal flow.
+
+### Architecture
+- **`src/state/conflict-loser-archive.ts`** (new, ~140 lines) — pure helpers + a localStorage-backed rotating store:
+  - `record(state, { now?, reason? })` — push the about-to-be-overwritten state. Side effect: filters past-TTL entries on every write.
+  - `listFresh(now?)` — newest-first list of entries within the 1-hour TTL.
+  - `get(id)` / `remove(id)` / `clear()` — straightforward CRUD.
+  - Wire format: `{ version: 1, entries: LoserSnapshot[] }` keyed by `KEY = 'gm-encounter-maps-conflict-loser-archive'`. Version field is the forward-compat escape hatch — a future breaking change would bump it + a v2 reader could ignore older blobs.
+  - Defensive against malformed persisted state: drops entries missing required fields, drops wrong-version blobs, falls back to empty on parse failure.
+- **`src/ui/conflict-loser-archive-modal.ts`** (new, ~170 lines) — modal listing the archive entries with restore / discard / clear-all actions. Same row pattern as the Phase 97 snapshot history modal; reuses `formatRelativeTime` from `snapshot-history.ts` to keep the timestamp formatting consistent across both surfaces.
+- **`src/entries/gm.ts`** — extended the `gm-takeover` channel handler to call `conflictLoserArchive.record(serializeState(store.getState()))` BEFORE the `loadState` call. The archive write is wrapped in its own try/catch so a serialize failure doesn't block the takeover apply (the user already picked their winner; the archive is opportunistic). The restore path mirrors Phase 97: `loadState` → `clearHistory` → `void saveState`. Restoration also calls `archive.remove(id)` because recovery is one-shot — if the user restored by mistake, they can re-trigger the conflict, but there's no way to re-archive automatically.
+
+### Why localStorage (not IDB like Phase 97 snapshots)
+The `gm-takeover` apply path is synchronous. Capturing the loser BEFORE the `loadState` call needs to complete before the load runs (otherwise we'd archive the post-load state, which is the wrong direction). localStorage is sync; IDB is async. Storage size: 5 entries × ~50KB max state = ~250KB worst case, well inside localStorage's per-origin quota.
+
+### Tests
+- **+14 unit tests** in `src/state/conflict-loser-archive.test.ts` (new): starts empty, record persists, listFresh sorted newest-first, TTL filtering on read + on next write, MAX_ARCHIVED FIFO eviction, custom reason / default fallback, get by id (regardless of TTL), remove by id, remove unknown is no-op, clear forgets everything, malformed JSON returns empty, wrong-version blob returns empty, defensive field validation drops malformed entries.
+- **+4 Playwright specs** in `e2e/conflict-loser-archive.spec.ts` (new): palette has the new entry; empty state when nothing archived; Esc closes; **end-to-end takeover round-trip** — drop a token (1-token loser state) → spin up a synthetic GM peer that responds to `gm-state-request` with a 0-token takeover → use the conflict-merge modal's "Use other tab" → verify canvas drops to "0 tokens placed" → open the archive via palette → assert the loser is there with "1 token" summary → click Restore → verify canvas regains the token. All in one spec.
+- **All 1123 unit tests + 249 Playwright specs pass.** No visual-regression baseline drift (the new modal is hidden by default + isn't anchored to any existing snapshot region).
+
+### Bundle
+- **Initial-load brotli budget bumped 86 → 88 KB.** Phase 99 added ~1.1 KB (archive + modal + entry wiring + palette command); landed at 86.23 / 86 KB which would have been 229 B over. CSS 10.79 / 12 KB. Lazy chunks unchanged.
+
+### Process improvements (continued)
+This is the second phase in a row to ship clean on first push, after Phase 94 + 98 each needed fix-up commits. Following the new pre-push checklist now: full unit suite + full e2e suite + visual-regression spec + size-limit. Catching the JS-budget overage and the file-input selector collision locally has paid off in zero broken-CI cycles for 99.
 
 ---
 

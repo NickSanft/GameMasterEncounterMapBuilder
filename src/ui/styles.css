@@ -3015,6 +3015,148 @@ body.notes-open .mini-map {
   flex: 1 1 auto;
 }
 
+/* ───── Phase 99 — Conflict-loser archive modal ────────────────────
+   Recovery UI listing the about-to-be-overwritten states captured
+   when the GM resolved a conflict by adopting another tab. 1-hour
+   TTL; capped at 5 entries. Same row layout as the snapshot
+   history modal but with an extra "Discard" action per row + a
+   "Clear archive" button at the bottom. */
+
+.conflict-loser-archive-modal {
+  min-width: 460px;
+  max-width: 600px;
+}
+
+.conflict-loser-archive-modal .conflict-loser-hint {
+  margin: 0 0 0.8rem;
+  color: var(--fg-muted);
+  font-size: 0.82rem;
+  text-transform: none;
+  letter-spacing: 0;
+  line-height: 1.4;
+}
+
+.conflict-loser-archive-modal .conflict-loser-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.conflict-loser-archive-modal .conflict-loser-empty {
+  margin: 0.6rem 0 0;
+  color: var(--fg-muted);
+  font-style: italic;
+  font-size: 0.85rem;
+  line-height: 1.4;
+}
+
+.conflict-loser-row {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.55rem 0.7rem;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.conflict-loser-meta {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.conflict-loser-time {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--fg);
+  font-variant-numeric: tabular-nums;
+}
+
+.conflict-loser-reason {
+  font-size: 0.78rem;
+  color: var(--fg-muted);
+  font-style: italic;
+}
+
+.conflict-loser-summary {
+  font-size: 0.78rem;
+  color: var(--fg-muted);
+}
+
+.conflict-loser-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.conflict-loser-restore {
+  appearance: none;
+  background: var(--accent);
+  color: var(--bg);
+  border: none;
+  border-radius: 4px;
+  padding: 0.32rem 0.85rem;
+  font-family: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.conflict-loser-restore:hover {
+  background: var(--accent-hover);
+}
+
+.conflict-loser-discard {
+  appearance: none;
+  background: transparent;
+  color: var(--fg-muted);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.32rem 0.65rem;
+  font-family: inherit;
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+
+.conflict-loser-discard:hover {
+  background: var(--hover-overlay);
+  color: var(--fg);
+}
+
+.conflict-loser-archive-modal .modal-footer {
+  padding: 0.6rem 0 0;
+  border-top: 1px solid var(--border);
+  margin-top: 0.8rem;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.conflict-loser-archive-modal .btn-danger {
+  appearance: none;
+  background: transparent;
+  color: #ef5350;
+  border: 1px solid #ef5350;
+  border-radius: 4px;
+  padding: 0.32rem 0.85rem;
+  font-family: inherit;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
+.conflict-loser-archive-modal .btn-danger:hover {
+  background: rgba(239, 83, 80, 0.12);
+}
+
+.conflict-loser-archive-modal .btn-danger[hidden] {
+  display: none;
+}
+
 /* ───── Phase 97 — Snapshot history modal ──────────────────────────
    Restore-from-snapshot UI listing the rotating per-scene history.
    Each row shows a relative timestamp ("5 minutes ago") + a quick
