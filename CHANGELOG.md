@@ -95,7 +95,52 @@ _Polish:_
 - **0.107.0** — Dice expression history recall (up-arrow in the slash-command input cycles previous rolls) ✅
 - **0.108.0** — Recent backgrounds quick switcher (mirrors the Phase 75 recent-scenes pattern but for backgrounds) ✅
 - **0.109.0** — Per-spectator token visibility (extend Phase 82's permissions to "GM hides individual tokens from individual players") ✅
-- **0.110.0** — Persistent player names across reloads (stable cross-session player IDs — flagged in Phase 82 as future)
+- **0.110.0** — Persistent player names across reloads (stable cross-session player IDs — flagged in Phase 82 as future) ✅
+
+---
+
+## [0.110.0] — 2026-04-26 — Persistent per-tab player id
+
+### Added
+- **Stable `playerId` across page reloads.** Pre-110 every tab generated a fresh id at module init; reloading a Spectator tab orphaned all of the GM's per-player state for that participant. Phase 110 backs the id with `sessionStorage` so an F5 / browser-restore keeps the SAME id.
+- **Phase 82 + Phase 109 state survives Spectator reloads** as a direct consequence:
+  - `canRoll = false` overrides stay revoked.
+  - Hidden-from-this-Spectator tokens stay hidden — no need for the GM to re-toggle every time a player refreshes their browser.
+- **Brand-new tabs still mint a brand-new id.** sessionStorage is per-tab + per-origin; closing the tab or opening a second Spectator window creates a fresh participant from the GM's perspective. So the multi-tab-collision risk that comes with localStorage-backed ids is sidestepped entirely.
+
+### Why this matters
+Phase 82 introduced per-Spectator permissions; Phase 109 introduced per-Spectator token visibility. Both stored their override map keyed by `playerId`. Both phases shipped with a known caveat: a Spectator who reloads their tab gets a fresh `playerId` and the GM's overrides reset to default (the "MVP tradeoff" call-out at the top of `spectator-permissions.ts`). That was acceptable as long as players rarely reloaded — but in practice, a network blip / iPad app-switch / browser autorefresh hits often enough to be annoying. Phase 110 closes the gap with the smallest possible change (a one-call helper + a sessionStorage key per role).
+
+### Architecture
+- **`src/state/player-id.ts`** (new, ~55 lines) — pure helper. `getOrCreatePlayerId(viewMode)` reads from `sessionStorage[gm-encounter-maps-player-id-{viewMode}]`; on miss it mints a fresh `nid()` + persists. Falls back to an ephemeral id if sessionStorage throws (Safari private-mode behavior) so the rest of the app keeps working.
+- **`src/entries/spectator.ts`** — replaced the ephemeral `const playerId = nid()` with `const playerId = getOrCreatePlayerId('spectator')`. Removed the now-unused `nid` import.
+- **`src/entries/gm.ts`** — same swap with `getOrCreatePlayerId('gm')`. `nid` is still used elsewhere in the GM entry (token ids, etc.) so the import stays.
+
+### Why sessionStorage and not localStorage
+- **localStorage** would cross-share the id across multiple tabs of the same role in the same browser. Two Spectator tabs would both claim the same id; BroadcastChannel envelopes would dedupe + each tab would think the OTHER one's actions came from itself. Bad.
+- **sessionStorage** is per-tab + per-origin AND survives reloads (F5, browser-restore from session). Closing the tab + reopening creates a new id, which is the right semantic — a brand-new tab is a brand-new participant from the GM's perspective.
+
+### Tradeoffs (deliberately accepted)
+- **Different browsers + incognito = different ids**, even for the same human player. Fine — the alternative would require account login + server-side identity, which is out of scope for a local-first VTT.
+- **The GM's permissions store accumulates entries forever** (Phase 82 didn't auto-clean on identity-leave; Phase 110 doesn't change that). A future maintenance phase could add a "garbage-collect entries older than X days" sweeper.
+- **Closing a tab loses the id.** A reopened Spectator tab is a new participant — the GM has to re-grant any restrictions. This is the correct semantic for a tab-as-participant model; cross-device identity would need a separate cross-browser persistence strategy.
+
+### Tests
+- **+5 unit tests** in `src/state/player-id.test.ts` (new): same-tab calls return the same id; `_resetPlayerId` simulates a new tab and yields a different id; GM and Spectator scopes are independent and both stable; the id is persisted under the documented sessionStorage key; falls back to a fresh ephemeral id when sessionStorage throws (private-mode simulation via `Object.defineProperty` override).
+- **+3 Playwright specs** in `e2e/persistent-player-id.spec.ts` (new):
+  - **Spectator playerId persists across page reload** — read sessionStorage before + after `page.reload()`, assert equal.
+  - **A brand-new Spectator tab gets a different id** — open two Spectator pages in the same context, assert their stored ids differ.
+  - **Phase 109 hidden token stays hidden after the Spectator reloads** — full GM + Spectator handshake, hide a token via the editor's "Visible to" checkbox, reload the Spectator, verify the canvas aria-label still reports `0 token` (would be `1 token visible` pre-110).
+- **All 1238 unit tests + 295 Playwright specs pass** locally on the first run.
+
+### Bundle
+- 92.40 / 94 KB initial-load brotli (+0.09 KB for the helper). CSS 11.51 / 12 KB. Lazy chunks unchanged. Comfortable headroom under the limit bumped in Phase 109.
+
+### Pre-push checklist
+Caught zero issues — full unit suite + full e2e + visual-regression spec + size-limit all green before push. Thirteen clean phases in a row now (97 + 99 + 100 + 101 + 102 + 103 + 104 + 105 + 106 + 107 + 108 + 109 + 110).
+
+### End of the Phase 86 → 110 queue
+Phase 110 wraps the 25-phase accessibility / UX / mobile / data-lifecycle / authoring / sharing expansion plan that started with Phase 86. From the original queue announced in the "Queued (Phases 86 → 110)" block: every entry is now ✅. Going forward, the next plan will be drafted in response to the next round of "Could you please suggest some features…" — subject to the same per-phase semver + tagging discipline that's held for the last 25 minor releases.
 
 ---
 

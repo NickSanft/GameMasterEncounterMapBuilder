@@ -13,7 +13,7 @@ import {
   type PlayerIdentity,
 } from '../state/player-identity.js';
 import { createIdentityPrefs } from '../state/identity-prefs.js';
-import { nid } from '../util/id.js';
+import { getOrCreatePlayerId } from '../state/player-id.js';
 import { deserializeState, fromSerializablePatch } from '../sync/messages.js';
 import {
   loadPersistedState,
@@ -479,7 +479,13 @@ store.subscribe((patch) => {
 // Phase 66 — `createSyncChannel` takes the tab's player id so every
 // outgoing envelope is stamped + the channel can drop self-echoes.
 // `playerId` was declared further down in Phase 63; hoist it here.
-const playerId = nid();
+//
+// Phase 110 — the id is now sessionStorage-backed so a page reload
+// (F5, browser-restore) keeps the SAME id, and the GM's per-player
+// state (Phase 82 permissions, Phase 109 hidden tokens) survives the
+// reload. A brand-new tab still mints a fresh id — sessionStorage is
+// per-tab, not per-browser.
+const playerId = getOrCreatePlayerId('spectator');
 const channel = createSyncChannel(playerId);
 
 // Phase 62 — Remote Play modal (Spectator side). Populate the

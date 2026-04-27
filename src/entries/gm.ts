@@ -109,6 +109,7 @@ import { mountPresetBackgroundsModal } from '../ui/preset-backgrounds-modal.js';
 import { resolvePresetUrl } from '../state/preset-backgrounds.js';
 import { showContextMenu, type ContextMenuEntry } from '../ui/context-menu.js';
 import { nid } from '../util/id.js';
+import { getOrCreatePlayerId } from '../state/player-id.js';
 import { nextTokenColor } from '../state/token-colors.js';
 import {
   tokenFromCatalogEntry,
@@ -1789,7 +1790,13 @@ attachLongPress(canvas, {
 // when the channel is constructed; the rest of the identity wiring
 // (registry, `ownIdentity()`, `broadcastIdentity()`) stays where it
 // was, just referencing this earlier-declared id.
-const playerId = nid();
+//
+// Phase 110 — sessionStorage-backed so reloads keep the SAME id.
+// Pre-110 every reload minted a fresh id, which made the GM
+// reappear in the spectator's connected-players list as a new
+// participant (with default permissions / no scoping carried over).
+// Stable across reloads, fresh per tab.
+const playerId = getOrCreatePlayerId('gm');
 const channel = createSyncChannel(playerId);
 
 // Phase 62 — Remote Play modal. Only mounted when BroadcastChannel
