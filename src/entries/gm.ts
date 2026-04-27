@@ -33,7 +33,11 @@ import { mountRulerSettings } from '../ui/ruler-settings.js';
 import { RULER_PRESETS } from '../state/ruler.js';
 import { createAoeTool, createAoeToolOptionsRef } from '../input/tool-aoe.js';
 import { createDrawTool, createDrawToolOptionsRef } from '../input/tool-draw.js';
-import { createWallsTool } from '../input/tool-walls.js';
+import {
+  createWallsTool,
+  createWallsToolOptionsRef,
+  createBlockPreviewRef,
+} from '../input/tool-walls.js';
 import { hitTestWalls } from '../state/walls.js';
 import { nextEntityId, describeEntity } from '../state/canvas-nav.js';
 import {
@@ -72,6 +76,7 @@ import { mountAnnotationEditor } from '../ui/annotation-editor.js';
 import { mountWallEditor } from '../ui/wall-editor.js';
 import { mountCanvasOutline } from '../ui/canvas-outline.js';
 import { mountFogSettings } from '../ui/fog-settings.js';
+import { mountWallsSettings } from '../ui/walls-settings.js';
 import { mountSettingsModal } from '../ui/settings-modal.js';
 import { mountZoomControls } from '../ui/zoom-controls.js';
 import { createSyncChannel } from '../sync/channel.js';
@@ -333,6 +338,8 @@ const renderer = createRenderer({
   getDrawPreview: () => drawOverlayRef.current,
   getFogRects: () => fogWorkerClient.getLatest(),
   getWallsOverlay: () => wallsOverlayRef.current,
+  // Phase 112 — block-mode drag preview (Walls tool, GM only).
+  getBlockPreview: () => blockPreviewRef.current,
   // Phase 85 — endpoint drag for the in-place wall editor.
   getEndpointDrag: () => endpointDragRef.current,
   getLosPolygons: () =>
@@ -397,7 +404,9 @@ function refreshLos(): void {
   // collectViewers walks `state.tokens` exactly as before.
   fogWorkerClient.requestLos(
     collectViewers(state.tokens, state.grid, dragOverlayRef.current),
-    collectSightWalls(state.walls),
+    // Phase 112 — cellSize required so block walls can expand to
+    // their 4 perimeter LoS segments.
+    collectSightWalls(state.walls, state.grid.cellSize),
     // Phase 57 — light sources also follow the drag overlay so a
     // torchbearer's halo doesn't get left behind mid-drag.
     collectLights(state.tokens, state.grid, dragOverlayRef.current),
@@ -542,10 +551,17 @@ toolManager.register(
     drawOptions: drawToolOptionsRef,
   }),
 );
+// Phase 112 — Walls tool options (line vs block mode) + the
+// drag-time block preview ref. Both passed into the tool + the
+// settings panel so the GM can flip between modes mid-session.
+const wallsToolOptionsRef = createWallsToolOptionsRef();
+const blockPreviewRef = createBlockPreviewRef();
 toolManager.register(
   createWallsTool({
     ...inputContext,
     wallsOverlay: wallsOverlayRef,
+    wallsToolOptions: wallsToolOptionsRef,
+    blockPreview: blockPreviewRef,
   }),
 );
 
@@ -590,6 +606,9 @@ toolManager.onChange((id) => {
 });
 
 mountFogSettings(document.body, fogOptionsRef, toolManager);
+// Phase 112 — Walls tool mode toggle (Lines / Block) shown only
+// while the Walls tool is active.
+mountWallsSettings(document.body, wallsToolOptionsRef, toolManager);
 mountAoeSettings(document.body, aoeToolOptionsRef, toolManager);
 mountDrawSettings(document.body, drawToolOptionsRef, toolManager);
 const rulerSettings = mountRulerSettings(document.body, rulerToolOptionsRef);
@@ -1499,7 +1518,7 @@ canvas.addEventListener('contextmenu', (e) => {
     : hitTestStrokes(state.strokes, world.x, world.y);
   const wallHit = hit || annotHit || aoeHit || strokeHit
     ? null
-    : hitTestWalls(state.walls, world.x, world.y);
+    : hitTestWalls(state.walls, world.x, world.y, state.grid.cellSize);
   const gx = Math.floor(world.x / state.grid.cellSize);
   const gy = Math.floor(world.y / state.grid.cellSize);
   const onGrid =
@@ -2594,20 +2613,34 @@ function moveSelection(dx: number, dy: number): boolean {
       }
       const w = state.walls.find((w) => w.id === id);
       if (w) {
-        // Walls translate by (dx, dy) WORLD pixels (multiply grid-cell
-        // delta by cellSize) — both endpoints together.
-        const wx = dx * cellSize;
-        const wy = dy * cellSize;
-        store.applyPatch({
-          kind: 'wall-update',
-          id,
-          changes: {
-            x1: w.x1 + wx,
-            y1: w.y1 + wy,
-            x2: w.x2 + wx,
-            y2: w.y2 + wy,
-          },
-        });
+        if (w.kind === 'segment') {
+          // Walls translate by (dx, dy) WORLD pixels (multiply grid-cell
+          // delta by cellSize) — both endpoints together.
+          const wx = dx * cellSize;
+          const wy = dy * cellSize;
+          store.applyPatch({
+            kind: 'wall-update',
+            id,
+            changes: {
+              x1: w.x1 + wx,
+              y1: w.y1 + wy,
+              x2: w.x2 + wx,
+              y2: w.y2 + wy,
+            },
+          });
+        } else {
+          // Phase 112 — block walls translate by INTEGER cell deltas
+          // (their geometry is already in cell coords). Clamp to >= 0
+          // so a nudge can't produce negative cell coords.
+          store.applyPatch({
+            kind: 'wall-update',
+            id,
+            changes: {
+              cellX: Math.max(0, w.cellX + dx),
+              cellY: Math.max(0, w.cellY + dy),
+            },
+          });
+        }
         moved = true;
       }
     }

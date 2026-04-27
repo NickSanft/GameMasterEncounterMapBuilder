@@ -4,9 +4,9 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { mountWallEditor } from './wall-editor.js';
 import { createWall, WALL_DEFAULT_THICKNESS_PX } from '../state/walls.js';
-import type { Wall } from '../state/types.js';
+import type { Wall, WallSegment } from '../state/types.js';
 
-function makeWall(over: Partial<Wall> = {}): Wall {
+function makeWall(over: Partial<WallSegment> = {}): Wall {
   const w = createWall({ x1: 0, y1: 0, x2: 10, y2: 0 });
   return { ...w, ...over };
 }

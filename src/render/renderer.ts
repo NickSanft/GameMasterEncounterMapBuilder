@@ -120,6 +120,18 @@ interface CreateRendererOptions {
    */
   getWallsOverlay?(): WallsOverlay | null;
   /**
+   * Phase 112 — block-mode drag preview from the Walls tool. Returns
+   * the prospective block-wall geometry while the GM is mid-drag in
+   * Block mode; the renderer paints it as a dashed ghost rectangle.
+   * GM-only.
+   */
+  getBlockPreview?(): {
+    cellX: number;
+    cellY: number;
+    cellsWide: number;
+    cellsTall: number;
+  } | null;
+  /**
    * Phase 85 — endpoint drag overlay for the in-place wall editor.
    * When a GM is mid-drag of a single wall endpoint, the renderer
    * uses this to paint the wall with the dragged endpoint at the
@@ -197,6 +209,7 @@ export function createRenderer(opts: CreateRendererOptions): Renderer {
     getDrawPreview,
     getFogRects,
     getWallsOverlay,
+    getBlockPreview,
     getEndpointDrag,
     getLosPolygons,
     getLightPolygons,
@@ -294,6 +307,9 @@ export function createRenderer(opts: CreateRendererOptions): Renderer {
         dragOverlay: null,
         endpointDrag: null,
         zoom: camera.zoom,
+        // Phase 112 — cellSize for block-wall rectangles. Spectator
+        // sees the same blocks the GM does (modulo per-wall visibility).
+        cellSize: state.grid.cellSize,
       });
     }
     const precomputedFogRects = getFogRects ? getFogRects() : null;
@@ -342,6 +358,10 @@ export function createRenderer(opts: CreateRendererOptions): Renderer {
         dragOverlay,
         endpointDrag: getEndpointDrag ? getEndpointDrag() : null,
         zoom: camera.zoom,
+        // Phase 112 — cellSize for block-wall geometry + the in-flight
+        // block-mode drag preview ghost (the Walls tool sets it).
+        cellSize: state.grid.cellSize,
+        blockPreview: getBlockPreview ? getBlockPreview() : null,
       });
     }
     // LoS visibility polygons — GM-only yellow outline so the GM sees

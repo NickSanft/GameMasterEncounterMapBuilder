@@ -70,12 +70,18 @@ export function entitiesInReadingOrder(state: SessionState): EntityRef[] {
   }
   for (const w of state.walls) {
     // Walls use the segment midpoint as their visual anchor.
-    entries.push({
-      id: w.id,
-      kind: 'wall',
-      sortY: (w.y1 + w.y2) / 2,
-      sortX: (w.x1 + w.x2) / 2,
-    });
+    // Phase 112 — block walls use the AABB centroid in world pixels.
+    let sortX: number;
+    let sortY: number;
+    if (w.kind === 'block') {
+      const cs = state.grid.cellSize;
+      sortX = (w.cellX + w.cellsWide / 2) * cs;
+      sortY = (w.cellY + w.cellsTall / 2) * cs;
+    } else {
+      sortX = (w.x1 + w.x2) / 2;
+      sortY = (w.y1 + w.y2) / 2;
+    }
+    entries.push({ id: w.id, kind: 'wall', sortY, sortX });
   }
   for (const a of state.aoeTemplates) {
     entries.push({ id: a.id, kind: 'aoe', sortY: a.y, sortX: a.x });
@@ -184,12 +190,18 @@ export function describeEntity(state: SessionState, id: ID): string | null {
 
   const w = state.walls.find((x) => x.id === id);
   if (w) {
-    const lengthCells = wallLength(w) / state.grid.cellSize;
-    // 5 ft per square is the default; the announcer doesn't have a
-    // pref handle here. Round to whole cells which translates nicely
-    // ("3 squares") without leaking unit-system assumptions.
-    const cells = Math.max(1, Math.round(lengthCells));
-    const parts = [`Wall, ${cells} ${cells === 1 ? 'square' : 'squares'} long`];
+    let parts: string[];
+    if (w.kind === 'block') {
+      // Phase 112 — block wall: announce its cell footprint.
+      parts = [`Wall block, ${w.cellsWide} by ${w.cellsTall} cells`];
+    } else {
+      const lengthCells = wallLength(w) / state.grid.cellSize;
+      // 5 ft per square is the default; the announcer doesn't have a
+      // pref handle here. Round to whole cells which translates nicely
+      // ("3 squares") without leaking unit-system assumptions.
+      const cells = Math.max(1, Math.round(lengthCells));
+      parts = [`Wall, ${cells} ${cells === 1 ? 'square' : 'squares'} long`];
+    }
     if (!w.blocksSight) parts.push('does not block sight');
     if (!w.blocksMovement) parts.push('does not block movement');
     if ((w.visibility ?? 'shared') === 'gm') parts.push('GM-only');

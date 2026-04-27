@@ -62,6 +62,24 @@ export interface WallsRenderOptions {
   /** Current camera zoom so line widths stay visually consistent. */
   zoom: number;
   /**
+   * Phase 112 — grid cell size in world pixels. Required to render
+   * block walls (their geometry is in cell coordinates). The renderer
+   * passes `state.grid.cellSize` directly.
+   */
+  cellSize: number;
+  /**
+   * Phase 112 — block-wall preview while drag-creating. The Walls
+   * tool's Block mode passes a `{cellX, cellY, cellsWide, cellsTall}`
+   * object that renders as a translucent ghost rectangle until
+   * pointerup commits it as a real block.
+   */
+  blockPreview?: {
+    cellX: number;
+    cellY: number;
+    cellsWide: number;
+    cellsTall: number;
+  } | null;
+  /**
    * Phase 85 — endpoint drag overlay for the in-place editor. When a
    * GM is mid-drag of a single endpoint, the corresponding endpoint
    * renders at the dragged position so the line previews live. Other
@@ -121,11 +139,21 @@ export function drawWalls(
     : walls.filter((w) => (w.visibility ?? 'shared') !== 'gm');
   if (visibleWalls.length === 0 && !endpointDrag) return;
 
+  // Phase 112 — segments take the original line-coords path; blocks
+  // get a separate filled-rectangle pass below. Filtering once lets
+  // the segment loop assume `w.x1` etc. are present.
+  const segmentVisibleWalls = visibleWalls.filter(
+    (w): w is import('../state/types.js').WallSegment => w.kind === 'segment',
+  );
+  const blockVisibleWalls = visibleWalls.filter(
+    (w): w is import('../state/types.js').WallBlock => w.kind === 'block',
+  );
+
   // Per-wall world-space coords applied AFTER the drag overlay AND
   // the endpoint-drag overlay so a selected wall mid-drag previews its
   // destination in real time + a single endpoint mid-drag follows the
   // cursor while the OTHER endpoint stays put.
-  function wallCoords(w: Wall): { x1: number; y1: number; x2: number; y2: number } {
+  function wallCoords(w: import('../state/types.js').WallSegment): { x1: number; y1: number; x2: number; y2: number } {
     let x1 = w.x1;
     let y1 = w.y1;
     let x2 = w.x2;
@@ -155,7 +183,7 @@ export function drawWalls(
   ctx.strokeStyle = WALL_HIGHLIGHT_GLOW;
   ctx.lineWidth = glowWidth;
   ctx.beginPath();
-  for (const w of visibleWalls) {
+  for (const w of segmentVisibleWalls) {
     if (!highlights.has(w.id)) continue;
     const c = wallCoords(w);
     ctx.moveTo(c.x1, c.y1);
@@ -167,7 +195,7 @@ export function drawWalls(
   // 2) Wall body — per-wall stroke so per-wall thickness + the GM-only
   //    dashed style work without bucketing. With <100 walls in any
   //    realistic encounter the per-wall stroke cost is negligible.
-  for (const w of visibleWalls) {
+  for (const w of segmentVisibleWalls) {
     const isHighlighted = highlights.has(w.id);
     const isGmOnly = isGm && (w.visibility ?? 'shared') === 'gm';
     const baseThickness = (w.thickness ?? WALL_DEFAULT_THICKNESS_PX) / safeZoom;
@@ -200,7 +228,7 @@ export function drawWalls(
   const halfDot = dotSize / 2;
   const halfHandle = handleSize / 2;
   ctx.fillStyle = WALL_COLOR;
-  for (const w of visibleWalls) {
+  for (const w of segmentVisibleWalls) {
     if (highlights.has(w.id)) continue;
     const isGmOnly = isGm && (w.visibility ?? 'shared') === 'gm';
     ctx.fillStyle = isGmOnly ? WALL_GM_ONLY_COLOR : WALL_COLOR;
@@ -212,7 +240,7 @@ export function drawWalls(
   ctx.strokeStyle = '#1a1a1a';
   ctx.lineWidth = 1.5 / safeZoom;
   ctx.setLineDash([]);
-  for (const w of visibleWalls) {
+  for (const w of segmentVisibleWalls) {
     if (!highlights.has(w.id)) continue;
     const c = wallCoords(w);
     // Slight outline for contrast against any background — the handle
@@ -221,6 +249,68 @@ export function drawWalls(
     ctx.strokeRect(c.x1 - halfHandle, c.y1 - halfHandle, handleSize, handleSize);
     ctx.fillRect(c.x2 - halfHandle, c.y2 - halfHandle, handleSize, handleSize);
     ctx.strokeRect(c.x2 - halfHandle, c.y2 - halfHandle, handleSize, handleSize);
+  }
+
+  // Phase 112 — block walls. Drawn as filled rectangles in cell
+  // coordinates. Highlighted blocks get the same accent fill as
+  // selected segments; GM-only blocks get a dashed outline + the
+  // tinted color (matches the segment-wall convention).
+  if (blockVisibleWalls.length > 0) {
+    for (const w of blockVisibleWalls) {
+      const isHighlighted = highlights.has(w.id);
+      const isGmOnly = isGm && (w.visibility ?? 'shared') === 'gm';
+      const cs = options.cellSize;
+      const draggedDX = dragSet && dragSet.has(w.id) ? dx : 0;
+      const draggedDY = dragSet && dragSet.has(w.id) ? dy : 0;
+      const x = w.cellX * cs + draggedDX;
+      const y = w.cellY * cs + draggedDY;
+      const wpx = w.cellsWide * cs;
+      const hpx = w.cellsTall * cs;
+      ctx.fillStyle = isHighlighted
+        ? WALL_HIGHLIGHT_COLOR
+        : isGmOnly
+          ? WALL_GM_ONLY_COLOR
+          : WALL_COLOR;
+      ctx.globalAlpha = isGmOnly && !isHighlighted ? 0.45 : 0.85;
+      ctx.fillRect(x, y, wpx, hpx);
+      ctx.globalAlpha = 1;
+      // Outline so the block edge stays crisp against textured
+      // backgrounds. Highlighted blocks get the accent outline.
+      ctx.strokeStyle = isHighlighted
+        ? WALL_HIGHLIGHT_COLOR
+        : isGmOnly
+          ? WALL_GM_ONLY_COLOR
+          : WALL_COLOR;
+      ctx.lineWidth = (isHighlighted ? 2 : 1) / safeZoom;
+      if (isGmOnly && !isHighlighted) {
+        ctx.setLineDash([gmOnlyDashLen, gmOnlyDashLen]);
+      } else {
+        ctx.setLineDash([]);
+      }
+      ctx.strokeRect(x, y, wpx, hpx);
+    }
+    ctx.setLineDash([]);
+  }
+
+  // Phase 112 — block-mode drag preview. The Walls tool's Block mode
+  // hands us a {cellX, cellY, cellsWide, cellsTall} ghost; render it
+  // as a translucent dashed rectangle at the prospective destination.
+  const blockPreview = isGm ? options.blockPreview ?? null : null;
+  if (blockPreview && blockPreview.cellsWide > 0 && blockPreview.cellsTall > 0) {
+    const cs = options.cellSize;
+    const x = blockPreview.cellX * cs;
+    const y = blockPreview.cellY * cs;
+    const wpx = blockPreview.cellsWide * cs;
+    const hpx = blockPreview.cellsTall * cs;
+    ctx.fillStyle = WALL_COLOR;
+    ctx.globalAlpha = 0.3;
+    ctx.fillRect(x, y, wpx, hpx);
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = WALL_COLOR;
+    ctx.lineWidth = 1.5 / safeZoom;
+    ctx.setLineDash([dashLen, dashLen]);
+    ctx.strokeRect(x, y, wpx, hpx);
+    ctx.setLineDash([]);
   }
 
   // 4) In-progress chain preview (Walls tool only — overlay is null

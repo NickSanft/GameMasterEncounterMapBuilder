@@ -215,7 +215,8 @@ function refreshLos(): void {
   const visibleTokens = filterVisibleTokens(state.tokens);
   fogWorkerClient.requestLos(
     collectViewers(visibleTokens, state.grid),
-    collectSightWalls(state.walls),
+    // Phase 112 — cellSize required for block-wall perimeter expansion.
+    collectSightWalls(state.walls, state.grid.cellSize),
     // Phase 57 — lights compose with viewer polygons in the spectator
     // fog mask: a cell only shows if some viewer can see it AND some
     // light reaches it (when any lights are configured on the map).

@@ -208,13 +208,35 @@ export function mountWallEditor(opts: WallEditorOptions): WallEditorHandle {
     // Mixed selection — neither radio reads as "checked"; the GM has
     // to pick one explicitly to apply it to all selected walls.
 
-    const thickSame = allSame((w) => w.thickness ?? WALL_DEFAULT_THICKNESS_PX);
-    if (thickSame !== null) {
-      thicknessEl.value = String(thickSame);
-      thicknessOut.textContent = `${thickSame.toFixed(1)} px`;
+    // Phase 112 — thickness slider + Fill cell preset only apply to
+    // segment walls. Mixed segment + block selections show the slider
+    // but compute thickness only over the segments; an all-block
+    // selection hides the slider row entirely (blocks have no
+    // thickness — the region IS the wall).
+    const segmentWalls = walls.filter((w): w is import('../state/types.js').WallSegment =>
+      w.kind === 'segment',
+    );
+    const thicknessRow = thicknessEl.closest('.wall-editor-row') as HTMLDivElement | null;
+    if (segmentWalls.length === 0) {
+      // All blocks. Hide the thickness row entirely.
+      if (thicknessRow) thicknessRow.hidden = true;
     } else {
-      thicknessEl.value = String(WALL_DEFAULT_THICKNESS_PX);
-      thicknessOut.textContent = '— (mixed)';
+      if (thicknessRow) thicknessRow.hidden = false;
+      const thickSame = (() => {
+        const first = segmentWalls[0]!.thickness ?? WALL_DEFAULT_THICKNESS_PX;
+        for (let i = 1; i < segmentWalls.length; i++) {
+          const v = segmentWalls[i]!.thickness ?? WALL_DEFAULT_THICKNESS_PX;
+          if (v !== first) return null;
+        }
+        return first;
+      })();
+      if (thickSame !== null) {
+        thicknessEl.value = String(thickSame);
+        thicknessOut.textContent = `${thickSame.toFixed(1)} px`;
+      } else {
+        thicknessEl.value = String(WALL_DEFAULT_THICKNESS_PX);
+        thicknessOut.textContent = '— (mixed)';
+      }
     }
   }
 

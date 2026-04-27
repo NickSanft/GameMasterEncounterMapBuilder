@@ -1,6 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import {
   createWall,
+  createWallBlock,
+  isBlockWall,
+  isSegmentWall,
+  blockWallBounds,
+  wallToSegments,
   distanceSquaredToSegment,
   hitTestWalls,
   hitTestWallEndpoint,
@@ -67,11 +72,11 @@ describe('hitTestWalls', () => {
   ];
 
   it('returns null when the point is nowhere near any wall', () => {
-    expect(hitTestWalls(walls, 200, 200)).toBeNull();
+    expect(hitTestWalls(walls, 200, 200, 50)).toBeNull();
   });
 
   it('returns the wall within tolerance', () => {
-    const hit = hitTestWalls(walls, 50, 2);
+    const hit = hitTestWalls(walls, 50, 2, 50);
     expect(hit?.id).toBe(walls[0]!.id);
   });
 
@@ -82,15 +87,15 @@ describe('hitTestWalls', () => {
       createWall({ x1: 0, y1: 0, x2: 100, y2: 0 }),
       createWall({ x1: 0, y1: 0, x2: 100, y2: 0 }),
     ];
-    const hit = hitTestWalls(overlapping, 50, 0);
+    const hit = hitTestWalls(overlapping, 50, 0, 50);
     expect(hit?.id).toBe(overlapping[1]!.id);
   });
 
   it('respects the tolerance parameter', () => {
     // 10 px away from the y=0 wall. Default tolerance (6) misses.
-    expect(hitTestWalls(walls, 50, 10)).toBeNull();
+    expect(hitTestWalls(walls, 50, 10, 50)).toBeNull();
     // Larger tolerance catches it.
-    expect(hitTestWalls(walls, 50, 10, 12)?.id).toBe(walls[0]!.id);
+    expect(hitTestWalls(walls, 50, 10, 50, 12)?.id).toBe(walls[0]!.id);
   });
 });
 
@@ -190,5 +195,113 @@ describe('hitTestWallEndpoint', () => {
     const tiny = createWall({ x1: 0, y1: 0, x2: 4, y2: 0 });
     const hit = hitTestWallEndpoint([tiny], new Set([tiny.id]), 1, 0, 10);
     expect(hit?.endpoint).toBe(1); // closer to (0,0) than to (4,0)
+  });
+
+  it('Phase 112 — block walls have no endpoints (skipped in endpoint hit-test)', () => {
+    const block = createWallBlock({ cellX: 0, cellY: 0, cellsWide: 2, cellsTall: 2 });
+    const seg = createWall({ x1: 0, y1: 0, x2: 10, y2: 0 });
+    const selected = new Set([block.id, seg.id]);
+    // Click right on the block's "corner" (0, 0) — should resolve to
+    // the segment's endpoint, NOT the block (blocks don't expose
+    // endpoint handles in Phase 112).
+    const hit = hitTestWallEndpoint([block, seg], selected, 0, 0, 4);
+    expect(hit?.wall.id).toBe(seg.id);
+  });
+});
+
+describe('Phase 112 — createWallBlock', () => {
+  it('defaults blocksSight + blocksMovement to true', () => {
+    const w = createWallBlock({ cellX: 0, cellY: 0, cellsWide: 1, cellsTall: 1 });
+    expect(w.kind).toBe('block');
+    expect(w.blocksSight).toBe(true);
+    expect(w.blocksMovement).toBe(true);
+  });
+
+  it('floors fractional cell coords + clamps cellsWide/Tall to ≥ 1', () => {
+    const w = createWallBlock({
+      cellX: 3.7,
+      cellY: -2,
+      cellsWide: 0,
+      cellsTall: -5,
+    });
+    expect(w.cellX).toBe(3);
+    expect(w.cellY).toBe(0); // clamped to ≥ 0
+    expect(w.cellsWide).toBe(1);
+    expect(w.cellsTall).toBe(1);
+  });
+
+  it('threads visibility when supplied', () => {
+    const w = createWallBlock({
+      cellX: 0,
+      cellY: 0,
+      cellsWide: 1,
+      cellsTall: 1,
+      visibility: 'gm',
+    });
+    expect(w.visibility).toBe('gm');
+  });
+});
+
+describe('Phase 112 — discriminator predicates', () => {
+  it('isBlockWall narrows to WallBlock', () => {
+    const seg = createWall({ x1: 0, y1: 0, x2: 1, y2: 1 });
+    const block = createWallBlock({ cellX: 0, cellY: 0, cellsWide: 1, cellsTall: 1 });
+    expect(isBlockWall(seg)).toBe(false);
+    expect(isBlockWall(block)).toBe(true);
+  });
+
+  it('isSegmentWall narrows to WallSegment', () => {
+    const seg = createWall({ x1: 0, y1: 0, x2: 1, y2: 1 });
+    const block = createWallBlock({ cellX: 0, cellY: 0, cellsWide: 1, cellsTall: 1 });
+    expect(isSegmentWall(seg)).toBe(true);
+    expect(isSegmentWall(block)).toBe(false);
+  });
+});
+
+describe('Phase 112 — wallToSegments', () => {
+  it('segment wall returns [self]', () => {
+    const seg = createWall({ x1: 1, y1: 2, x2: 3, y2: 4 });
+    expect(wallToSegments(seg, 50)).toEqual([{ x1: 1, y1: 2, x2: 3, y2: 4 }]);
+  });
+
+  it('block wall returns 4 perimeter edges', () => {
+    const block = createWallBlock({ cellX: 1, cellY: 2, cellsWide: 3, cellsTall: 1 });
+    const segments = wallToSegments(block, 10);
+    // Block covers world rect x:[10..40], y:[20..30].
+    expect(segments).toEqual([
+      { x1: 10, y1: 20, x2: 40, y2: 20 }, // top
+      { x1: 40, y1: 20, x2: 40, y2: 30 }, // right
+      { x1: 10, y1: 30, x2: 40, y2: 30 }, // bottom
+      { x1: 10, y1: 20, x2: 10, y2: 30 }, // left
+    ]);
+  });
+});
+
+describe('Phase 112 — blockWallBounds', () => {
+  it('returns the AABB in world pixels', () => {
+    const block = createWallBlock({ cellX: 2, cellY: 3, cellsWide: 4, cellsTall: 5 });
+    expect(blockWallBounds(block, 10)).toEqual({ x: 20, y: 30, w: 40, h: 50 });
+  });
+});
+
+describe('Phase 112 — hitTestWalls block path', () => {
+  const cellSize = 50;
+  it('point inside the block AABB hits', () => {
+    const block = createWallBlock({ cellX: 1, cellY: 1, cellsWide: 2, cellsTall: 2 });
+    expect(hitTestWalls([block], 75, 75, cellSize)?.id).toBe(block.id);
+  });
+
+  it('point outside the block AABB does NOT hit (no tolerance band)', () => {
+    const block = createWallBlock({ cellX: 1, cellY: 1, cellsWide: 1, cellsTall: 1 });
+    // Block covers (50..100, 50..100). 49 is outside; segments
+    // would forgive a 6-px slop but blocks should be exact.
+    expect(hitTestWalls([block], 49, 75, cellSize)).toBeNull();
+  });
+
+  it('most-recently-drawn wins when a segment + block overlap', () => {
+    const block = createWallBlock({ cellX: 0, cellY: 0, cellsWide: 1, cellsTall: 1 });
+    const seg = createWall({ x1: 0, y1: 25, x2: 50, y2: 25 });
+    // Segment was drawn AFTER the block → should win on overlap.
+    expect(hitTestWalls([block, seg], 25, 25, cellSize)?.id).toBe(seg.id);
   });
 });

@@ -22,6 +22,7 @@ import type { ID, SessionState, Token, Wall } from './types.js';
 import type { LosViewer } from '../render/fog-worker-client.js';
 import type { LosPoint, LosSegment } from './los.js';
 import { rasterizeVisibility } from './los.js';
+import { wallToSegments } from './walls.js';
 
 /**
  * Drag-overlay shape that `collectViewers` understands. We mirror the
@@ -74,10 +75,21 @@ export function collectViewers(
   return viewers;
 }
 
-export function collectSightWalls(walls: readonly Wall[]): LosSegment[] {
-  return walls
-    .filter((w) => w.blocksSight)
-    .map((w) => ({ x1: w.x1, y1: w.y1, x2: w.x2, y2: w.y2 }));
+export function collectSightWalls(
+  walls: readonly Wall[],
+  cellSize: number,
+): LosSegment[] {
+  // Phase 112 — block walls expand to 4 perimeter segments via
+  // `wallToSegments`. Segment walls return [self] from the helper,
+  // so the per-wall result is uniformly a list of LosSegment.
+  const out: LosSegment[] = [];
+  for (const w of walls) {
+    if (!w.blocksSight) continue;
+    for (const s of wallToSegments(w, cellSize)) {
+      out.push({ x1: s.x1, y1: s.y1, x2: s.x2, y2: s.y2 });
+    }
+  }
+  return out;
 }
 
 /**

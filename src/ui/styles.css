@@ -465,7 +465,8 @@ body.view {
 .fog-settings,
 .aoe-settings,
 .ruler-settings,
-.draw-settings {
+.draw-settings,
+.walls-settings {
   position: absolute;
   top: 3.25rem;
   left: 8.75rem;
@@ -590,19 +591,22 @@ body.view {
   border-radius: 3px;
 }
 
-.fog-settings-label {
+.fog-settings-label,
+.walls-settings-label {
   font-size: 0.68rem;
   color: var(--fg-muted);
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
 
-.fog-settings-row {
+.fog-settings-row,
+.walls-settings-row {
   display: flex;
   gap: 0.25rem;
 }
 
-.fog-settings-row button {
+.fog-settings-row button,
+.walls-settings-row button {
   appearance: none;
   background: transparent;
   border: 1px solid var(--border);
@@ -616,11 +620,13 @@ body.view {
   text-align: center;
 }
 
-.fog-settings-row button:hover {
+.fog-settings-row button:hover,
+.walls-settings-row button:hover {
   background: var(--hover-overlay);
 }
 
-.fog-settings-row button.active {
+.fog-settings-row button.active,
+.walls-settings-row button.active {
   background: var(--accent);
   border-color: var(--accent);
   color: white;

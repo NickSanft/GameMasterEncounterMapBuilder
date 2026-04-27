@@ -73,7 +73,9 @@ export function createSelectTool(ctx: InputContext): Tool {
       if (hit) {
         // Endpoint drag — set the live overlay and capture the pointer.
         // Selection is unchanged (the endpoint belongs to a wall already
-        // in the selection set).
+        // in the selection set). Phase 112 — `hitTestWallEndpoint`
+        // only returns segment walls (blocks have no endpoints), so
+        // `hit.wall` is narrowed to WallSegment here.
         endpointDrag.current = {
           wallId: hit.wall.id,
           endpoint: hit.endpoint,
@@ -100,7 +102,7 @@ export function createSelectTool(ctx: InputContext): Tool {
     // on top, so a click that lands on both should pick the upper layer.
     const wallHit = tokenHit || annotHit || aoeHit
       ? null
-      : hitTestWalls(state.walls, world.x, world.y);
+      : hitTestWalls(state.walls, world.x, world.y, state.grid.cellSize);
 
     if (tokenHit) {
       // Alt+click on a stacked cell cycles selection down through the stack
@@ -230,7 +232,11 @@ export function createSelectTool(ctx: InputContext): Tool {
       endpointDrag.current = null;
       const state = store.getState();
       const w = state.walls.find((x) => x.id === drag.wallId);
-      if (w) {
+      // Phase 112 — endpoint drag only applies to segment walls.
+      // Block walls have no individual endpoints; the hit-test in
+      // pointerdown filters them out, so this find should always
+      // resolve to a segment when an endpoint drag is in flight.
+      if (w && w.kind === 'segment') {
         const same = drag.endpoint === 1
           ? drag.x === w.x1 && drag.y === w.y1
           : drag.x === w.x2 && drag.y === w.y2;
@@ -295,18 +301,34 @@ export function createSelectTool(ctx: InputContext): Tool {
             }
             const w = state.walls.find((x) => x.id === id);
             if (w) {
-              // Walls translate continuously (both endpoints) — like
-              // annotations / AoE, no grid snapping.
-              store.applyPatch({
-                kind: 'wall-update',
-                id,
-                changes: {
-                  x1: w.x1 + overlay.deltaX,
-                  y1: w.y1 + overlay.deltaY,
-                  x2: w.x2 + overlay.deltaX,
-                  y2: w.y2 + overlay.deltaY,
-                },
-              });
+              if (w.kind === 'segment') {
+                // Walls translate continuously (both endpoints) — like
+                // annotations / AoE, no grid snapping.
+                store.applyPatch({
+                  kind: 'wall-update',
+                  id,
+                  changes: {
+                    x1: w.x1 + overlay.deltaX,
+                    y1: w.y1 + overlay.deltaY,
+                    x2: w.x2 + overlay.deltaX,
+                    y2: w.y2 + overlay.deltaY,
+                  },
+                });
+              } else {
+                // Phase 112 — block walls translate by GRID-SNAPPED
+                // deltas (their geometry is integer cell coords). Snap
+                // to the nearest cell so a small drag still lands.
+                if (gridDX !== 0 || gridDY !== 0) {
+                  store.applyPatch({
+                    kind: 'wall-update',
+                    id,
+                    changes: {
+                      cellX: Math.max(0, w.cellX + gridDX),
+                      cellY: Math.max(0, w.cellY + gridDY),
+                    },
+                  });
+                }
+              }
             }
           }
         });
@@ -327,7 +349,7 @@ export function createSelectTool(ctx: InputContext): Tool {
         const tokenHits = collectLassoHits(state.tokens, state.grid.cellSize, rect);
         const annotHits = collectAnnotationLassoHits(state.annotations, rect);
         const aoeHits = collectAoeLassoHits(state.aoeTemplates, rect);
-        const wallHits = collectWallLassoHits(state.walls, rect);
+        const wallHits = collectWallLassoHits(state.walls, rect, state.grid.cellSize);
         const hits = [...tokenHits, ...annotHits, ...aoeHits, ...wallHits];
         if (additive) {
           const merged = new Set(startSel);

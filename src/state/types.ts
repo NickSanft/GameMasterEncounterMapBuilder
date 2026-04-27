@@ -199,59 +199,84 @@ export interface DrawStroke {
 }
 
 /**
- * A line-segment wall on the map. Stored in world-pixel coordinates
- * (not grid cells) so walls can freely cut across cells — useful for
- * dungeon corridors, doorways, and arbitrary masonry.
+ * A wall on the map. Phase 112 — walls are now a discriminated union
+ * over a `kind` field:
+ *   - `'segment'` (the original Phase 54 shape — a line segment between
+ *     two world-pixel endpoints).
+ *   - `'block'` (Phase 112 — a wall *region* that fills one or more
+ *     grid cells as a single entity).
  *
- * `blocksSight` drives the Phase 55 line-of-sight algorithm: only
- * walls with this flag contribute to the visibility polygon.
- * `blocksMovement` is a flag reserved for a future grid-pathing
- * feature; Phase 54 stores it but doesn't consume it yet.
+ * Pre-112 stored walls have no `kind` field at all; `deserializeState`
+ * normalizes them to `kind: 'segment'` on read so the in-memory model
+ * always has well-formed walls. Post-112 sync envelopes carry the
+ * explicit `kind`; pre-112 peers receiving a `kind: 'block'` wall
+ * will drop it (they require x1/y1/x2/y2 in the deserialize filter)
+ * — Phase 112 is forward-only, like Phase 109's hiddenTokenIds.
+ *
+ * `blocksSight` drives the Phase 55 line-of-sight algorithm. For
+ * segments, the segment IS the occluder. For blocks, all four
+ * perimeter edges contribute (the LoS path expanding via
+ * `wallToSegments` in `walls.ts`).
+ *
+ * `blocksMovement` is reserved for a future grid-pathing feature.
  *
  * Visibility (0.72.3): walls render on BOTH the GM and Spectator
- * canvases. They're already serialized in `full-state` / patch
- * messages (have been since Phase 54), and the spectator-side
- * `refreshLos` reads them for the visibility polygon. The original
- * "GM-only" rationale (hide floor plans from devtools-snooping
- * players) was an over-correction: walls represent physical
- * features players naturally expect to see at the table. A future
- * phase may add a per-wall `visibility: 'shared' | 'gm'` for
- * secret-door style hiding.
+ * canvases by default; per-wall `visibility: 'gm'` (Phase 85) hides
+ * the wall's outline from the Spectator while still letting it
+ * contribute to LoS — the secret-door pattern.
  */
-export interface Wall {
+export type Wall = WallSegment | WallBlock;
+
+interface WallBase {
   id: ID;
+  blocksSight: boolean;
+  blocksMovement: boolean;
+  /**
+   * Phase 85 — `'shared'` (default) walls render on both GM and
+   * Spectator canvases. `'gm'` hides the wall's outline from the
+   * Spectator canvas while still contributing to LoS (secret door /
+   * hidden passage). Optional + back-compat: pre-85 walls + freshly-
+   * drawn ones default to `'shared'`.
+   */
+  visibility?: 'shared' | 'gm';
+}
+
+export interface WallSegment extends WallBase {
+  kind: 'segment';
   x1: number;
   y1: number;
   x2: number;
   y2: number;
-  blocksSight: boolean;
-  blocksMovement: boolean;
   /**
    * Phase 85 — render thickness in screen pixels at zoom = 1. Optional;
-   * pre-85 walls and freshly-drawn ones default to `WALL_DEFAULT_THICKNESS_PX`
-   * (see walls.ts). Stored per-wall so a stout exterior wall can be
-   * authored at e.g. 4px while interior dividers stay at 2px.
-   *
-   * Units are screen-pixels (the renderer divides by camera zoom so
-   * lines stay visually consistent across zoom levels) — same as
-   * the existing `WALL_WIDTH_SCREEN_PX` constant the layer used to
-   * apply uniformly.
+   * pre-85 walls and freshly-drawn ones default to
+   * `WALL_DEFAULT_THICKNESS_PX` (see walls.ts). Phase 111 bumped the
+   * editor max from 12 → 48 px so a segment wall can fill a full grid
+   * cell across; Phase 112's `WallBlock` is the discrete entity for
+   * regions larger than a single cell.
    */
   thickness?: number;
-  /**
-   * Phase 85 — `'shared'` (default) walls render on both GM and
-   * Spectator canvases AND contribute to the spectator's LoS mask.
-   * `'gm'` walls render ONLY on the GM canvas (and STILL contribute
-   * to the spectator's LoS — they're physical occluders, the player
-   * just doesn't see the wall outline). Use case: secret doors,
-   * hidden passages — the wall blocks sight but the player doesn't
-   * know it's there until the GM reveals it.
-   *
-   * Optional + back-compat: pre-85 walls + freshly-drawn ones
-   * default to `'shared'`. Anything outside the known kinds collapses
-   * to `'shared'` in `deserializeState`.
-   */
-  visibility?: 'shared' | 'gm';
+}
+
+/**
+ * Phase 112 — a wall *region* that fills `cellsWide × cellsTall` grid
+ * cells starting at `(cellX, cellY)`. Authored by drag-creating a
+ * rectangle in the Walls tool's Block mode. The renderer fills the
+ * region as a solid wall material; LoS treats the region's perimeter
+ * as four blocking segments. Block walls have no `thickness` (the
+ * region IS the wall); they have no individual endpoints (drag-to-
+ * resize is a future polish — for now, edit by re-drawing).
+ */
+export interface WallBlock extends WallBase {
+  kind: 'block';
+  /** Top-left grid cell, x in cells. */
+  cellX: number;
+  /** Top-left grid cell, y in cells. */
+  cellY: number;
+  /** Width in cells (≥ 1). */
+  cellsWide: number;
+  /** Height in cells (≥ 1). */
+  cellsTall: number;
 }
 
 export interface InitiativeEntry {
@@ -355,7 +380,22 @@ export type StatePatch =
   | { kind: 'stroke-remove'; id: ID }
   | { kind: 'strokes-clear' }
   | { kind: 'wall-add'; wall: Wall }
-  | { kind: 'wall-update'; id: ID; changes: Partial<Omit<Wall, 'id'>> }
+  /**
+   * Phase 112 — `changes` is the union of all updatable wall fields
+   * across both kinds. The store does a naive spread merge; callers
+   * are responsible for only setting fields appropriate to the
+   * existing wall's `kind` (segment paths set x1/y1/x2/y2/thickness;
+   * block paths set cellX/cellY/cellsWide/cellsTall). The `kind`
+   * itself is NOT updatable — converting a segment to a block (or
+   * vice versa) is a delete + re-add operation.
+   */
+  | {
+      kind: 'wall-update';
+      id: ID;
+      changes: Partial<
+        Omit<WallSegment, 'id' | 'kind'> & Omit<WallBlock, 'id' | 'kind'>
+      >;
+    }
   | { kind: 'wall-remove'; id: ID }
   | { kind: 'walls-clear' }
   | { kind: 'weather-set'; weather: WeatherKind }

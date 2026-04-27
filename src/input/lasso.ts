@@ -70,10 +70,26 @@ export function collectAnnotationLassoHits(
 export function collectWallLassoHits(
   walls: readonly Wall[],
   lasso: LassoRect,
+  cellSize = 0,
 ): ID[] {
   const { minX, maxX, minY, maxY } = normalize(lasso);
   const hits: ID[] = [];
   for (const w of walls) {
+    if (w.kind === 'block') {
+      // Phase 112 — block walls hit the lasso when their AABB
+      // intersects the lasso rect. cellSize must be supplied for
+      // block hits to register; tests that don't care about blocks
+      // can omit it (pre-112 default of 0 means blocks never match).
+      if (cellSize <= 0) continue;
+      const bx1 = w.cellX * cellSize;
+      const by1 = w.cellY * cellSize;
+      const bx2 = (w.cellX + w.cellsWide) * cellSize;
+      const by2 = (w.cellY + w.cellsTall) * cellSize;
+      if (bx1 <= maxX && bx2 >= minX && by1 <= maxY && by2 >= minY) {
+        hits.push(w.id);
+      }
+      continue;
+    }
     if (segmentIntersectsRect(w.x1, w.y1, w.x2, w.y2, minX, minY, maxX, maxY)) {
       hits.push(w.id);
     }

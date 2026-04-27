@@ -466,39 +466,69 @@ export function deserializeState(s: SerializedSessionState): SessionState {
       : [],
     walls: Array.isArray(s.walls)
       ? s.walls
-          .filter((w): w is Wall =>
-            !!w &&
-            typeof (w as { x1?: unknown }).x1 === 'number' &&
-            typeof (w as { y1?: unknown }).y1 === 'number' &&
-            typeof (w as { x2?: unknown }).x2 === 'number' &&
-            typeof (w as { y2?: unknown }).y2 === 'number',
-          )
-          .map((w) => {
-            const out: Wall = {
+          // Phase 112 — accept either a segment wall (x1/y1/x2/y2) OR a
+          // block wall (kind:'block' + cellX/Y/cellsWide/Tall). Pre-112
+          // peers + freshly-drawn lines are normalized to kind:'segment'.
+          .filter((w): w is Wall => {
+            if (!w) return false;
+            const k = (w as { kind?: unknown }).kind;
+            if (k === 'block') {
+              return (
+                typeof (w as { cellX?: unknown }).cellX === 'number' &&
+                typeof (w as { cellY?: unknown }).cellY === 'number' &&
+                typeof (w as { cellsWide?: unknown }).cellsWide === 'number' &&
+                typeof (w as { cellsTall?: unknown }).cellsTall === 'number'
+              );
+            }
+            // Default = segment (back-compat with pre-112 / pre-kind blobs).
+            return (
+              typeof (w as { x1?: unknown }).x1 === 'number' &&
+              typeof (w as { y1?: unknown }).y1 === 'number' &&
+              typeof (w as { x2?: unknown }).x2 === 'number' &&
+              typeof (w as { y2?: unknown }).y2 === 'number'
+            );
+          })
+          .map((w): Wall => {
+            const k = (w as { kind?: unknown }).kind;
+            const vis = (w as { visibility?: unknown }).visibility;
+            const visibility: 'shared' | 'gm' | undefined =
+              vis === 'gm' ? 'gm' : vis === 'shared' ? 'shared' : undefined;
+            if (k === 'block') {
+              const wb = w as Partial<import('../state/types.js').WallBlock>;
+              const out: import('../state/types.js').WallBlock = {
+                kind: 'block',
+                id: String(w.id ?? ''),
+                cellX: Math.max(0, Math.floor(Number(wb.cellX) || 0)),
+                cellY: Math.max(0, Math.floor(Number(wb.cellY) || 0)),
+                cellsWide: Math.max(1, Math.floor(Number(wb.cellsWide) || 1)),
+                cellsTall: Math.max(1, Math.floor(Number(wb.cellsTall) || 1)),
+                blocksSight: w.blocksSight !== false,
+                blocksMovement: w.blocksMovement !== false,
+              };
+              if (visibility !== undefined) out.visibility = visibility;
+              return out;
+            }
+            // Segment wall (explicit or pre-112 default).
+            const ws = w as Partial<import('../state/types.js').WallSegment>;
+            const out: import('../state/types.js').WallSegment = {
+              kind: 'segment',
               id: String(w.id ?? ''),
-              x1: w.x1,
-              y1: w.y1,
-              x2: w.x2,
-              y2: w.y2,
+              x1: Number(ws.x1),
+              y1: Number(ws.y1),
+              x2: Number(ws.x2),
+              y2: Number(ws.y2),
               blocksSight: w.blocksSight !== false,
               blocksMovement: w.blocksMovement !== false,
             };
-            // Phase 85 — optional thickness + visibility. Pre-85 walls
-            // omit these; we keep the field absent on the deserialized
-            // wall so a roundtrip of a pre-85 save stays byte-identical
-            // (the renderer falls back to its default when absent).
-            // Anything outside the known visibility kinds collapses
-            // to `'shared'` (the safer default — making a wall
-            // unexpectedly invisible could surprise a GM mid-session).
+            // Phase 85 — optional thickness. Pre-85 walls omit it;
+            // keep absent on roundtrip so the renderer's default kicks in.
             if (
               typeof (w as { thickness?: unknown }).thickness === 'number' &&
               Number.isFinite((w as { thickness: number }).thickness)
             ) {
               out.thickness = (w as { thickness: number }).thickness;
             }
-            const vis = (w as { visibility?: unknown }).visibility;
-            if (vis === 'gm') out.visibility = 'gm';
-            else if (vis === 'shared') out.visibility = 'shared';
+            if (visibility !== undefined) out.visibility = visibility;
             return out;
           })
       : [],

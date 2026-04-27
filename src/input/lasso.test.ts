@@ -6,10 +6,17 @@ import {
   collectWallLassoHits,
   segmentIntersectsRect,
 } from './lasso.js';
-import type { Annotation, AoeTemplate, Token, Wall } from '../state/types.js';
+import type {
+  Annotation,
+  AoeTemplate,
+  Token,
+  Wall,
+  WallSegment,
+} from '../state/types.js';
 
-function wall(partial: Partial<Wall> & { id: string }): Wall {
+function wall(partial: Partial<WallSegment> & { id: string }): Wall {
   return {
+    kind: 'segment',
     id: partial.id,
     x1: partial.x1 ?? 0,
     y1: partial.y1 ?? 0,

@@ -1,12 +1,17 @@
 /**
  * Helpers for the Wall state slice.
  *
- * Walls are line segments stored in world-pixel coordinates. Phase 54
- * introduces the state model + tool + GM-only rendering; Phase 55 will
- * consume them for dynamic line-of-sight.
+ * Walls were originally (Phase 54) just line segments stored in
+ * world-pixel coordinates. Phase 112 extended `Wall` to a discriminated
+ * union over `kind: 'segment' | 'block'` so wall regions (whole-cell
+ * fills) can coexist with the line-segment authoring path.
+ *
+ * Common helpers below operate on `Wall` regardless of kind via the
+ * `wallToSegments(w, cellSize)` adapter (returns 1 segment for
+ * `kind: 'segment'`, 4 perimeter edges for `kind: 'block'`).
  */
 
-import type { Wall } from './types.js';
+import type { Wall, WallSegment, WallBlock } from './types.js';
 import { nid } from '../util/id.js';
 
 /** Pixel thickness of the hit-test band around a wall segment. */
@@ -56,8 +61,9 @@ export interface WallConstructorOptions {
  * to the per-canvas default) and `'shared'` visibility (wall renders on
  * both GM and Spectator).
  */
-export function createWall(opts: WallConstructorOptions): Wall {
-  const w: Wall = {
+export function createWall(opts: WallConstructorOptions): WallSegment {
+  const w: WallSegment = {
+    kind: 'segment',
     id: nid(),
     x1: opts.x1,
     y1: opts.y1,
@@ -69,6 +75,100 @@ export function createWall(opts: WallConstructorOptions): Wall {
   if (opts.thickness !== undefined) w.thickness = opts.thickness;
   if (opts.visibility !== undefined) w.visibility = opts.visibility;
   return w;
+}
+
+/**
+ * Phase 112 — block-wall constructor. Drag-create UI computes the
+ * grid cells covered by the drag rectangle + hands them to this
+ * helper. Defaults match `createWall`: blocks both sight + movement.
+ */
+export interface WallBlockConstructorOptions {
+  cellX: number;
+  cellY: number;
+  cellsWide: number;
+  cellsTall: number;
+  blocksSight?: boolean;
+  blocksMovement?: boolean;
+  visibility?: 'shared' | 'gm';
+}
+
+export function createWallBlock(opts: WallBlockConstructorOptions): WallBlock {
+  const w: WallBlock = {
+    kind: 'block',
+    id: nid(),
+    cellX: Math.max(0, Math.floor(opts.cellX)),
+    cellY: Math.max(0, Math.floor(opts.cellY)),
+    cellsWide: Math.max(1, Math.floor(opts.cellsWide)),
+    cellsTall: Math.max(1, Math.floor(opts.cellsTall)),
+    blocksSight: opts.blocksSight ?? true,
+    blocksMovement: opts.blocksMovement ?? true,
+  };
+  if (opts.visibility !== undefined) w.visibility = opts.visibility;
+  return w;
+}
+
+/** Phase 112 — kind discriminator predicates. */
+export function isBlockWall(w: Wall): w is WallBlock {
+  return w.kind === 'block';
+}
+
+export function isSegmentWall(w: Wall): w is WallSegment {
+  return w.kind === 'segment';
+}
+
+/**
+ * Phase 112 — convert a wall (any kind) to one or more line segments
+ * in world-pixel coords. Segments return [self]; blocks return their
+ * 4 perimeter edges (top, right, bottom, left). Used by:
+ *   - LoS collectors (Phase 55 / 57) — every segment becomes an
+ *     occluder for the visibility polygon.
+ *   - Generic per-edge consumers that don't care about kind.
+ *
+ * `cellSize` is in world pixels per grid cell — required for blocks
+ * since their geometry is stored in cells; ignored for segments.
+ */
+export interface SegmentLike {
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+}
+
+export function wallToSegments(w: Wall, cellSize: number): SegmentLike[] {
+  if (w.kind === 'segment') {
+    return [{ x1: w.x1, y1: w.y1, x2: w.x2, y2: w.y2 }];
+  }
+  // Block: 4 perimeter edges, in world pixels.
+  const x1 = w.cellX * cellSize;
+  const y1 = w.cellY * cellSize;
+  const x2 = (w.cellX + w.cellsWide) * cellSize;
+  const y2 = (w.cellY + w.cellsTall) * cellSize;
+  return [
+    { x1, y1, x2, y2: y1 }, // top
+    { x1: x2, y1, x2, y2 }, // right
+    { x1, y1: y2, x2, y2 }, // bottom
+    { x1, y1, x2: x1, y2 }, // left
+  ];
+}
+
+/**
+ * Phase 112 — block-wall AABB in world pixels. Used by the renderer
+ * (filled rectangle) and the hit-tester (point-in-rect check).
+ */
+export interface BlockBounds {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+export function blockWallBounds(w: WallBlock, cellSize: number): BlockBounds {
+  return {
+    x: w.cellX * cellSize,
+    y: w.cellY * cellSize,
+    w: w.cellsWide * cellSize,
+    h: w.cellsTall * cellSize,
+  };
 }
 
 /**
@@ -92,7 +192,12 @@ export function clampThickness(raw: unknown): number {
  * tie, matching `hitTestWalls`'s mental model.
  */
 export interface WallEndpointHit {
-  wall: Wall;
+  /**
+   * Phase 112 — only segment walls have endpoints; the hit-test
+   * filter below skips block walls entirely. Narrowed accordingly so
+   * callers don't need to re-discriminate.
+   */
+  wall: WallSegment;
   endpoint: 1 | 2;
 }
 
@@ -108,6 +213,10 @@ export function hitTestWallEndpoint(
   for (let i = walls.length - 1; i >= 0; i--) {
     const w = walls[i]!;
     if (!selectedIds.has(w.id)) continue;
+    // Phase 112 — block walls have no individual endpoints (drag-to-
+    // resize is a future polish; for now blocks are edited via re-
+    // draw + delete). Skip them in the endpoint hit-test entirely.
+    if (w.kind !== 'segment') continue;
     const d1x = px - w.x1;
     const d1y = py - w.y1;
     const d1Sq = d1x * d1x + d1y * d1y;
@@ -165,19 +274,30 @@ export function hitTestWalls(
   walls: readonly Wall[],
   px: number,
   py: number,
+  cellSize: number,
   tolerancePx: number = WALL_HIT_TOLERANCE_PX,
 ): Wall | null {
   const tolSq = tolerancePx * tolerancePx;
   for (let i = walls.length - 1; i >= 0; i--) {
     const w = walls[i]!;
+    if (w.kind === 'block') {
+      // Phase 112 — point-in-rect for the AABB. No tolerance band
+      // since the entire region IS the wall (unlike a 1D segment that
+      // benefits from a few px of grace either side).
+      const b = blockWallBounds(w, cellSize);
+      if (px >= b.x && px <= b.x + b.w && py >= b.y && py <= b.y + b.h) {
+        return w;
+      }
+      continue;
+    }
     const dSq = distanceSquaredToSegment(px, py, w.x1, w.y1, w.x2, w.y2);
     if (dSq <= tolSq) return w;
   }
   return null;
 }
 
-/** Euclidean length of a wall in world pixels. */
-export function wallLength(w: Pick<Wall, 'x1' | 'y1' | 'x2' | 'y2'>): number {
+/** Euclidean length of a segment wall in world pixels. */
+export function wallLength(w: Pick<WallSegment, 'x1' | 'y1' | 'x2' | 'y2'>): number {
   const dx = w.x2 - w.x1;
   const dy = w.y2 - w.y1;
   return Math.hypot(dx, dy);

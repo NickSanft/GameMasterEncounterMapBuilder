@@ -5,7 +5,7 @@ import {
   collectViewers,
   spectatorEffectiveFog,
 } from './los-compose.js';
-import type { Token, TokenLight, Wall, SessionState } from './types.js';
+import type { Token, TokenLight, Wall, WallSegment, SessionState } from './types.js';
 import { createDefaultState } from './types.js';
 
 function token(overrides: Partial<Token> & { id: string }): Token {
@@ -29,8 +29,9 @@ function token(overrides: Partial<Token> & { id: string }): Token {
   };
 }
 
-function wall(overrides: Partial<Wall> & { id: string }): Wall {
+function wall(overrides: Partial<WallSegment> & { id: string }): Wall {
   return {
+    kind: 'segment',
     id: overrides.id,
     x1: overrides.x1 ?? 0,
     y1: overrides.y1 ?? 0,
@@ -124,13 +125,55 @@ describe('collectSightWalls', () => {
       wall({ id: 'w2', blocksSight: false }),
       wall({ id: 'w3', blocksSight: true }),
     ];
-    const out = collectSightWalls(walls);
+    const out = collectSightWalls(walls, GRID.cellSize);
     expect(out).toHaveLength(2);
   });
 
   it('strips id + blocks* fields from the output', () => {
     const walls = [wall({ id: 'w1', x1: 1, y1: 2, x2: 3, y2: 4 })];
-    expect(collectSightWalls(walls)).toEqual([{ x1: 1, y1: 2, x2: 3, y2: 4 }]);
+    expect(collectSightWalls(walls, GRID.cellSize)).toEqual([
+      { x1: 1, y1: 2, x2: 3, y2: 4 },
+    ]);
+  });
+
+  it('Phase 112 — block walls expand to 4 perimeter segments', () => {
+    // A 2x1 block at cell (3, 4) on a 10-px grid covers world rect
+    // x:[30..50], y:[40..50]. Expect top, right, bottom, left edges.
+    const walls: Wall[] = [
+      {
+        kind: 'block',
+        id: 'b1',
+        cellX: 3,
+        cellY: 4,
+        cellsWide: 2,
+        cellsTall: 1,
+        blocksSight: true,
+        blocksMovement: true,
+      },
+    ];
+    const out = collectSightWalls(walls, 10);
+    expect(out).toEqual([
+      { x1: 30, y1: 40, x2: 50, y2: 40 }, // top
+      { x1: 50, y1: 40, x2: 50, y2: 50 }, // right
+      { x1: 30, y1: 50, x2: 50, y2: 50 }, // bottom
+      { x1: 30, y1: 40, x2: 30, y2: 50 }, // left
+    ]);
+  });
+
+  it('Phase 112 — blocksSight=false on a block wall drops all 4 perimeter edges', () => {
+    const walls: Wall[] = [
+      {
+        kind: 'block',
+        id: 'b1',
+        cellX: 0,
+        cellY: 0,
+        cellsWide: 1,
+        cellsTall: 1,
+        blocksSight: false,
+        blocksMovement: true,
+      },
+    ];
+    expect(collectSightWalls(walls, 10)).toEqual([]);
   });
 });
 

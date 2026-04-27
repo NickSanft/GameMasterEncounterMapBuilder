@@ -102,8 +102,51 @@ walls that fill a tile + wider walls in general. Three phases shipped
 small-to-large so the lowest-risk change lands first:
 
 - **0.111.0** — Wider walls + "Fill cell" preset (max thickness 12 → 48 px; one-click snap to grid cellSize) ✅
-- **0.112.0** — Block walls (a wall *region* that fills one or more grid cells; new `kind: 'block'` discriminator)
+- **0.112.0** — Block walls (a wall *region* that fills one or more grid cells; new `kind: 'block'` discriminator) ✅
 - **0.113.0** — Door entities (segment walls with toggleable `open` state — closed blocks LoS / movement, open doesn't)
+
+---
+
+## [0.112.0] — 2026-04-26 — Block walls
+
+### Added
+- **Block walls** — a new wall type that fills one or more grid cells as a single entity. Drag-to-create snaps to the grid; the result is one selectable, deletable, sync-able entity (not 4 separate segments). Use case: pillars, untraversable terrain, large fortifications, anything you'd otherwise build out of 4 hand-aligned segments.
+- **Walls tool gets a Lines / Block mode toggle** in its settings panel (above the canvas, top-left). Lines = original click-vertex chain. Block = drag-a-rectangle that becomes a block wall snapped to grid cells.
+- **End-to-end first-class behavior**: block walls render as filled rectangles; their 4 perimeter edges contribute to LoS just like four separate segments would; right-click + lasso + delete + sync + visibility (`shared`/`gm`) all work uniformly with segment walls.
+- **Drag-time ghost preview**: while you drag in Block mode, a translucent dashed ghost rectangle follows the cursor showing the prospective block. Releases commit; Esc / right-click cancels mid-drag.
+
+### Why this matters
+The user asked for walls that "take up a full tile." Phase 111 made segment thickness reach 48 px so a single segment can fill a cell across, but four-walls-around-a-pillar was still four separate entities. Phase 112 promotes "the wall material fills this region" to a first-class type — one click to author, one click to delete, one entity in the selection set.
+
+### Architecture
+- **`src/state/types.ts`** — `Wall` is now a discriminated union: `WallSegment | WallBlock`. The `kind` field is required in both arms (no implicit defaults at the type level); the deserializer normalizes pre-112 walls (no `kind` field) to `kind: 'segment'` on read so the in-memory model is always well-formed.
+- **`src/state/walls.ts`** — added `createWallBlock(opts)`, the `isBlockWall` / `isSegmentWall` predicates, `wallToSegments(w, cellSize)` (returns 1 segment for `kind: 'segment'`, 4 perimeter edges for `kind: 'block'` — used by every per-edge consumer), and `blockWallBounds(w, cellSize)` (AABB in world pixels for renderer + hit-test). `hitTestWalls` gained a `cellSize` parameter so block-wall AABB checks can run; the function returns `Wall` (segments still hit by tolerance band, blocks hit by exact point-in-rect — no slop, since the entire region IS the wall). `hitTestWallEndpoint` returns `WallSegment` (block walls have no individual endpoints in Phase 112; drag-to-resize is a future polish).
+- **`src/sync/messages.ts`** — `deserializeState` accepts both shapes: a `kind: 'block'` wall (validated by cellX/Y/cellsWide/Tall) OR the original segment shape (default for missing `kind`). Pre-112 peers reading a Phase-112 sync envelope drop block walls during the deserialize filter (their schema requires x1/y1/x2/y2) — Phase 112 is forward-only, like Phase 109's `hiddenTokenIds`.
+- **`src/state/los-compose.ts`** — `collectSightWalls` now takes `(walls, cellSize)` and uses `wallToSegments` to expand block walls into 4 LoS occluders. Updated `collectSightWalls` callers in `gm.ts` + `spectator.ts`.
+- **`src/render/layer-walls.ts`** — split the wall draw pass into segment-only and block-only halves. Block walls render as filled `WALL_COLOR` rectangles with a 1 px outline (highlighted blocks get the accent fill + outline; GM-only blocks get a translucent fill + dashed outline). Added a `getBlockPreview` callback for the in-flight drag ghost.
+- **`src/input/tool-walls.ts`** — added `WallsToolMode` ('line' | 'block'), the `WallsToolOptionsRef` shape, and a `BlockPreviewRef` for the drag ghost. The tool's `onPointerDown` / `onPointerMove` / `onPointerUp` paths branch on the active mode: line mode = the original click-vertex chain (unchanged); block mode = drag-from-cell-A to cell-B and commit on pointerup. Esc and right-click cancel a block drag mid-flow.
+- **`src/ui/walls-settings.ts`** (new) — small settings panel mirroring `fog-settings` shape; two-button mode toggle that mutates the options ref.
+- **`src/state/canvas-nav.ts`** — block walls use the AABB centroid for the reading-order sort; the announcer reads "Wall block, 2 by 3 cells" instead of segment-style "3 squares long".
+- **`src/input/lasso.ts`** — block walls hit the lasso when their AABB intersects the rect (segment walls still use the line-segment intersection check).
+- **`src/input/tool-select.ts`** + **`src/entries/gm.ts`** — wall translation paths branch on kind: segment translate by world-pixel deltas (both endpoints), block translate by integer cell deltas (clamped to ≥ 0).
+- **`src/ui/wall-editor.ts`** — when the edit selection contains only block walls, the thickness slider row is hidden entirely (blocks have no thickness). Mixed segment + block selections show the slider but compute "all same" only over the segment subset.
+
+### What's deliberately deferred to a future phase
+- **Drag-to-resize a block** by its corners (no endpoint handles for blocks in Phase 112; resize via delete + redraw).
+- **Cell-perfect block-vs-token movement** (`blocksMovement` is still a flag, not enforced — same as for segment walls pre-112).
+- **Wall-editor block-specific fields** like a "Resize to N×M cells" input (you can edit visibility / sight / movement flags via the existing UI; geometry edits are out-of-scope for now).
+
+### Tests
+- **+12 unit tests** in `src/state/walls.test.ts`: `createWallBlock` defaults / floors fractional coords / clamps cellsWide-Tall to ≥ 1 / threads visibility; `isBlockWall` + `isSegmentWall` predicates; `wallToSegments` returns 1 / 4 segments for segment / block; `blockWallBounds` AABB; `hitTestWalls` block-path inside-AABB hit / outside-AABB miss / segment-on-top-of-block z-order; `hitTestWallEndpoint` skips block walls (no endpoints).
+- **+2 unit tests** in `src/state/los-compose.test.ts`: block walls expand to 4 perimeter LoS segments; `blocksSight: false` on a block drops all 4 edges.
+- **+3 Playwright specs** in `e2e/block-walls.spec.ts` (new): Walls panel exposes the Lines / Block toggle (Lines is the default + active); Block mode drag creates a wall whose right-click surfaces "Wall actions"; switching back to Lines restores click-vertex authoring.
+- **All 1258 unit tests + 301 Playwright specs pass** locally on the first run after the TypeScript narrowing pass walked me through every call site that needed branching.
+
+### Bundle
+- **JS budget bumped 94 → 96 KB.** Phase 112 landed at 93.92 / 94 KB which would have been 80 B under (single-byte margin into Phase 113 was risky); bumped proactively to leave headroom for Phase 113's door entities. CSS 11.55 / 12 KB. Lazy chunks unchanged.
+
+### Pre-push checklist
+Caught zero issues — full unit suite + full e2e + visual-regression spec + size-limit (after the proactive 94 → 96 KB bump) all green before push. Fifteen clean phases in a row now (97 + 99 + 100 + 101 + 102 + 103 + 104 + 105 + 106 + 107 + 108 + 109 + 110 + 111 + 112).
 
 ---
 
