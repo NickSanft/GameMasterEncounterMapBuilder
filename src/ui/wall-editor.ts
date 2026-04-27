@@ -60,6 +60,13 @@ export interface WallEditorOptions {
    * walls no longer exist to edit.
    */
   onDelete(ids: readonly string[]): void;
+  /**
+   * Phase 111 — current grid cell size in world pixels. Used by the
+   * "Fill cell" preset button to set thickness to (cellSize, clamped
+   * to WALL_MAX_THICKNESS_PX) so the wall renders at exactly one
+   * grid cell wide. Optional; the button is hidden when omitted.
+   */
+  getCellSize?(): number;
 }
 
 export function mountWallEditor(opts: WallEditorOptions): WallEditorHandle {
@@ -118,6 +125,13 @@ export function mountWallEditor(opts: WallEditorOptions): WallEditorHandle {
                  min="${WALL_MIN_THICKNESS_PX}" max="${WALL_MAX_THICKNESS_PX}" step="0.5" />
           <output data-field="thickness-out">—</output>
         </label>
+        <!-- Phase 111 — one-click preset that snaps thickness to the
+             current grid cell size (clamped to MAX). Hidden when
+             getCellSize wasn't supplied. -->
+        <button type="button" class="wall-editor-fill-cell" data-field="fill-cell"
+          title="Snap thickness to one full grid cell (Phase 111)" hidden>
+          Fill cell
+        </button>
       </div>
     </div>
     <div class="modal-footer">
@@ -137,6 +151,12 @@ export function mountWallEditor(opts: WallEditorOptions): WallEditorHandle {
   const visGmEl = modal.querySelector<HTMLInputElement>('[data-field="vis-gm"]')!;
   const thicknessEl = modal.querySelector<HTMLInputElement>('[data-field="thickness"]')!;
   const thicknessOut = modal.querySelector<HTMLOutputElement>('[data-field="thickness-out"]')!;
+  const fillCellBtn = modal.querySelector<HTMLButtonElement>('[data-field="fill-cell"]')!;
+  // Phase 111 — surface the Fill-cell preset only when the host wired
+  // a `getCellSize` provider. Tests / minimal mounts can omit it.
+  if (opts.getCellSize) {
+    fillCellBtn.hidden = false;
+  }
   const deleteBtn = modal.querySelector<HTMLButtonElement>('[data-field="delete"]')!;
   const doneBtn = modal.querySelector<HTMLButtonElement>('[data-field="done"]')!;
   const closeBtn = modal.querySelector<HTMLButtonElement>('.modal-close')!;
@@ -251,6 +271,18 @@ export function mountWallEditor(opts: WallEditorOptions): WallEditorHandle {
   });
   thicknessEl.addEventListener('change', () => {
     const v = clampThickness(parseFloat(thicknessEl.value));
+    opts.onChange(editingIds, { thickness: v });
+    render();
+  });
+
+  // Phase 111 — Fill cell snaps thickness to the current grid cell
+  // size so the wall body fills exactly one cell across. The
+  // `clampThickness` call below caps to WALL_MAX_THICKNESS_PX —
+  // grids larger than the cap render at the cap (still chunky).
+  fillCellBtn.addEventListener('click', () => {
+    const cellSize = opts.getCellSize?.() ?? 0;
+    if (cellSize <= 0) return;
+    const v = clampThickness(cellSize);
     opts.onChange(editingIds, { thickness: v });
     render();
   });

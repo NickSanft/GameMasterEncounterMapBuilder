@@ -163,10 +163,11 @@ describe('mountWallEditor', () => {
     thickness.dispatchEvent(new Event('change'));
     expect(onChange).toHaveBeenCalledWith([wall.id], { thickness: 6 });
 
-    // Out-of-range value gets clamped.
+    // Out-of-range value gets clamped to WALL_MAX_THICKNESS_PX
+    // (Phase 111 bumped it 12 → 48 for thicker masonry walls).
     thickness.value = '999';
     thickness.dispatchEvent(new Event('change'));
-    expect(onChange).toHaveBeenLastCalledWith([wall.id], { thickness: 12 });
+    expect(onChange).toHaveBeenLastCalledWith([wall.id], { thickness: 48 });
     editor.destroy();
   });
 
@@ -236,6 +237,114 @@ describe('mountWallEditor', () => {
     // The onChange fires (with our id) but the modal then re-renders,
     // sees no live walls, and closes.
     expect(editor.isOpen()).toBe(false);
+    editor.destroy();
+  });
+});
+
+describe('Phase 111 — Fill cell preset', () => {
+  it('button is hidden when getCellSize is not provided', () => {
+    const wall = makeWall();
+    const editor = mountWallEditor({
+      getWallById: (id) => (id === wall.id ? wall : null),
+      onChange: vi.fn(),
+      onDelete: vi.fn(),
+    });
+    editor.openFor([wall]);
+    const btn = document.querySelector<HTMLButtonElement>(
+      '[data-field="fill-cell"]',
+    )!;
+    expect(btn.hidden).toBe(true);
+    editor.destroy();
+  });
+
+  it('button is visible when getCellSize is provided', () => {
+    const wall = makeWall();
+    const editor = mountWallEditor({
+      getWallById: (id) => (id === wall.id ? wall : null),
+      onChange: vi.fn(),
+      onDelete: vi.fn(),
+      getCellSize: () => 50,
+    });
+    editor.openFor([wall]);
+    const btn = document.querySelector<HTMLButtonElement>(
+      '[data-field="fill-cell"]',
+    )!;
+    expect(btn.hidden).toBe(false);
+    editor.destroy();
+  });
+
+  it('clicking Fill cell sets thickness to the cell size', () => {
+    const wall = makeWall({ thickness: 2 });
+    const onChange = vi.fn();
+    const editor = mountWallEditor({
+      getWallById: (id) => (id === wall.id ? wall : null),
+      onChange,
+      onDelete: vi.fn(),
+      getCellSize: () => 32,
+    });
+    editor.openFor([wall]);
+    const btn = document.querySelector<HTMLButtonElement>(
+      '[data-field="fill-cell"]',
+    )!;
+    btn.click();
+    expect(onChange).toHaveBeenCalledWith([wall.id], { thickness: 32 });
+    editor.destroy();
+  });
+
+  it('cell sizes above the cap are clamped to WALL_MAX_THICKNESS_PX', () => {
+    const wall = makeWall();
+    const onChange = vi.fn();
+    const editor = mountWallEditor({
+      getWallById: (id) => (id === wall.id ? wall : null),
+      onChange,
+      onDelete: vi.fn(),
+      // Very large grid — should clamp to 48 (the new Phase 111 max).
+      getCellSize: () => 200,
+    });
+    editor.openFor([wall]);
+    const btn = document.querySelector<HTMLButtonElement>(
+      '[data-field="fill-cell"]',
+    )!;
+    btn.click();
+    expect(onChange).toHaveBeenCalledWith([wall.id], { thickness: 48 });
+    editor.destroy();
+  });
+
+  it('multi-select Fill cell applies to every selected wall', () => {
+    const a = makeWall({ thickness: 2 });
+    const b = makeWall({ thickness: 6 });
+    const onChange = vi.fn();
+    const editor = mountWallEditor({
+      getWallById: (id) =>
+        id === a.id ? a : id === b.id ? b : null,
+      onChange,
+      onDelete: vi.fn(),
+      getCellSize: () => 24,
+    });
+    editor.openFor([a, b]);
+    const btn = document.querySelector<HTMLButtonElement>(
+      '[data-field="fill-cell"]',
+    )!;
+    btn.click();
+    expect(onChange).toHaveBeenCalledWith([a.id, b.id], { thickness: 24 });
+    editor.destroy();
+  });
+
+  it('zero / negative cellSize is a silent no-op', () => {
+    const wall = makeWall();
+    const onChange = vi.fn();
+    const editor = mountWallEditor({
+      getWallById: (id) => (id === wall.id ? wall : null),
+      onChange,
+      onDelete: vi.fn(),
+      getCellSize: () => 0,
+    });
+    editor.openFor([wall]);
+    const btn = document.querySelector<HTMLButtonElement>(
+      '[data-field="fill-cell"]',
+    )!;
+    btn.click();
+    expect(onChange).not.toHaveBeenCalled();
     editor.destroy();
   });
 });

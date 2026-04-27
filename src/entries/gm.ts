@@ -1073,6 +1073,11 @@ const wallEditor = mountWallEditor({
     selection.ids = new Set();
     renderer.requestRender();
   },
+  // Phase 111 — provide the live grid cell size to the wall editor's
+  // "Fill cell" preset button. The button snaps the wall's thickness
+  // to the current cellSize so a stout interior divider can fill a
+  // tile in one click.
+  getCellSize: () => store.getState().grid.cellSize,
 });
 // Phase 94 — combat log + auto-observer. The log is in-memory only
 // (per-tab session); on reload it starts empty. The observer

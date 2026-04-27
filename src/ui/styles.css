@@ -3036,6 +3036,33 @@ body.notes-open .mini-map {
   text-align: right;
 }
 
+/* Phase 111 — Fill-cell preset button. Sits to the right of the
+   thickness slider in the same row; styled like a small secondary
+   button so it doesn't compete with Done / Delete in the footer. */
+.wall-editor-fill-cell {
+  appearance: none;
+  background: transparent;
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.32rem 0.65rem;
+  font-family: inherit;
+  font-size: 0.78rem;
+  cursor: pointer;
+  margin-top: 0.4rem;
+  align-self: flex-start;
+}
+
+.wall-editor-fill-cell:hover {
+  background: var(--hover-overlay);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.wall-editor-fill-cell[hidden] {
+  display: none;
+}
+
 .wall-editor .modal-footer {
   display: flex;
   align-items: center;

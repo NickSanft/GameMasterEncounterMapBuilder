@@ -97,6 +97,45 @@ _Polish:_
 - **0.109.0** — Per-spectator token visibility (extend Phase 82's permissions to "GM hides individual tokens from individual players") ✅
 - **0.110.0** — Persistent player names across reloads (stable cross-session player IDs — flagged in Phase 82 as future) ✅
 
+**Queued (Phases 111 → 113)** — chunky-walls trilogy. User asked for
+walls that fill a tile + wider walls in general. Three phases shipped
+small-to-large so the lowest-risk change lands first:
+
+- **0.111.0** — Wider walls + "Fill cell" preset (max thickness 12 → 48 px; one-click snap to grid cellSize) ✅
+- **0.112.0** — Block walls (a wall *region* that fills one or more grid cells; new `kind: 'block'` discriminator)
+- **0.113.0** — Door entities (segment walls with toggleable `open` state — closed blocks LoS / movement, open doesn't)
+
+---
+
+## [0.111.0] — 2026-04-26 — Wider walls + "Fill cell" preset
+
+### Added
+- **Wall thickness range bumped from 1–12 px to 1–48 px.** Authoring a chunky exterior masonry wall, a thick stone divider, or a "this whole row of cells is wall" pillar no longer saturates the slider at 12. The renderer's existing zoom-aware divisor keeps thicker walls visually consistent across zoom levels.
+- **"Fill cell" preset button** in the wall editor. One click snaps the selected wall(s) thickness to the current grid `cellSize` (clamped to the new 48 px max). At the default 50 px grid, this lands at 48 — visually the wall's body fills a full grid cell across.
+- Multi-select aware: editing N walls at once and clicking Fill cell updates all N in a single `store.batch` (one undo step).
+- Hidden when the host doesn't supply a `getCellSize` callback (Spectator side / minimal test mounts).
+
+### Why this matters
+The user asked for two things: (1) walls that "take up a full tile" and (2) wider walls in general. Phase 111 is the smallest possible change that addresses both directly, before the bigger Phase 112 work (a true block-wall *region* type) lands. After 111 you can already author a thick "fills the cell" wall by clicking Fill cell on any segment; Phase 112 will add a separate region primitive for cases where you want a single entity that occupies several cells at once.
+
+### Architecture
+- **`src/state/walls.ts`** — `WALL_MAX_THICKNESS_PX` bumped 12 → 48. The existing `clampThickness()` helper picks up the new bound automatically; pre-111 walls saved at any thickness ≤ 12 keep working unchanged. Comment on the constant explains the new semantic ("48 px wall on a 48 px grid = full cell").
+- **`src/ui/wall-editor.ts`** — added an optional `getCellSize?(): number` to `WallEditorOptions`. When supplied, a small "Fill cell" button appears beside the thickness slider. Click handler reads the cellSize, clamps via the existing `clampThickness`, and dispatches `onChange` for every wall in the current edit selection. Same event-shape as the slider — wraps in the host's existing `store.batch` so undo works as a single step.
+- **`src/entries/gm.ts`** — wires `getCellSize: () => store.getState().grid.cellSize` into the wall editor mount. Reads live, so the button always uses the current grid (e.g. after a Phase 101 grid-snap).
+- **`src/ui/styles.css`** — small `.wall-editor-fill-cell` block. Secondary-button style (transparent w/ border) so it doesn't compete with the Done / Delete buttons in the footer.
+
+### Tests
+- **+5 unit tests** in `src/ui/wall-editor.test.ts`: button hidden when getCellSize omitted; button visible when supplied; click sets thickness to cellSize; oversized cells clamp to WALL_MAX_THICKNESS_PX; multi-select Fill cell applies to every wall in one onChange call; zero/negative cellSize is a silent no-op.
+- **+1 updated test** for the existing slider-clamp path: out-of-range thickness now clamps to 48 (was 12).
+- **+3 Playwright specs** in `e2e/wall-fill-cell.spec.ts` (new): slider's `max` attribute is `48`; Fill cell button is visible (gm.ts wires getCellSize); clicking it updates the thickness output to `48.0 px` (default 50 px grid clamps to 48).
+- **All 1243 unit tests + 298 Playwright specs pass** locally.
+
+### Bundle
+- 92.49 / 94 KB initial-load brotli (+0.09 KB for the button + handler). CSS 11.53 / 12 KB (+0.02 KB for the button styles). Lazy chunks unchanged. Comfortable headroom.
+
+### Pre-push checklist
+Caught zero issues — full unit suite + full e2e + visual-regression spec + size-limit all green before push. Fourteen clean phases in a row now (97 + 99 + 100 + 101 + 102 + 103 + 104 + 105 + 106 + 107 + 108 + 109 + 110 + 111).
+
 ---
 
 ## [0.110.0] — 2026-04-26 — Persistent per-tab player id

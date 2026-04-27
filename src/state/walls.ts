@@ -22,9 +22,12 @@ export const WALL_HIT_TOLERANCE_PX = 6;
  */
 export const WALL_DEFAULT_THICKNESS_PX = 2.5;
 
-/** Phase 85 — bounds on per-wall thickness for the editor UI. */
+/** Phase 85 — bounds on per-wall thickness for the editor UI.
+ *  Phase 111 — bumped max 12 → 48 so users can author chunky masonry
+ *  walls and full-cell-width dividers without saturating the slider.
+ *  At zoom = 1 with a 48px grid, a 48px-thick wall fills a full cell. */
 export const WALL_MIN_THICKNESS_PX = 1;
-export const WALL_MAX_THICKNESS_PX = 12;
+export const WALL_MAX_THICKNESS_PX = 48;
 
 /**
  * Phase 85 — pixel size (at zoom = 1) of the endpoint drag handles
