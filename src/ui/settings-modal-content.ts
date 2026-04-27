@@ -585,9 +585,10 @@ function renderAppearancePane(viewMode: ViewMode): string {
           <div class="radio-group">
             <label><input type="radio" name="settings-diagonal-rule" value="chebyshev" /> Chebyshev (5e default — diagonals count as 1)</label>
             <label><input type="radio" name="settings-diagonal-rule" value="alternating" /> Alternating (PHB optional — every other diagonal counts as 2)</label>
+            <label><input type="radio" name="settings-diagonal-rule" value="euclidean" /> Euclidean (Phase 115 — straight-line, 3×4 diagonal = 5)</label>
           </div>
         </label>
-        <p class="settings-hint">Used by the yellow movement indicator that appears while you drag a token on the map.</p>
+        <p class="settings-hint">Used by the yellow movement indicator that appears while you drag a token on the map, and by the Ruler tool's distance readout.</p>
       </fieldset>
       <fieldset class="settings-subgroup">
         <legend>Scene lighting</legend>

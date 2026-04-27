@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   chebyshevDistance,
   alternatingDistance,
+  euclideanDistance,
   gridDistance,
   formatDistance,
 } from './distance.js';
@@ -61,6 +62,31 @@ describe('alternatingDistance', () => {
   });
 });
 
+describe('Phase 115 — euclideanDistance', () => {
+  it('is 0 for no movement', () => {
+    expect(euclideanDistance(0, 0)).toBe(0);
+  });
+
+  it('reduces to orthogonal distance on cardinal moves', () => {
+    expect(euclideanDistance(5, 0)).toBe(5);
+    expect(euclideanDistance(0, 7)).toBe(7);
+  });
+
+  it('returns the rounded hypotenuse on diagonal moves', () => {
+    // 3-4-5 right triangle is the canonical exact case.
+    expect(euclideanDistance(3, 4)).toBe(5);
+    // 1×1 diagonal = sqrt(2) ≈ 1.41 → rounds to 1
+    expect(euclideanDistance(1, 1)).toBe(1);
+    // 2×2 diagonal = sqrt(8) ≈ 2.83 → rounds to 3
+    expect(euclideanDistance(2, 2)).toBe(3);
+  });
+
+  it('is symmetric across sign and axis', () => {
+    expect(euclideanDistance(-3, -4)).toBe(5);
+    expect(euclideanDistance(4, 3)).toBe(5);
+  });
+});
+
 describe('gridDistance', () => {
   it('defaults to chebyshev', () => {
     expect(gridDistance(3, 3)).toBe(chebyshevDistance(3, 3));
@@ -69,6 +95,19 @@ describe('gridDistance', () => {
 
   it('dispatches to the alternating rule when requested', () => {
     expect(gridDistance(3, 3, 'alternating')).toBe(4);
+  });
+
+  it('dispatches to the euclidean rule when requested', () => {
+    // Three rules can disagree on the same delta: 3×4 box.
+    // Chebyshev = max(3, 4) = 4; alternating = 3 diagonals (1+2+1) = 4 + 1 straight = 5;
+    // euclidean = round(hypot(3, 4)) = 5.
+    expect(gridDistance(3, 4, 'chebyshev')).toBe(4);
+    expect(gridDistance(3, 4, 'alternating')).toBe(5);
+    expect(gridDistance(3, 4, 'euclidean')).toBe(5);
+  });
+
+  it('falls back to chebyshev for an unknown rule string', () => {
+    expect(gridDistance(3, 4, 'bogus' as never)).toBe(4);
   });
 });
 

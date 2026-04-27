@@ -111,7 +111,7 @@ collaboration, QoL, and a hex-grid mode. Closes the major remaining
 gaps so the v1.0 cut is genuinely "stable + remote-play-capable."
 
 - **0.114.0** — `blocksMovement` enforcement (the flag from Phase 54 finally does something) ✅
-- **0.115.0** — Diagonal movement rules (5e / 5e-alt / Chebyshev / Euclidean — settings dropdown the ruler + indicator both consume)
+- **0.115.0** — Diagonal movement rules (5e / 5e-alt / Chebyshev / Euclidean — settings dropdown the ruler + indicator both consume) ✅
 - **0.116.0** — Drag-to-resize block corners (deferred from Phase 112)
 - **0.117.0** — Wall presets (saveable templates: stone-exterior, wooden-divider, etc.)
 - **0.118.0** — Snap-to-grid-edge wall drawing (toggle in walls-settings)
@@ -122,6 +122,33 @@ gaps so the v1.0 cut is genuinely "stable + remote-play-capable."
 - **0.123.0** — Bulk token edit (multi-select then "set HP max to N for all" / "add condition to all")
 - **0.124.0** — Hex grid mode (currently square only — biggest lift; touches every layer that uses cellSize × cellSize math)
 - **1.0.0** — Stable + remote-play-capable cut after the 0.124 work lands.
+
+---
+
+## [0.115.0] — 2026-04-26 — Diagonal movement rules: add Euclidean
+
+### Added
+- **Euclidean diagonal rule** — third option for the existing diagonal-cost dropdown. Returns the rounded straight-line Pythagorean distance, so the diagonal of a 3×4 right triangle is 5 cells (Chebyshev would say 4; alternating would say 5). Useful for simulationist play (Pathfinder 2e ranges, Star Frontiers, anything that prefers honest distance over D&D-style simplification).
+- **Settings → Appearance → Distance** gains a third radio: *"Euclidean (Phase 115 — straight-line, 3×4 diagonal = 5)."* The choice persists per-tab via the existing `preferences.diagonalRule` field; the ruler + the movement-remaining indicator both consume it through `gridDistance(dx, dy, rule)`.
+
+### Why this matters
+Pre-115 the app shipped two diagonal rules: D&D 5e's Chebyshev (default) and the PHB-optional alternating (5/10) rule. Both are simplifications that game-system-specific GMs love or hate. Phase 115 adds a third option that doesn't simplify at all — closes the gap for systems that want honest Euclidean distance without the GM having to translate manually.
+
+### Architecture
+- **`src/state/distance.ts`** — added `euclideanDistance(dx, dy) = round(hypot(dx, dy))` and extended `DiagonalRule = 'chebyshev' | 'alternating' | 'euclidean'`. The `gridDistance` dispatch switched from a ternary to a `switch` so the third arm reads cleanly + an unknown rule string falls through to `chebyshev` (defensive: a malformed peer that sneaks `diagonalRule: 'frob'` over the wire doesn't break the renderer).
+- **`src/ui/settings-modal-content.ts`** — third radio inserted in the existing Appearance > Distance group. The hint copy got a one-line update mentioning the Ruler tool reads it too.
+- **No other call-site changes needed** — the renderer + the ruler already routed everything through `gridDistance(dx, dy, prefs.diagonalRule)` since Phase 0.61. New rule plugs in transparently.
+
+### Tests
+- **+5 unit tests** in `src/state/distance.test.ts`: `euclideanDistance` returns 0 for no-movement, falls back to orthogonal magnitude on cardinal moves, returns the rounded hypotenuse on diagonals (3-4-5 exact + 1×1 ≈ √2 → 1 + 2×2 ≈ √8 → 3), is symmetric across sign + axis. Plus a `gridDistance` test that exercises all three rules on the same delta (3×4 box: chebyshev = 4, alternating = 5, euclidean = 5) + a fall-through test for an unknown rule.
+- **+1 Playwright spec** in `e2e/diagonal-rule.spec.ts` (new): Settings modal exposes the third radio in the Appearance tab; selecting it persists across modal close + re-open.
+- **All 1292 unit tests + 308 Playwright specs pass** locally after one fix (the diagonal-rule fieldset lives in the Appearance tab, not the default Grid tab — the e2e helper now clicks the tab first). The same `scenes.spec.ts:56` parallel flake that's been seen since Phase 101 reappeared once (passes in isolation; CI runs serially with retries=2, absorbed).
+
+### Bundle
+- 95.08 / 96 KB initial-load brotli (+0.12 KB for `euclideanDistance` + the third radio HTML). CSS 11.62 / 12 KB. Lazy chunks unchanged.
+
+### Pre-push checklist
+Caught zero issues — full unit suite + full e2e + visual-regression spec + size-limit all green before push. Eighteen clean phases in a row now (97 → 115).
 
 ---
 
