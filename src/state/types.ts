@@ -1,10 +1,29 @@
 export type ID = string;
 
+/**
+ * Phase 124 — grid shape. `'square'` (default, every prior phase)
+ * draws a rectangular grid; `'hex'` paints a pointy-top hex
+ * cosmetic overlay using the same `cellSize` (re-interpreted as
+ * the hex vertex radius). The underlying coordinate system stays
+ * rectangular for v124 — tokens, walls, fog all continue to operate
+ * in cellSize × cellSize world coords. The hex overlay is purely
+ * a visual cue for GMs running hex-rules games. A future phase
+ * (post-1.0) can adapt snap / distance / wall geometry to true
+ * hex semantics.
+ */
+export type GridShape = 'square' | 'hex';
+
 export interface GridConfig {
   cols: number;
   rows: number;
   cellSize: number;
   showGridLines: boolean;
+  /**
+   * Phase 124 — `'square'` (default) or `'hex'`. Optional in serialized
+   * blobs from pre-124; `deserializeState` defaults missing values to
+   * `'square'`.
+   */
+  gridShape?: GridShape;
 }
 
 export type HpVisibility = 'gm' | 'shared';
@@ -420,6 +439,9 @@ export const DEFAULT_GRID: GridConfig = {
   rows: 20,
   cellSize: 50,
   showGridLines: true,
+  // Phase 124 — explicit default so deserialize round-trips don't
+  // accidentally introduce a "missing vs explicit" diff.
+  gridShape: 'square',
 };
 
 export const DEFAULT_BACKGROUND: Background = {

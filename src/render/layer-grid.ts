@@ -1,5 +1,11 @@
 import type { GridConfig } from '../state/types.js';
 import type { Theme } from '../state/preferences.js';
+import {
+  hexCenter,
+  hexHorizontalStride,
+  hexVerticalStride,
+  pathHex,
+} from './hex-geometry.js';
 
 export interface GridRenderOptions {
   highContrast: boolean;
@@ -65,6 +71,21 @@ export function drawGrid(
   const normalStroke = options.highContrast ? palette.highContrastNormal : palette.normal;
   const boundaryStroke = options.highContrast ? palette.highContrastBoundary : palette.boundary;
 
+  // Phase 124 — hex overlay branch. The underlying coord system stays
+  // rectangular (cellSize × cellSize); the hex render covers the same
+  // map bounds but with pointy-top hex cells of vertex-radius =
+  // cellSize. The boundary rect still draws so the GM can see the
+  // logical map extent.
+  if (grid.gridShape === 'hex') {
+    if (grid.showGridLines) {
+      drawHexOverlay(ctx, grid, normalStroke);
+    }
+    ctx.lineWidth = options.highContrast ? 3 : 2;
+    ctx.strokeStyle = boundaryStroke;
+    ctx.strokeRect(0, 0, mapW, mapH);
+    return;
+  }
+
   if (!grid.showGridLines) {
     ctx.lineWidth = options.highContrast ? 3 : 2;
     ctx.strokeStyle = boundaryStroke;
@@ -90,4 +111,35 @@ export function drawGrid(
   ctx.lineWidth = options.highContrast ? 3 : 2;
   ctx.strokeStyle = boundaryStroke;
   ctx.strokeRect(0, 0, mapW, mapH);
+}
+
+/**
+ * Phase 124 — paint the pointy-top hex cells covering the map bounds.
+ * We over-iterate by 1 row + 1 col so partial hexes near the right /
+ * bottom edges still get an outline. Hexes that fall entirely outside
+ * the map rect still draw; the boundary rect drawn afterward covers
+ * the logical extent.
+ */
+function drawHexOverlay(
+  ctx: CanvasRenderingContext2D,
+  grid: GridConfig,
+  stroke: string,
+): void {
+  const size = grid.cellSize;
+  const xStride = hexHorizontalStride(size);
+  const yStride = hexVerticalStride(size);
+  const mapW = grid.cols * size;
+  const mapH = grid.rows * size;
+  const cols = Math.ceil(mapW / xStride) + 1;
+  const rows = Math.ceil(mapH / yStride) + 1;
+  ctx.lineWidth = 1;
+  ctx.strokeStyle = stroke;
+  ctx.beginPath();
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const center = hexCenter(c, r, size);
+      pathHex(ctx, center.x, center.y, size);
+    }
+  }
+  ctx.stroke();
 }

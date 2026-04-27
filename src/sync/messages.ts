@@ -417,9 +417,13 @@ export function deserializeState(s: SerializedSessionState): SessionState {
     typeof bg.scaleX === 'number' ? bg.scaleX : typeof bg.scale === 'number' ? bg.scale : 1;
   const scaleY =
     typeof bg.scaleY === 'number' ? bg.scaleY : typeof bg.scale === 'number' ? bg.scale : 1;
+  // Phase 124 — `gridShape` is optional in pre-124 blobs; default
+  // missing / unknown values to 'square' so back-compat holds.
+  const rawShape = (s.grid as { gridShape?: unknown }).gridShape;
+  const gridShape: 'square' | 'hex' = rawShape === 'hex' ? 'hex' : 'square';
   return {
     version: s.version,
-    grid: { ...s.grid },
+    grid: { ...s.grid, gridShape },
     background: {
       imageId: bg.imageId ?? null,
       offsetX: bg.offsetX ?? 0,

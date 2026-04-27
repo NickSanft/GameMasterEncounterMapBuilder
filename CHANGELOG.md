@@ -120,9 +120,46 @@ gaps so the v1.0 cut is genuinely "stable + remote-play-capable."
 - **0.121.0** — Auto-generated scene thumbnails (renderer snapshot at scene save) ✅
 - **0.122.0** — Token movement undo (`Z` reverts just the last token move, not the whole-state undo) ✅
 - **0.123.0** — Bulk token edit (multi-select then "set HP max to N for all" / "add condition to all") ✅
-- **0.124.0** — Hex grid mode (currently square only — biggest lift; touches every layer that uses cellSize × cellSize math)
+- **0.124.0** — Hex grid mode (cosmetic overlay; tokens / walls / fog still operate on the underlying square grid in v124) ✅
 - **0.125.0** — Test coverage + performance audit (added at user request before the 1.0.0 cut)
 - **1.0.0** — Stable + remote-play-capable cut after the 0.125 work lands.
+
+---
+
+## [0.124.0] — 2026-04-27 — Hex grid mode (cosmetic overlay)
+
+### Added
+- **`GridConfig.gridShape`** — new per-scene field with values `'square'` (default, every prior phase) or `'hex'`. When set to `'hex'`, the grid layer paints pointy-top hex polygons over the same map bounds, using the same `cellSize` re-interpreted as the hex's vertex-radius.
+- **Settings → Grid pane → "Grid shape" select** — choose between Square and Hex (pointy-top, cosmetic overlay). Toggles are per-scene, persist in IDB / sync over the wire as a normal `grid-update` patch.
+- **Default `'square'` round-trip** — `DEFAULT_GRID` now carries an explicit `gridShape: 'square'` so serialize → deserialize is identity for fresh state. Pre-124 saves load with the field defaulted to `'square'` via `deserializeState`.
+
+### Why this matters (and the v124 limitation)
+A meaningful chunk of the GM tabletop community runs hex-rules games (Dragon Pass, classic D&D theatre-of-the-mind, modern tactical hex grids). Pre-124 the only grid was square, which forced those GMs to either ignore the visual cue or use a separate tool. Phase 124 ships the **visual** half of hex support: the GM sees pointy-top hexes, players see them too (the patch syncs), the rendered cellSize stays similar across modes so the hex render isn't surprising in scale.
+
+**Important limitation: v124 is a cosmetic overlay only.** The underlying coordinate system stays rectangular — tokens still snap to the cellSize × cellSize world grid, walls still use segment / block geometry sized in pixels, fog cells are still rectangular, distance helpers (Phase 115) still measure on the square grid. A full hex semantics pass — hex-distance ruler, hex-snap token placement, hex-aware wall geometry, hex-shaped fog cells — is a multi-phase post-1.0 project. The CHANGELOG calls this out explicitly so a hex-rules GM doesn't expect 5e-hex-rules movement out of the box.
+
+### Architecture
+- **`src/render/hex-geometry.ts`** (new, ~85 lines) — pure math + canvas-path helpers. `hexWidth`, `hexHeight`, `hexHorizontalStride`, `hexVerticalStride` for layout; `hexCenter(col, row, size)` for the offset coordinate of a given cell; `hexVertices(cx, cy, size)` returns the six vertex positions; `pathHex(ctx, cx, cy, size)` traces the outline. The "size" param is the vertex radius (= half the hex's vertex-to-vertex height).
+- **`src/render/layer-grid.ts`** — early branch on `grid.gridShape === 'hex'` calls `drawHexOverlay(ctx, grid, stroke)`. The hex helper iterates over `(cols × rows)` cells and paths each one. The boundary rect still draws so the GM sees the logical map extent.
+- **`src/state/types.ts`** — adds `GridShape` type + optional field on `GridConfig`. `DEFAULT_GRID` carries an explicit `'square'` so round-trips are identity.
+- **`src/sync/messages.ts`** — `deserializeState` defaults missing / unknown gridShape to `'square'` so pre-124 saves + tampered peers can't break the renderer.
+- **`src/ui/settings-modal-content.ts`** — adds the gridShape select to renderGridPane + wires it to the `grid-update` patch path. Includes a hint paragraph documenting the cosmetic-only limitation so users aren't surprised.
+
+### UX details
+- **Grid shape syncs across peers.** A `grid-update` patch with `{gridShape: 'hex'}` flows over the existing sync wire — Spectator sees the hex overlay too. No new SyncMessage variant needed.
+- **The boundary rect still draws** in hex mode so the logical map extent is visible. Hexes can extend past the rect (the iteration over-counts by 1 row + 1 col so partial hexes near the edge get an outline).
+- **Visual baseline updated.** The new gridShape select extended the Grid pane content slightly enough to shift the modal layout when rendered on the Appearance tab — visual-regression baselines for both Win32 + Linux were regenerated to reflect the new layout.
+
+### Tests
+- **+10 unit tests** in `src/render/hex-geometry.test.ts` (new): width / height formulas; horizontal stride equals width; vertical stride is 3/4 height; hexCenter with even / odd row offset; hexCenter row stride; hexVertices count; top vertex is directly above center; vertices are size-distance from center.
+- **+2 Playwright specs** in `e2e/hex-grid.spec.ts` (new): Settings Grid pane shows the gridShape select with both options; selecting hex persists across modal close + re-open.
+- **All 1383 unit tests + 331 Playwright specs pass** locally (after regenerating the settings-appearance visual baseline).
+
+### Bundle
+- 101.14 / 110 KB initial-load brotli (+0.25 KB for the hex-geometry helpers + the layer-grid branch + the settings select). CSS unchanged. Lazy chunks unchanged.
+
+### Pre-push checklist
+Caught one issue: visual-regression baseline shifted (the new select grew the Grid pane by 9918 px-of-diff on the Appearance tab capture). Regenerated both Win32 + Linux baselines via `npm run baselines -- --grep "Settings modal"` and re-ran clean.
 
 ---
 

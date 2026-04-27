@@ -72,6 +72,8 @@ export function buildSettingsModal(
   const rowsInput = modal.querySelector<HTMLInputElement>('[data-field="rows"]')!;
   const cellSizeInput = modal.querySelector<HTMLInputElement>('[data-field="cellSize"]')!;
   const showGridLinesInput = modal.querySelector<HTMLInputElement>('[data-field="showGridLines"]')!;
+  // Phase 124 — grid shape select (square / hex). Per-scene state.
+  const gridShapeSelect = modal.querySelector<HTMLSelectElement>('[data-field="gridShape"]')!;
   const showGridLabelsInput = modal.querySelector<HTMLInputElement>('[data-field="showGridLabels"]')!;
   const showMiniMapInput = modal.querySelector<HTMLInputElement>('[data-field="showMiniMap"]')!;
   const losModeInput = modal.querySelector<HTMLInputElement>('[data-field="losMode"]')!;
@@ -154,6 +156,7 @@ export function buildSettingsModal(
     rowsInput.value = String(state.grid.rows);
     cellSizeInput.value = String(state.grid.cellSize);
     showGridLinesInput.checked = state.grid.showGridLines;
+    gridShapeSelect.value = state.grid.gridShape === 'hex' ? 'hex' : 'square';
     showGridLabelsInput.checked = prefs.showGridLabels;
     showMiniMapInput.checked = prefs.showMiniMap;
     losModeInput.checked = prefs.losMode !== 'off';
@@ -248,6 +251,16 @@ export function buildSettingsModal(
     store.applyPatch({
       kind: 'grid-update',
       changes: { showGridLines: showGridLinesInput.checked },
+    });
+  });
+
+  // Phase 124 — toggling grid shape patches per-scene state. The
+  // renderer redraws on the subscriber tick.
+  gridShapeSelect.addEventListener('change', () => {
+    const next = gridShapeSelect.value === 'hex' ? 'hex' : 'square';
+    store.applyPatch({
+      kind: 'grid-update',
+      changes: { gridShape: next },
     });
   });
 
@@ -513,6 +526,13 @@ function renderGridPane(): string {
         <input type="checkbox" data-field="showGridLines" />
         <span>Show grid lines</span>
       </label>
+      <label>Grid shape
+        <select data-field="gridShape">
+          <option value="square">Square</option>
+          <option value="hex">Hex (pointy-top, cosmetic overlay)</option>
+        </select>
+      </label>
+      <p class="settings-hint">In v124 hex mode is a visual overlay only — tokens, walls, and fog still operate on the underlying square cell grid. Useful as a hex-rules visual cue at the table.</p>
       <label class="check">
         <input type="checkbox" data-field="showGridLabels" />
         <span>Show coordinate labels (A1, B2, …)</span>
