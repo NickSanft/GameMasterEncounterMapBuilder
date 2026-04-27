@@ -117,12 +117,46 @@ gaps so the v1.0 cut is genuinely "stable + remote-play-capable."
 - **0.118.0** — Snap-to-grid-edge wall drawing (toggle in walls-settings) ✅
 - **0.119.0** — Player chat panel (text chat over the existing sync channel; per-message visibility) ✅
 - **0.120.0** — Player-side annotations (Spectator drops a marker; GM sees + approves / dismisses) ✅
-- **0.121.0** — Auto-generated scene thumbnails (renderer snapshot at scene save)
+- **0.121.0** — Auto-generated scene thumbnails (renderer snapshot at scene save) ✅
 - **0.122.0** — Token movement undo (`Z` reverts just the last token move, not the whole-state undo)
 - **0.123.0** — Bulk token edit (multi-select then "set HP max to N for all" / "add condition to all")
 - **0.124.0** — Hex grid mode (currently square only — biggest lift; touches every layer that uses cellSize × cellSize math)
 - **0.125.0** — Test coverage + performance audit (added at user request before the 1.0.0 cut)
 - **1.0.0** — Stable + remote-play-capable cut after the 0.125 work lands.
+
+---
+
+## [0.121.0] — 2026-04-27 — Auto-generated scene thumbnails
+
+### Added
+- **Scenes auto-capture a thumbnail every ~10 seconds during play.** The auto-save loop now folds a thumbnail snapshot into the persist flow whenever the throttle gate allows. A freshly-created scene captures on its FIRST auto-save (the throttle returns `true` for any sceneId it hasn't seen before), so a brand-new scene shows a real thumbnail in the Scenes modal as soon as it's been touched — no more "(no thumbnail)" placeholder waiting for the user to switch scenes for the first time.
+- **Per-scene throttle** — captures are gated at one-per-10s PER scene, so editing one scene doesn't burn the throttle for every other scene. Switching scenes still captures the outgoing scene synchronously (the existing `switchToScene` path) — the new auto-capture is additive.
+
+### Why this matters
+Pre-121 a scene only got a thumbnail if you EXPLICITLY switched away from it. Most GMs don't switch scenes mid-session, so the Scenes modal looked perpetually empty (placeholder tiles for every scene). Phase 121 ties thumbnail capture into the regular save loop so scenes look real-and-current the moment you open the picker.
+
+### Architecture
+- **`src/state/scene-thumbnails.ts`** (new, ~80 lines) — pure helper. `createSceneThumbnailThrottle({minIntervalMs?, now?})` returns `{shouldCapture, reset, forget}`. `shouldCapture(sceneId)` returns `true` the first time it sees an id, then at most once per `minIntervalMs` (default 10 s) per id. Counts the call as a capture so consecutive `true` responses don't fire. Includes a clock seam (`now`) for deterministic tests.
+- **`src/entries/gm.ts`** — adds `sceneThumbnailThrottle` next to the existing `persist` debouncer. Inside the persist callback (right after the snapshot-history record path, both gated on `ok`), if the throttle says yes, capture a thumbnail via the existing `captureThumbnail(canvas)` helper from Phase 39 and write it via `saveScene(id, state, {thumbnail})`. Failures swallowed with a `console.warn` — thumbnails are nice-to-have, never critical.
+- **`handleDeleteActiveScene`** — calls `sceneThumbnailThrottle.forget(activeId)` so a deleted-then-recreated scene id starts fresh (rare but possible via scene-import round-trips).
+- **No changes to `src/state/scenes.ts`** — `saveScene(id, state, {thumbnail})` already supported the optional thumbnail field; we just call it more often.
+
+### UX details
+- **Throttle is per-scene, not global.** Editing scene A and B in quick succession captures both on first touch; subsequent edits to either are throttled independently.
+- **In-memory only.** Reload re-mints the throttle map, so the first save after reload always captures (acceptable — costs one extra capture per reload).
+- **Capture is best-effort.** A thrown captureThumbnail (corrupt canvas state) just logs a warning + the existing thumbnail (if any) is preserved.
+- **No back-pressure.** Phase 76's save-status pill keeps reflecting the saveState result, not the thumbnail step. A thumbnail failure doesn't flip the pill to "error" — that's reserved for state persistence failures.
+
+### Tests
+- **+7 unit tests** in `src/state/scene-thumbnails.test.ts` (new): first call returns true; second call within minInterval returns false; call after minInterval returns true; per-scene independence; falsy-id guard; reset clears every record; forget drops a single id without affecting others.
+- **+1 Playwright spec** in `e2e/auto-thumbnails.spec.ts` (new): place a token, wait 700 ms (longer than the 200 ms persist debounce), open Scenes modal, verify the active card's `.scene-thumb` style includes a `background-image:url(data...)` (the captured JPEG).
+- **All 1352 unit tests + 323 Playwright specs pass** locally.
+
+### Bundle
+- 99.65 / 110 KB initial-load brotli (+0.11 KB for the throttle helper + the wiring). CSS 12.26 / 14 KB. Lazy chunks unchanged.
+
+### Pre-push checklist
+Caught zero issues — full unit suite + full e2e + visual-regression specs + size-limit all green before push.
 
 ---
 

@@ -58,6 +58,7 @@ import { createChatHistory } from '../state/chat-history.js';
 import { mountChatPanel } from '../ui/chat-panel.js';
 import { createAnnotationProposals } from '../state/annotation-proposals.js';
 import { mountAnnotationProposalsPanel } from '../ui/annotation-proposals-panel.js';
+import { createSceneThumbnailThrottle } from '../state/scene-thumbnails.js';
 import { attachCombatLogObserver } from '../state/combat-log-observer.js';
 import { mountCommandPalette } from '../ui/command-palette.js';
 import { createCommandRegistry } from '../state/command-registry.js';
@@ -1502,6 +1503,9 @@ async function handleDeleteActiveScene(): Promise<void> {
   // (e.g. via JSON-import round trips).
   if (activeId) {
     forgetSceneBookmarks(activeId);
+    // Phase 121 — drop the throttle's last-capture record for the
+    // deleted id so a future scene with a recycled id starts fresh.
+    sceneThumbnailThrottle.forget(activeId);
   }
   const others = list.filter((s) => s.id !== activeId);
   if (others.length > 0) {
@@ -2591,6 +2595,13 @@ const timeOfDayPicker = mountTimeOfDayPicker({
 // 30 s rate-limit + state-dedup, so calling it on every persist is
 // cheap; most calls are no-ops. Snapshot failures are swallowed
 // with a console warning — a missed snapshot doesn't block the user.
+// Phase 121 — throttle gate so the auto-save loop captures a fresh
+// thumbnail at most once per 10 s per scene. The first call for a
+// brand-new scene returns true so a freshly-created scene gets a
+// thumbnail right away (instead of showing "(no thumbnail)" until
+// the user switches scenes for the first time).
+const sceneThumbnailThrottle = createSceneThumbnailThrottle();
+
 const persist = debounce(async () => {
   saveStatusPill.setStatus('saving');
   try {
@@ -2603,6 +2614,21 @@ const persist = debounce(async () => {
           await recordSnapshot(sceneId, serializeState(store.getState()));
         } catch (snapErr) {
           console.warn('[snapshot-history] record failed', snapErr);
+        }
+        // Phase 121 — auto-thumbnail. The throttle gate caps captures
+        // at one per 10 s per scene; cheap when it returns false (just
+        // a Map lookup). A successful capture re-saves the scene with
+        // ONLY the thumbnail field updated; the state blob is the
+        // same one we just wrote.
+        if (sceneThumbnailThrottle.shouldCapture(sceneId)) {
+          try {
+            const thumb = captureThumbnail(canvas);
+            if (thumb) {
+              await saveScene(sceneId, store.getState(), { thumbnail: thumb });
+            }
+          } catch (thumbErr) {
+            console.warn('[thumbnail] auto-capture failed', thumbErr);
+          }
         }
       }
     }
