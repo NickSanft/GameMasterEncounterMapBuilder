@@ -357,6 +357,34 @@ export type SyncMessage =
       text: string;
       visibility: 'shared' | 'gm-only';
       timestamp: number;
+    }
+  /**
+   * Phase 120 — Spectator-proposed annotation. Spectators can't write
+   * to authoritative state directly, so they SUGGEST an annotation at
+   * a world point + the GM decides whether to approve (which fires a
+   * normal `annotation-add` patch, making it visible to all peers) or
+   * dismiss (drops the suggestion locally; nothing crosses the wire).
+   *
+   * Receiver behavior:
+   *   - GM adds to their local `annotationProposals` queue. The panel
+   *     re-renders + an announcer message fires.
+   *   - Spectators ignore the message entirely (nothing to do — only
+   *     the GM acts on suggestions).
+   *
+   * The `proposalId` is sender-generated (Phase 110 stable id seed
+   * via `nid()`). Re-broadcasts with the same id are deduped on the
+   * GM side, so an out-of-order WebRTC delivery doesn't clone.
+   */
+  | {
+      type: 'annotation-proposal';
+      proposalId: string;
+      senderId: string;
+      senderName: string;
+      x: number;
+      y: number;
+      text: string;
+      color: string;
+      timestamp: number;
     };
 
 export function serializeState(s: SessionState): SerializedSessionState {

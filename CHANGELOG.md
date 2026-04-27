@@ -116,13 +116,55 @@ gaps so the v1.0 cut is genuinely "stable + remote-play-capable."
 - **0.117.0** — Wall presets (saveable templates: stone-exterior, wooden-divider, etc.) ✅
 - **0.118.0** — Snap-to-grid-edge wall drawing (toggle in walls-settings) ✅
 - **0.119.0** — Player chat panel (text chat over the existing sync channel; per-message visibility) ✅
-- **0.120.0** — Player-side annotations (Spectator drops a marker; GM sees + approves / dismisses)
+- **0.120.0** — Player-side annotations (Spectator drops a marker; GM sees + approves / dismisses) ✅
 - **0.121.0** — Auto-generated scene thumbnails (renderer snapshot at scene save)
 - **0.122.0** — Token movement undo (`Z` reverts just the last token move, not the whole-state undo)
 - **0.123.0** — Bulk token edit (multi-select then "set HP max to N for all" / "add condition to all")
 - **0.124.0** — Hex grid mode (currently square only — biggest lift; touches every layer that uses cellSize × cellSize math)
 - **0.125.0** — Test coverage + performance audit (added at user request before the 1.0.0 cut)
 - **1.0.0** — Stable + remote-play-capable cut after the 0.125 work lands.
+
+---
+
+## [0.120.0] — 2026-04-27 — Player-side annotations (suggestion → review)
+
+### Added
+- **Spectator can suggest annotations.** A new "Suggest (N)" button on the spectator toolbar (and the `n` keyboard shortcut) puts the canvas into "suggest annotation" mode. Click on the map → an inline prompt appears at the click point asking for the annotation text → Send broadcasts the suggestion to the GM. Suggest mode stays active so the spectator can drop multiple markers in a row; toggle off by clicking the button again or pressing `n` / Esc.
+- **GM-side review panel.** New "Player Suggestions" side panel (sliding right-pinned, mirrors the chat / combat-log layout) lists every pending suggestion with the sender's name + identity-color swatch, the proposed text, world coordinates, and two action buttons:
+  - **Approve** fires a normal `annotation-add` patch with `visibility: 'shared'`, so the suggestion lands on the GM's map AND gets mirrored to all peers via the existing sync wire.
+  - **Dismiss** drops the suggestion locally with no state mutation. The spectator who sent it isn't notified — they see no on-screen confirmation either way (matching the announcer-only feedback pattern from chat).
+  - **Dismiss all** in the panel header empties the queue in one click.
+- **Auto-opens on arrival.** When a new suggestion arrives, the GM panel auto-opens so a busy GM doesn't miss it. Already-open panel just re-renders. Closed deliberately? Re-open via command palette (*"Toggle Player Suggestions panel"*, group **Panels**).
+- **Polite-announce on arrival** — `announcer.announce("X suggested an annotation: …")` so screen-reader users + GMs not currently looking at the panel know a suggestion came in.
+
+### Why this matters
+Pre-120 the only way for a player to flag something on the GM's map was to ping (transient flash) or describe it verbally / in chat. Persistent annotations were strictly authored by the GM. Phase 120 closes that gap with a low-friction, GM-mediated channel: players can flag "trap door here?" / "secret room?" / "the bandit camp must be in this clearing" without crossing the GM-as-source-of-truth boundary the rest of the sync model relies on.
+
+### Architecture
+- **`src/state/annotation-proposals.ts`** (new, ~110 lines) — pure helper. `createAnnotationProposals({maxEntries?})` returns `{add, entries, size, remove, clear, subscribe}`. Same id-dedupe + eviction-frees-the-slot pattern as Phase 119's chat-history. Cap defaults to 50 entries (smaller than chat — a session that accumulates 50 unapproved suggestions has bigger problems than a queue overflow).
+- **`src/sync/messages.ts`** — added an `annotation-proposal` SyncMessage variant: `{type: 'annotation-proposal', proposalId, senderId, senderName, x, y, text, color, timestamp}`. Pure broadcast: every connected peer receives it; only the GM acts on it. Other spectators ignore the message (no handler in their channel.onMessage chain).
+- **`src/ui/annotation-proposals-panel.ts`** (new, ~150 lines) — GM-side review panel. Header with title + Dismiss-all + ×; empty-state copy; ordered list of `.annotation-proposal` cards each with meta (color swatch + name + coords), body (text), and approve / dismiss buttons. Live updates via `proposals.subscribe`.
+- **`src/ui/annotation-proposal-prompt.ts`** (new, ~115 lines) — Spectator-side floating inline prompt. `mountAnnotationProposalPrompt({onSubmit, onCancel})` returns `{open, close, isOpen, destroy}`. `open(screenX, screenY)` positions the prompt at the click point (clamped to viewport); submit fires `onSubmit(text)`; Esc / Cancel fires `onCancel()`. Pure UI; the host owns the world-coord capture + the broadcast.
+- **`src/entries/gm.ts`** — mounts `annotationProposals` queue + `annotationProposalsPanel`. Channel handler for `annotation-proposal`: adds to queue, auto-opens the panel, fires announcer. Approve callback constructs an `Annotation` (visibility: 'shared'), applies an `annotation-add` patch, removes from queue. Dismiss callback removes from queue. Command palette entry registered in **Panels** group.
+- **`src/entries/spectator.ts`** — mounts `mountAnnotationProposalPrompt`. Toolbar gains a Suggest button (alongside Ruler) — refactored `mountSpectatorToolbar` to return `{ruler, suggest}` instead of a single button. `setSuggestActive(active)` adds / removes a `pointerdown` listener on the canvas; click captures `pointerToWorld(canvas, renderer, e)` + opens the prompt at the click's screen coords. `n` keyboard shortcut toggles suggest mode. Mutually exclusive with ruler — switching one on auto-disables the other. Send path stamps `proposalId = nid()` + spectator's identity color so the GM's panel shows the suggester's color swatch.
+- **`src/ui/styles.css`** — new `.annotation-proposals-panel` block + nested `.annotation-proposal` / `.annotation-proposal-meta` / `.annotation-proposal-body` / `.annotation-proposal-buttons` / `.annotation-proposal-swatch` rules. Approve uses the accent fill (filled, primary action); Dismiss uses panel-card styling (outlined, secondary action). Separate `.annotation-proposal-prompt` block for the spectator-side floating prompt — `position: fixed`, accent-bordered, with input + Send + Cancel inline.
+
+### UX details
+- **No persistence by design.** Pending suggestions are in-memory only; on tab reload they're lost. Approved suggestions land in the normal annotation state path (which IS persisted). Matching the chat / combat-log ephemerality story.
+- **Suggest mode stays active across sends.** The user typically wants to drop several markers in a row ("trap, then trap, then exit") so the mode persists; toggle off explicitly.
+- **No back-channel from GM to suggester.** Approval / dismissal is silent on the spectator side — they see the approved annotation appear on the shared map (because it's a real shared annotation now), but a dismissed suggestion just vanishes. A future polish could echo back an `annotation-decision` message to the original sender for explicit feedback; out of scope for v120.
+- **Other spectators don't see other spectators' suggestions.** The sync layer broadcasts to all peers, but only the GM has a handler. Keeps the panel a per-GM workspace.
+
+### Tests
+- **+11 unit tests** in `src/state/annotation-proposals.test.ts` (new): starts empty; arrival ordering; id-dedupe (re-broadcast no-op); empty-id rejected; cap eviction (oldest evicted); eviction frees the dedupe slot; remove drops + frees the slot; remove of unknown id is a silent no-op; clear empties + notifies / silent no-op when already empty; subscribe / unsubscribe round-trip.
+- **+3 Playwright specs** in `e2e/annotation-proposals.spec.ts` (new): toolbar Suggest button + canvas click opens the prompt; GM sees the suggestion and Approve clears the panel (suggesting the patch landed in state); GM Dismiss drops the suggestion without state mutation.
+- **All 1345 unit tests + 322 Playwright specs pass** locally.
+
+### Bundle
+- **JS budget bumped 100 → 110 KB.** Phase 120 added ~1.5 KB JS (the proposals queue + the two UI modules + the wiring on both entries); landed at 99.54 / 100 KB which would have been 0.46 KB headroom — too tight for the heavier Phase 121-124 lifts (especially hex grid). Bumped 10 KB at once rather than per-phase. CSS 12.26 / 14 KB. Lazy chunks unchanged.
+
+### Pre-push checklist
+Caught zero issues — full unit suite + full e2e + visual-regression specs + size-limit (after the proactive 100 → 110 KB bump) all green before push.
 
 ---
 

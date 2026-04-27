@@ -37,6 +37,8 @@ import {
   spectatorShouldRenderChat,
 } from '../state/chat-history.js';
 import { mountChatPanel } from '../ui/chat-panel.js';
+import { mountAnnotationProposalPrompt } from '../ui/annotation-proposal-prompt.js';
+import { pointerToWorld } from '../input/context.js';
 import { nid } from '../util/id.js';
 import { mountMiniMap } from '../ui/mini-map.js';
 import { createPingManager } from '../state/ping-manager.js';
@@ -405,13 +407,83 @@ const slashInput = mountSlashCommandInput({
 });
 
 let rulerActive = false;
-const rulerBtn = mountSpectatorToolbar(() => setRulerActive(!rulerActive));
+let suggestActive = false;
+const toolbarBtns = mountSpectatorToolbar({
+  onRuler: () => setRulerActive(!rulerActive),
+  onSuggest: () => setSuggestActive(!suggestActive),
+});
+const rulerBtn = toolbarBtns.ruler;
+const suggestBtn = toolbarBtns.suggest;
 const rulerSettings = mountRulerSettings(document.body, rulerToolOptionsRef);
+
+// Phase 120 — Spectator-side annotation suggestion. The prompt is
+// mounted once; `setSuggestActive(true)` switches the canvas into
+// suggest mode where the next click opens the prompt at the click
+// point. Submitting broadcasts an `annotation-proposal` SyncMessage;
+// the GM reviews + approves / dismisses in their panel.
+const annotationPrompt = mountAnnotationProposalPrompt({
+  onSubmit: (text) => {
+    if (!pendingProposalWorld) return;
+    const ownIdent = ownIdentity();
+    channel?.send({
+      type: 'annotation-proposal',
+      proposalId: nid(),
+      senderId: playerId,
+      senderName: ownIdent.name,
+      x: pendingProposalWorld.x,
+      y: pendingProposalWorld.y,
+      text,
+      color: ownIdent.color,
+      timestamp: Date.now(),
+    });
+    announcer.announce(`Suggestion sent to GM: ${text}`);
+    pendingProposalWorld = null;
+    // Stay in suggest mode so the user can drop another marker; they
+    // exit by hitting `n` / Esc / clicking the toolbar button again.
+  },
+  onCancel: () => {
+    pendingProposalWorld = null;
+  },
+});
+
+let pendingProposalWorld: { x: number; y: number } | null = null;
+
+function onSuggestPointerDown(e: PointerEvent) {
+  if (e.button !== 0 || panZoomRef.handle?.isSpaceHeld()) return;
+  if (annotationPrompt.isOpen()) return; // already prompting; ignore
+  const world = pointerToWorld(canvas, renderer, e);
+  pendingProposalWorld = world;
+  annotationPrompt.open(e.clientX, e.clientY);
+  e.preventDefault();
+}
+
+function setSuggestActive(active: boolean) {
+  if (active === suggestActive) return;
+  suggestActive = active;
+  if (active) {
+    // Mutually exclusive with ruler — switching on suggest closes ruler.
+    if (rulerActive) setRulerActive(false);
+    canvas.addEventListener('pointerdown', onSuggestPointerDown);
+    canvas.style.cursor = 'crosshair';
+    announcer.announce(
+      'Suggest annotation mode active. Click the map to propose a marker for the GM.',
+    );
+  } else {
+    canvas.removeEventListener('pointerdown', onSuggestPointerDown);
+    annotationPrompt.close();
+    pendingProposalWorld = null;
+    if (!rulerActive) canvas.style.cursor = '';
+    announcer.announce('Suggest annotation mode off.');
+  }
+  suggestBtn.classList.toggle('active', active);
+  suggestBtn.setAttribute('aria-pressed', active ? 'true' : 'false');
+}
 
 function setRulerActive(active: boolean) {
   if (active === rulerActive) return;
   rulerActive = active;
   if (active) {
+    if (suggestActive) setSuggestActive(false);
     measureTool.activate();
   } else {
     measureTool.deactivate();
@@ -798,6 +870,12 @@ window.addEventListener('keydown', (e) => {
     e.preventDefault();
     return;
   }
+  // Phase 120 — `n` toggles annotation suggest mode.
+  if (e.key === 'n' && !e.shiftKey && !e.altKey) {
+    setSuggestActive(!suggestActive);
+    e.preventDefault();
+    return;
+  }
   if (e.ctrlKey || e.metaKey) return;
   if (e.key === '+' || e.key === '=') {
     zoomBy(renderer, ZOOM_BUTTON_STEP);
@@ -864,26 +942,47 @@ window.addEventListener('beforeunload', () => {
   persistCameraDebounced.flush();
 });
 
-function mountSpectatorToolbar(onRuler: () => void): HTMLButtonElement {
+function mountSpectatorToolbar(actions: {
+  onRuler: () => void;
+  onSuggest: () => void;
+}): { ruler: HTMLButtonElement; suggest: HTMLButtonElement } {
   const bar = document.createElement('div');
   bar.className = 'gm-toolbar spectator-toolbar';
   bar.setAttribute('role', 'toolbar');
   bar.setAttribute('aria-label', 'Spectator tools');
 
-  const btn = document.createElement('button');
-  btn.type = 'button';
-  btn.textContent = 'Ruler (L)';
-  btn.title = 'Drag to measure distance in grid squares.';
-  btn.setAttribute('aria-pressed', 'false');
-  btn.setAttribute('aria-label', 'Ruler — drag to measure distance');
-  btn.addEventListener('click', () => {
-    onRuler();
-    btn.blur();
+  const rulerBtn = document.createElement('button');
+  rulerBtn.type = 'button';
+  rulerBtn.textContent = 'Ruler (L)';
+  rulerBtn.title = 'Drag to measure distance in grid squares.';
+  rulerBtn.setAttribute('aria-pressed', 'false');
+  rulerBtn.setAttribute('aria-label', 'Ruler — drag to measure distance');
+  rulerBtn.addEventListener('click', () => {
+    actions.onRuler();
+    rulerBtn.blur();
   });
-  bar.appendChild(btn);
+  bar.appendChild(rulerBtn);
+
+  // Phase 120 — "Suggest annotation" toggle. Click to enter suggest
+  // mode; click on the map to propose a marker; the GM reviews.
+  const suggestBtn = document.createElement('button');
+  suggestBtn.type = 'button';
+  suggestBtn.textContent = 'Suggest (N)';
+  suggestBtn.title =
+    'Click on the map to suggest an annotation. The GM can approve or dismiss it.';
+  suggestBtn.setAttribute('aria-pressed', 'false');
+  suggestBtn.setAttribute(
+    'aria-label',
+    'Suggest annotation — propose a marker for the GM',
+  );
+  suggestBtn.addEventListener('click', () => {
+    actions.onSuggest();
+    suggestBtn.blur();
+  });
+  bar.appendChild(suggestBtn);
 
   document.body.appendChild(bar);
-  return btn;
+  return { ruler: rulerBtn, suggest: suggestBtn };
 }
 
 function mountSpectatorMenu(actions: {

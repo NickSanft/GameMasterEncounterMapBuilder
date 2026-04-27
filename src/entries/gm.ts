@@ -56,6 +56,8 @@ import { mountCombatLogPanel } from '../ui/combat-log-panel.js';
 import { createCombatLog } from '../state/combat-log.js';
 import { createChatHistory } from '../state/chat-history.js';
 import { mountChatPanel } from '../ui/chat-panel.js';
+import { createAnnotationProposals } from '../state/annotation-proposals.js';
+import { mountAnnotationProposalsPanel } from '../ui/annotation-proposals-panel.js';
 import { attachCombatLogObserver } from '../state/combat-log-observer.js';
 import { mountCommandPalette } from '../ui/command-palette.js';
 import { createCommandRegistry } from '../state/command-registry.js';
@@ -1195,6 +1197,33 @@ const chatPanel = mountChatPanel({
       visibility: msg.visibility,
       timestamp: msg.timestamp,
     });
+  },
+});
+
+// Phase 120 — player-proposed annotations queue. Spectators send
+// proposals over the wire; the GM reviews them in this panel and
+// approves (fires a real `annotation-add` patch) or dismisses
+// (drops locally). The queue is in-memory only — on tab reload the
+// pending suggestions are lost (Spectators have to re-suggest).
+const annotationProposals = createAnnotationProposals();
+const annotationProposalsPanel = mountAnnotationProposalsPanel({
+  proposals: annotationProposals,
+  onApprove: (p) => {
+    const annotation: Annotation = {
+      id: nid(),
+      x: p.x,
+      y: p.y,
+      text: p.text,
+      color: p.color || DEFAULT_ANNOTATION_COLOR,
+      visibility: 'shared',
+    };
+    store.applyPatch({ kind: 'annotation-add', annotation });
+    annotationProposals.remove(p.id);
+    announcer.announce(`Approved annotation from ${p.senderName || 'player'}.`);
+  },
+  onDismiss: (p) => {
+    annotationProposals.remove(p.id);
+    announcer.announce(`Dismissed annotation suggestion from ${p.senderName || 'player'}.`);
   },
 });
 
@@ -2453,6 +2482,25 @@ if (channel) {
       // Polite-announce so screen readers + GMs not currently looking
       // at the panel know a message arrived.
       announcer.announce(`${msg.senderName || 'Player'} said: ${msg.text}`);
+    } else if (msg.type === 'annotation-proposal') {
+      // Phase 120 — Spectator-proposed annotation. Add to the GM's
+      // review queue + auto-open the panel so a busy GM doesn't miss
+      // a fresh suggestion. The queue's id-dedupe makes a re-broadcast
+      // a silent no-op.
+      annotationProposals.add({
+        id: msg.proposalId,
+        senderId: msg.senderId,
+        senderName: msg.senderName,
+        x: msg.x,
+        y: msg.y,
+        text: msg.text,
+        color: msg.color,
+        timestamp: msg.timestamp,
+      });
+      annotationProposalsPanel.open();
+      announcer.announce(
+        `${msg.senderName || 'Player'} suggested an annotation: ${msg.text}`,
+      );
     } else if (msg.type === 'latency-probe') {
       // Phase 83 — peer is asking for an RTT measurement; echo back
       // immediately. We pass the probe id verbatim so the original
@@ -3228,6 +3276,14 @@ function slugForFilename(name: string): string {
     hint: 'Text chat over the sync channel',
     group: 'Panels',
     run: () => chatPanel.toggle(),
+  });
+  // Phase 120 — player annotation suggestions panel (toggle).
+  reg.register({
+    id: 'toggle-annotation-proposals',
+    label: 'Toggle Player Suggestions panel',
+    hint: 'Review pending annotation suggestions from spectators',
+    group: 'Panels',
+    run: () => annotationProposalsPanel.toggle(),
   });
   reg.register({
     id: 'open-shortcuts',

@@ -4066,6 +4066,251 @@ body.reduced-motion .first-use-hint {
   background: var(--accent-hover);
 }
 
+/* ───── Phase 120 — Player annotation suggestions ───────────────────
+   GM-side review panel (sliding right pinned) + Spectator-side floating
+   inline prompt that appears at the click point. */
+
+.annotation-proposals-panel {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 360px;
+  background: var(--bg-elev);
+  border-left: 1px solid var(--border);
+  box-shadow: -4px 0 18px rgba(0, 0, 0, 0.2);
+  z-index: 17;
+  display: flex;
+  flex-direction: column;
+}
+
+.annotation-proposals-panel[hidden] {
+  display: none;
+}
+
+.annotation-proposals-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.7rem 0.8rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.annotation-proposals-header h3 {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.annotation-proposals-actions {
+  display: flex;
+  gap: 0.35rem;
+  align-items: center;
+}
+
+.annotation-proposals-clear {
+  appearance: none;
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.2rem 0.55rem;
+  font-family: inherit;
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+
+.annotation-proposals-clear:hover {
+  background: var(--hover-overlay);
+  border-color: var(--accent);
+}
+
+.annotation-proposals-close {
+  appearance: none;
+  background: none;
+  border: none;
+  color: var(--fg-muted);
+  font-size: 1.4rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 0.25rem;
+}
+
+.annotation-proposals-close:hover {
+  color: var(--fg);
+}
+
+.annotation-proposals-empty {
+  margin: 0.7rem 0.8rem;
+  color: var(--fg-muted);
+  font-size: 0.82rem;
+  font-style: italic;
+  line-height: 1.4;
+}
+
+.annotation-proposals-list {
+  list-style: none;
+  margin: 0;
+  padding: 0.5rem 0.8rem;
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.annotation-proposal {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 0.55rem 0.65rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.annotation-proposal-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.78rem;
+}
+
+.annotation-proposal-swatch {
+  display: inline-block;
+  width: 0.85rem;
+  height: 0.85rem;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+}
+
+.annotation-proposal-name {
+  font-weight: 600;
+  color: var(--fg);
+}
+
+.annotation-proposal-coords {
+  margin-left: auto;
+  color: var(--fg-muted);
+  font-variant-numeric: tabular-nums;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.72rem;
+}
+
+.annotation-proposal-body {
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--fg);
+  font-size: 0.86rem;
+  line-height: 1.4;
+}
+
+.annotation-proposal-buttons {
+  display: flex;
+  gap: 0.4rem;
+  justify-content: flex-end;
+}
+
+.annotation-proposal-approve,
+.annotation-proposal-dismiss {
+  appearance: none;
+  border-radius: 4px;
+  padding: 0.3rem 0.7rem;
+  font-family: inherit;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid transparent;
+}
+
+.annotation-proposal-approve {
+  background: var(--accent);
+  color: var(--bg);
+}
+
+.annotation-proposal-approve:hover {
+  background: var(--accent-hover);
+}
+
+.annotation-proposal-dismiss {
+  background: var(--bg-elev);
+  color: var(--fg);
+  border-color: var(--border);
+}
+
+.annotation-proposal-dismiss:hover {
+  background: var(--hover-overlay);
+  border-color: var(--accent);
+}
+
+/* Spectator-side inline prompt — floats at click point. */
+.annotation-proposal-prompt {
+  position: fixed;
+  z-index: 80;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.4rem 0.5rem;
+  background: var(--bg-elev);
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+}
+
+.annotation-proposal-prompt[hidden] {
+  display: none;
+}
+
+.annotation-proposal-prompt-input {
+  appearance: none;
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.35rem 0.5rem;
+  font-family: inherit;
+  font-size: 0.85rem;
+  min-width: 220px;
+}
+
+.annotation-proposal-prompt-input:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.annotation-proposal-prompt-send,
+.annotation-proposal-prompt-cancel {
+  appearance: none;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.35rem 0.65rem;
+  font-family: inherit;
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+
+.annotation-proposal-prompt-send {
+  background: var(--accent);
+  color: var(--bg);
+  border-color: var(--accent);
+  font-weight: 600;
+}
+
+.annotation-proposal-prompt-send:hover {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+
+.annotation-proposal-prompt-cancel {
+  background: var(--bg);
+  color: var(--fg);
+}
+
+.annotation-proposal-prompt-cancel:hover {
+  background: var(--hover-overlay);
+  border-color: var(--accent);
+}
+
 /* ───── Phase 84 — Conflict-merge modal ─────────────────────────────
    Opens from the conflict warning banner ("Resolve…" action). Lists
    every detected GM peer with a side-by-side state summary (last
