@@ -118,11 +118,49 @@ gaps so the v1.0 cut is genuinely "stable + remote-play-capable."
 - **0.119.0** — Player chat panel (text chat over the existing sync channel; per-message visibility) ✅
 - **0.120.0** — Player-side annotations (Spectator drops a marker; GM sees + approves / dismisses) ✅
 - **0.121.0** — Auto-generated scene thumbnails (renderer snapshot at scene save) ✅
-- **0.122.0** — Token movement undo (`Z` reverts just the last token move, not the whole-state undo)
+- **0.122.0** — Token movement undo (`Z` reverts just the last token move, not the whole-state undo) ✅
 - **0.123.0** — Bulk token edit (multi-select then "set HP max to N for all" / "add condition to all")
 - **0.124.0** — Hex grid mode (currently square only — biggest lift; touches every layer that uses cellSize × cellSize math)
 - **0.125.0** — Test coverage + performance audit (added at user request before the 1.0.0 cut)
 - **1.0.0** — Stable + remote-play-capable cut after the 0.125 work lands.
+
+---
+
+## [0.122.0] — 2026-04-27 — Token movement undo (plain `Z`)
+
+### Added
+- **Plain `Z` (no Ctrl) reverts just the most recent token move.** Distinct from Ctrl+Z (whole-state undo, which rewinds every kind of patch — annotations, fog, conditions, initiative, the lot). Mid-combat, a GM who just dragged a token to the wrong square wants to pop ONLY that move without losing the unrelated state changes that happened between then and now (auto-fog reveals, condition timers ticking, initiative round increments, etc.).
+- **Per-token entry granularity.** Multi-token arrow-key moves (WASD with multi-select) record one entry per token, so pressing Z several times rewinds them individually. Deliberately simpler than batching across a keystroke; simple to reason about.
+- **History wipes on session-reset / scene switch.** Undoing across scene boundaries would reference token ids that may not exist (or worse, recycle to a different token in the new scene), so the history clears on every `loadState` / `session-reset` patch.
+- **Polite-announce on undo + on no-op.** "Reverted Token 1 to its previous position" / "No token move to undo" / "Cannot undo: token no longer exists" — screen-reader users + keyboard-only GMs get explicit feedback.
+
+### Why this matters
+The store's whole-state undo is correct but blunt: undoing a misplaced drag also rewinds the auto-fog reveal that happened after, the condition timer that ticked, and the initiative round-advance. Pre-122 the GM either accepted a wrong token position OR re-did three other actions after Ctrl+Z. Phase 122 picks the surgical revert with a one-key shortcut that's already universal muscle memory in the table-top genre.
+
+### Architecture
+- **`src/state/token-move-history.ts`** (new, ~85 lines) — pure helper. `createTokenMoveHistory({maxEntries?, now?})` returns `{record, popLast, peekLast, clear, size}`. Cap defaults to 100; older entries evicted FIFO. `record` filters out no-op moves (`from == to`); explicit `timestamp` overrides the `now` seam.
+- **`src/entries/gm.ts`** —
+  - Mounts `tokenMoveHistory` + a `lastKnownPositions: Map<id, {x, y}>` cache. The store-subscribe handler watches `token-update` patches with x/y changes, looks up the from-coords in the cache, and records `(tokenId, from, to)`. After every patch, `rebuildLastKnownPositions()` syncs the cache from current state — covers token-add / token-remove / session-reset / scene-switch in one pass.
+  - `skipNextTokenMoveRecord` flag suppresses the recursive record when we apply the inverse patch ourselves (otherwise Z would push the inverse onto the stack and re-undoing would just bounce the token back-and-forth).
+  - `undoLastTokenMove()` pops the most recent entry, sets the skip flag, applies `{kind: 'token-update', id, changes: {x: fromX, y: fromY}}`, fires the announcer.
+  - `Z` keybinding (no Ctrl/Meta/Alt/Shift) handler runs BEFORE the existing Ctrl/Meta block so it doesn't accidentally collide with `Ctrl+Z`.
+- **No store changes.** The store's existing `applyPatch({kind: 'token-update', ...})` is the inverse-application path; the new history is a parallel side-channel that doesn't touch the existing undo / redo stacks.
+
+### UX details
+- **The whole-state Ctrl+Z still works as before.** Phase 122 doesn't rewire it; the two paths are independent. A user who wants the old "rewind everything" behavior just keeps using Ctrl+Z.
+- **Z mid-edit (token editor open) is intercepted by `isEditableFocus`** — the existing focus guard at the top of the GM keydown handler already returns early when an input / textarea is focused. Z is safe to type in those contexts.
+- **No visible UI affordance yet.** The shortcut is documented in the help overlay (separate phase to update); the discovery path right now is the announcer + the changelog. A future polish could surface a "Last move:" pill on the toolbar with a click-to-undo handle, but that's out of scope for v122.
+
+### Tests
+- **+8 unit tests** in `src/state/token-move-history.test.ts` (new): starts empty; LIFO ordering; peekLast doesn't consume; skip no-op moves; cap eviction; clear; now seam; explicit-timestamp override.
+- **+3 Playwright specs** in `e2e/token-move-undo.spec.ts` (new): plain Z reverts a single arrow-key move; Z with no recorded moves is a silent no-op; Ctrl+Z still does whole-state undo (independent of plain Z).
+- **All 1360 unit tests + 326 Playwright specs pass** locally.
+
+### Bundle
+- 100.02 / 110 KB initial-load brotli (+0.37 KB for the history module + the wiring + the keybinding). CSS 12.26 / 14 KB. Lazy chunks unchanged.
+
+### Pre-push checklist
+Caught zero issues — full unit suite + full e2e + visual-regression specs + size-limit all green before push.
 
 ---
 

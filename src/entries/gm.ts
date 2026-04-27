@@ -59,6 +59,7 @@ import { mountChatPanel } from '../ui/chat-panel.js';
 import { createAnnotationProposals } from '../state/annotation-proposals.js';
 import { mountAnnotationProposalsPanel } from '../ui/annotation-proposals-panel.js';
 import { createSceneThumbnailThrottle } from '../state/scene-thumbnails.js';
+import { createTokenMoveHistory } from '../state/token-move-history.js';
 import { attachCombatLogObserver } from '../state/combat-log-observer.js';
 import { mountCommandPalette } from '../ui/command-palette.js';
 import { createCommandRegistry } from '../state/command-registry.js';
@@ -2602,6 +2603,46 @@ const timeOfDayPicker = mountTimeOfDayPicker({
 // the user switches scenes for the first time).
 const sceneThumbnailThrottle = createSceneThumbnailThrottle();
 
+// Phase 122 — token-move-only undo, parallel to the store's whole-
+// state undo. `Z` (no Ctrl) reverts just the most recent token move
+// without rewinding the unrelated state changes (fog, conditions,
+// initiative, etc.) that happened between then and now. The history
+// is fed off the store-subscribe stream below; `lastKnownPositions`
+// gives us the from-coords each move (the patch only carries
+// to-coords). `skipNextTokenMoveRecord` suppresses the recursive
+// record when we apply the inverse patch ourselves.
+const tokenMoveHistory = createTokenMoveHistory();
+const lastKnownPositions = new Map<string, { x: number; y: number }>();
+let skipNextTokenMoveRecord = false;
+function rebuildLastKnownPositions(): void {
+  lastKnownPositions.clear();
+  for (const t of store.getState().tokens) {
+    lastKnownPositions.set(t.id, { x: t.x, y: t.y });
+  }
+}
+function undoLastTokenMove(): boolean {
+  const last = tokenMoveHistory.popLast();
+  if (!last) {
+    announcer.announce('No token move to undo.');
+    return false;
+  }
+  const token = store.getState().tokens.find((t) => t.id === last.tokenId);
+  if (!token) {
+    announcer.announce('Cannot undo: token no longer exists.');
+    return false;
+  }
+  skipNextTokenMoveRecord = true;
+  store.applyPatch({
+    kind: 'token-update',
+    id: last.tokenId,
+    changes: { x: last.fromX, y: last.fromY },
+  });
+  announcer.announce(
+    `Reverted ${token.label || 'token'} to its previous position.`,
+  );
+  return true;
+}
+
 const persist = debounce(async () => {
   saveStatusPill.setStatus('saving');
   try {
@@ -2657,6 +2698,40 @@ const updateCanvasLabelDebounced = debounce(updateCanvasLabel, 250);
 updateCanvasLabel();
 
 store.subscribe((patch) => {
+  // Phase 122 — feed the token-move-only undo history. We watch
+  // `token-update` patches with x/y changes and diff against the
+  // `lastKnownPositions` cache so we have both ends of the move
+  // (the patch only carries the new coords). On every patch the
+  // cache rebuilds from the post-patch state — covers token-add
+  // / token-remove / session-reset / scene-switch in one place.
+  if (
+    patch?.kind === 'token-update' &&
+    (patch.changes.x !== undefined || patch.changes.y !== undefined)
+  ) {
+    if (skipNextTokenMoveRecord) {
+      skipNextTokenMoveRecord = false;
+    } else {
+      const prev = lastKnownPositions.get(patch.id);
+      const cur = store.getState().tokens.find((t) => t.id === patch.id);
+      if (prev && cur && (prev.x !== cur.x || prev.y !== cur.y)) {
+        tokenMoveHistory.record({
+          tokenId: patch.id,
+          fromX: prev.x,
+          fromY: prev.y,
+          toX: cur.x,
+          toY: cur.y,
+        });
+      }
+    }
+  }
+  // Session-reset / scene-switch wipes the move history — undoing
+  // across scene boundaries would reference token ids that don't
+  // exist in the new scene (or worse, recycle to a different token).
+  if (patch?.kind === 'session-reset' || patch === null) {
+    tokenMoveHistory.clear();
+  }
+  rebuildLastKnownPositions();
+
   renderer.requestRender();
   persist();
   toolbarHandle.refreshActions();
@@ -3518,6 +3593,24 @@ window.addEventListener('keydown', (e) => {
     shortcutOverlay.toggle();
     e.preventDefault();
     return;
+  }
+
+  // Phase 122 — plain `Z` (no Ctrl) reverts just the most recent
+  // token move. Distinct from Ctrl+Z (whole-state undo, which rewinds
+  // every kind of patch). Skipped when modifiers are held so we
+  // don't intercept Ctrl+Z / Cmd+Z / Shift+Z (the Ctrl branch below
+  // owns those).
+  if (
+    (e.key === 'z' || e.key === 'Z') &&
+    !e.ctrlKey &&
+    !e.metaKey &&
+    !e.altKey &&
+    !e.shiftKey
+  ) {
+    if (undoLastTokenMove()) {
+      e.preventDefault();
+      return;
+    }
   }
 
   // Phase 74 — `/` opens the slash-command input. Skipped when an
