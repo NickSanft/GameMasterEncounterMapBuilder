@@ -202,13 +202,25 @@ export function drawWalls(
     const lineWidth = isHighlighted
       ? baseThickness + HIGHLIGHT_WIDTH_BUMP_PX / safeZoom
       : baseThickness;
+    // Phase 113 — open doors render with a thinner, fainter, dashed
+    // line so the GM can see at a glance which doors are open. Closed
+    // doors render normally; the door affordance comes from the
+    // perpendicular tick markers added below.
+    const isDoor = w.door !== undefined;
+    const isOpenDoor = isDoor && w.door!.open;
     ctx.strokeStyle = isHighlighted
       ? WALL_HIGHLIGHT_COLOR
       : isGmOnly
         ? WALL_GM_ONLY_COLOR
         : WALL_COLOR;
-    ctx.lineWidth = lineWidth;
-    if (isGmOnly && !isHighlighted) {
+    ctx.lineWidth = isOpenDoor
+      ? Math.max(1 / safeZoom, lineWidth * 0.55)
+      : lineWidth;
+    ctx.globalAlpha = isOpenDoor ? 0.55 : 1;
+    if (isOpenDoor) {
+      const dlen = PREVIEW_DASH_SCREEN_PX / safeZoom;
+      ctx.setLineDash([dlen, dlen]);
+    } else if (isGmOnly && !isHighlighted) {
       ctx.setLineDash([gmOnlyDashLen, gmOnlyDashLen]);
     } else {
       ctx.setLineDash([]);
@@ -218,8 +230,33 @@ export function drawWalls(
     ctx.moveTo(c.x1, c.y1);
     ctx.lineTo(c.x2, c.y2);
     ctx.stroke();
+    ctx.globalAlpha = 1;
+    // Phase 113 — door tick markers. Two short perpendicular ticks at
+    // the segment midpoint (±10% of segment length) so a door reads
+    // as a door even when closed and visually identical to a wall.
+    if (isDoor) {
+      const dx = c.x2 - c.x1;
+      const dy = c.y2 - c.y1;
+      const len = Math.hypot(dx, dy);
+      if (len > 0) {
+        const mx = (c.x1 + c.x2) / 2;
+        const my = (c.y1 + c.y2) / 2;
+        // Perpendicular unit vector + a tick length tied to the wall
+        // thickness (visually scales with the door's chunkiness).
+        const px = -dy / len;
+        const py = dx / len;
+        const tick = Math.max(4 / safeZoom, lineWidth * 1.6);
+        ctx.lineWidth = Math.max(1 / safeZoom, lineWidth * 0.6);
+        ctx.setLineDash([]);
+        ctx.beginPath();
+        ctx.moveTo(mx - px * tick, my - py * tick);
+        ctx.lineTo(mx + px * tick, my + py * tick);
+        ctx.stroke();
+      }
+    }
   }
   ctx.setLineDash([]);
+  ctx.globalAlpha = 1;
 
   // 3) Endpoint dots — color-matched to wall state. Selected walls get
   //    LARGER handles (Phase 85) so the GM has a real click target for

@@ -41,6 +41,13 @@ export interface WallEditorChange {
   blocksMovement?: boolean;
   thickness?: number;
   visibility?: 'shared' | 'gm';
+  /**
+   * Phase 113 — door promotion / state. `null` removes the door
+   * promotion entirely; `{open}` sets / updates it. Block walls
+   * silently ignore the field (the editor hides the door row when
+   * any block is in the edit selection).
+   */
+  door?: { open: boolean } | null;
 }
 
 export interface WallEditorOptions {
@@ -133,6 +140,19 @@ export function mountWallEditor(opts: WallEditorOptions): WallEditorHandle {
           Fill cell
         </button>
       </div>
+
+      <!-- Phase 113 — door promotion. Hidden when the edit selection
+           contains any block walls (blocks can't be doors). -->
+      <div class="wall-editor-row" data-field="door-row" hidden>
+        <label class="wall-editor-toggle">
+          <input type="checkbox" data-field="door" />
+          <span>Door — toggles open / closed mid-session</span>
+        </label>
+        <label class="wall-editor-toggle wall-editor-door-state" data-field="door-state-row" hidden>
+          <input type="checkbox" data-field="door-open" />
+          <span>Currently open (no LoS / movement contribution)</span>
+        </label>
+      </div>
     </div>
     <div class="modal-footer">
       <button type="button" class="btn-danger" data-field="delete">Delete</button>
@@ -152,6 +172,11 @@ export function mountWallEditor(opts: WallEditorOptions): WallEditorHandle {
   const thicknessEl = modal.querySelector<HTMLInputElement>('[data-field="thickness"]')!;
   const thicknessOut = modal.querySelector<HTMLOutputElement>('[data-field="thickness-out"]')!;
   const fillCellBtn = modal.querySelector<HTMLButtonElement>('[data-field="fill-cell"]')!;
+  // Phase 113 — door promotion controls.
+  const doorRow = modal.querySelector<HTMLDivElement>('[data-field="door-row"]')!;
+  const doorEl = modal.querySelector<HTMLInputElement>('[data-field="door"]')!;
+  const doorStateRow = modal.querySelector<HTMLLabelElement>('[data-field="door-state-row"]')!;
+  const doorOpenEl = modal.querySelector<HTMLInputElement>('[data-field="door-open"]')!;
   // Phase 111 — surface the Fill-cell preset only when the host wired
   // a `getCellSize` provider. Tests / minimal mounts can omit it.
   if (opts.getCellSize) {
@@ -238,6 +263,40 @@ export function mountWallEditor(opts: WallEditorOptions): WallEditorHandle {
         thicknessOut.textContent = '— (mixed)';
       }
     }
+
+    // Phase 113 — door promotion controls. Hidden when ANY block wall
+    // is in the edit selection (blocks can't be doors). Mixed segment
+    // + block selections also hide the row to avoid confusion.
+    if (segmentWalls.length === 0 || segmentWalls.length !== walls.length) {
+      doorRow.hidden = true;
+    } else {
+      doorRow.hidden = false;
+      const doorSame = (() => {
+        const first = segmentWalls[0]!.door !== undefined;
+        for (let i = 1; i < segmentWalls.length; i++) {
+          if ((segmentWalls[i]!.door !== undefined) !== first) return null;
+        }
+        return first;
+      })();
+      doorEl.checked = doorSame ?? false;
+      doorEl.indeterminate = doorSame === null;
+      // The "currently open" sub-toggle only makes sense when ALL
+      // selected walls ARE doors. Hide otherwise.
+      if (doorSame === true) {
+        doorStateRow.hidden = false;
+        const openSame = (() => {
+          const first = segmentWalls[0]!.door!.open;
+          for (let i = 1; i < segmentWalls.length; i++) {
+            if (segmentWalls[i]!.door!.open !== first) return null;
+          }
+          return first;
+        })();
+        doorOpenEl.checked = openSame ?? false;
+        doorOpenEl.indeterminate = openSame === null;
+      } else {
+        doorStateRow.hidden = true;
+      }
+    }
   }
 
   function open(walls: readonly Wall[]) {
@@ -306,6 +365,26 @@ export function mountWallEditor(opts: WallEditorOptions): WallEditorHandle {
     if (cellSize <= 0) return;
     const v = clampThickness(cellSize);
     opts.onChange(editingIds, { thickness: v });
+    render();
+  });
+
+  // Phase 113 — door promotion. Checking the box adds a `door`
+  // sub-object (defaulting to closed); unchecking removes it
+  // entirely. The host's `onChange` interprets `door: null` as the
+  // remove signal.
+  doorEl.addEventListener('change', () => {
+    if (doorEl.checked) {
+      opts.onChange(editingIds, { door: { open: false } });
+    } else {
+      opts.onChange(editingIds, { door: null });
+    }
+    render();
+  });
+  // Phase 113 — toggle the door's open/closed state. Only meaningful
+  // when at least one selected wall is already a door (the row is
+  // hidden otherwise).
+  doorOpenEl.addEventListener('change', () => {
+    opts.onChange(editingIds, { door: { open: doorOpenEl.checked } });
     render();
   });
 

@@ -175,6 +175,28 @@ describe('collectSightWalls', () => {
     ];
     expect(collectSightWalls(walls, 10)).toEqual([]);
   });
+
+  it('Phase 113 — closed door contributes its segment to LoS', () => {
+    const w = wall({ id: 'd1', x1: 0, y1: 0, x2: 100, y2: 0 }) as WallSegment;
+    w.door = { open: false };
+    expect(collectSightWalls([w], 50)).toEqual([
+      { x1: 0, y1: 0, x2: 100, y2: 0 },
+    ]);
+  });
+
+  it('Phase 113 — open door drops its LoS contribution', () => {
+    const w = wall({ id: 'd1', x1: 0, y1: 0, x2: 100, y2: 0 }) as WallSegment;
+    w.door = { open: true };
+    expect(collectSightWalls([w], 50)).toEqual([]);
+  });
+
+  it('Phase 113 — open door coexists with normal walls (only the door drops)', () => {
+    const normal = wall({ id: 'normal', x1: 0, y1: 0, x2: 100, y2: 0 });
+    const door = wall({ id: 'door', x1: 100, y1: 0, x2: 200, y2: 0 }) as WallSegment;
+    door.door = { open: true };
+    const out = collectSightWalls([normal, door], 50);
+    expect(out).toEqual([{ x1: 0, y1: 0, x2: 100, y2: 0 }]);
+  });
 });
 
 describe('collectLights', () => {

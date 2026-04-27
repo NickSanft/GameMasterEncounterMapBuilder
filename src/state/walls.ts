@@ -117,6 +117,43 @@ export function isSegmentWall(w: Wall): w is WallSegment {
 }
 
 /**
+ * Phase 113 — narrow to a segment wall that has been promoted to a
+ * door. Block walls cannot be doors (the doorway shape is inherently
+ * a thin opening), so this implicitly requires `kind === 'segment'`.
+ */
+export function isDoor(
+  w: Wall,
+): w is WallSegment & { door: { open: boolean } } {
+  return w.kind === 'segment' && w.door !== undefined;
+}
+
+/**
+ * Phase 113 — does this wall actually block sight RIGHT NOW? An open
+ * door (`door.open === true`) stops contributing to LoS regardless
+ * of `blocksSight`. Closed doors and non-door walls fall through to
+ * their `blocksSight` flag.
+ */
+export function wallBlocksSightEffective(w: Wall): boolean {
+  if (!w.blocksSight) return false;
+  if (isDoor(w) && w.door.open) return false;
+  return true;
+}
+
+/**
+ * Phase 113 — does this wall actually block movement RIGHT NOW?
+ * Mirrors `wallBlocksSightEffective`; an open door doesn't block
+ * movement either. (Phase 113 doesn't enforce movement blocking
+ * yet — the flag is reserved for a future grid-pathing phase — but
+ * the helper is exported so that future consumer can use it
+ * uniformly with the LoS path.)
+ */
+export function wallBlocksMovementEffective(w: Wall): boolean {
+  if (!w.blocksMovement) return false;
+  if (isDoor(w) && w.door.open) return false;
+  return true;
+}
+
+/**
  * Phase 112 — convert a wall (any kind) to one or more line segments
  * in world-pixel coords. Segments return [self]; blocks return their
  * 4 perimeter edges (top, right, bottom, left). Used by:

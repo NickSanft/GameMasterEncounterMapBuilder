@@ -4,6 +4,9 @@ import {
   createWallBlock,
   isBlockWall,
   isSegmentWall,
+  isDoor,
+  wallBlocksSightEffective,
+  wallBlocksMovementEffective,
   blockWallBounds,
   wallToSegments,
   distanceSquaredToSegment,
@@ -16,6 +19,7 @@ import {
   WALL_MIN_THICKNESS_PX,
   WALL_MAX_THICKNESS_PX,
 } from './walls.js';
+import type { Wall } from './types.js';
 
 describe('createWall', () => {
   it('defaults blocksSight and blocksMovement to true', () => {
@@ -281,6 +285,80 @@ describe('Phase 112 — blockWallBounds', () => {
   it('returns the AABB in world pixels', () => {
     const block = createWallBlock({ cellX: 2, cellY: 3, cellsWide: 4, cellsTall: 5 });
     expect(blockWallBounds(block, 10)).toEqual({ x: 20, y: 30, w: 40, h: 50 });
+  });
+});
+
+describe('Phase 113 — door helpers', () => {
+  it('isDoor returns false for plain segments + block walls', () => {
+    const seg = createWall({ x1: 0, y1: 0, x2: 1, y2: 1 });
+    const block = createWallBlock({ cellX: 0, cellY: 0, cellsWide: 1, cellsTall: 1 });
+    expect(isDoor(seg)).toBe(false);
+    expect(isDoor(block)).toBe(false);
+  });
+
+  it('isDoor returns true for a segment with a door field', () => {
+    const door: Wall = {
+      ...createWall({ x1: 0, y1: 0, x2: 10, y2: 0 }),
+      door: { open: false },
+    };
+    expect(isDoor(door)).toBe(true);
+  });
+
+  it('wallBlocksSightEffective: closed door blocks; open door does not', () => {
+    const closed: Wall = {
+      ...createWall({ x1: 0, y1: 0, x2: 10, y2: 0 }),
+      door: { open: false },
+    };
+    const open: Wall = {
+      ...createWall({ x1: 0, y1: 0, x2: 10, y2: 0 }),
+      door: { open: true },
+    };
+    expect(wallBlocksSightEffective(closed)).toBe(true);
+    expect(wallBlocksSightEffective(open)).toBe(false);
+  });
+
+  it('wallBlocksSightEffective: respects underlying blocksSight=false even for closed doors', () => {
+    // A non-sight-blocking door (e.g. arrow slit) doesn't block LoS
+    // when closed either — the door wraps the flag, doesn't override it.
+    const w: Wall = {
+      ...createWall({ x1: 0, y1: 0, x2: 10, y2: 0, blocksSight: false }),
+      door: { open: false },
+    };
+    expect(wallBlocksSightEffective(w)).toBe(false);
+  });
+
+  it('wallBlocksSightEffective: non-door segment walls fall through to blocksSight', () => {
+    const blocking = createWall({ x1: 0, y1: 0, x2: 1, y2: 1 });
+    const transparent = createWall({
+      x1: 0, y1: 0, x2: 1, y2: 1, blocksSight: false,
+    });
+    expect(wallBlocksSightEffective(blocking)).toBe(true);
+    expect(wallBlocksSightEffective(transparent)).toBe(false);
+  });
+
+  it('wallBlocksMovementEffective: same shape as sight (open door = false)', () => {
+    const open: Wall = {
+      ...createWall({ x1: 0, y1: 0, x2: 10, y2: 0 }),
+      door: { open: true },
+    };
+    const closed: Wall = {
+      ...createWall({ x1: 0, y1: 0, x2: 10, y2: 0 }),
+      door: { open: false },
+    };
+    expect(wallBlocksMovementEffective(open)).toBe(false);
+    expect(wallBlocksMovementEffective(closed)).toBe(true);
+  });
+
+  it('block walls cannot be doors (isDoor stays false)', () => {
+    // Type system already forbids `door` on WallBlock; the runtime
+    // helper also checks kind explicitly so a malformed peer that
+    // sneaks `door` onto a block via the wire format is ignored.
+    const bogus = {
+      ...createWallBlock({ cellX: 0, cellY: 0, cellsWide: 1, cellsTall: 1 }),
+      door: { open: true },
+    } as Wall;
+    expect(isDoor(bogus)).toBe(false);
+    expect(wallBlocksSightEffective(bogus)).toBe(true);
   });
 });
 

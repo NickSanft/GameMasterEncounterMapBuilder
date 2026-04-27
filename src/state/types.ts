@@ -256,6 +256,19 @@ export interface WallSegment extends WallBase {
    * regions larger than a single cell.
    */
   thickness?: number;
+  /**
+   * Phase 113 — promote this segment to a *door*. When the door is
+   * open, the wall stops contributing to LoS / movement (it's visually
+   * still drawn as a doorway frame, but the dynamic blockers go away).
+   * Closed doors behave exactly like the underlying wall — `blocksSight`
+   * + `blocksMovement` still gate the contribution; the door wraps
+   * those flags rather than replacing them.
+   *
+   * Authored via the wall editor's "Is door" toggle, or via the
+   * right-click "Open / Close" action mid-session. Block walls don't
+   * support doors — the doorway shape is inherently a thin opening.
+   */
+  door?: { open: boolean };
 }
 
 /**

@@ -22,7 +22,7 @@ import type { ID, SessionState, Token, Wall } from './types.js';
 import type { LosViewer } from '../render/fog-worker-client.js';
 import type { LosPoint, LosSegment } from './los.js';
 import { rasterizeVisibility } from './los.js';
-import { wallToSegments } from './walls.js';
+import { wallToSegments, wallBlocksSightEffective } from './walls.js';
 
 /**
  * Drag-overlay shape that `collectViewers` understands. We mirror the
@@ -82,9 +82,12 @@ export function collectSightWalls(
   // Phase 112 — block walls expand to 4 perimeter segments via
   // `wallToSegments`. Segment walls return [self] from the helper,
   // so the per-wall result is uniformly a list of LosSegment.
+  // Phase 113 — `wallBlocksSightEffective` returns false for an OPEN
+  // door even when the underlying wall has `blocksSight: true`, so
+  // open doorways stop occluding LoS without a separate state mutation.
   const out: LosSegment[] = [];
   for (const w of walls) {
-    if (!w.blocksSight) continue;
+    if (!wallBlocksSightEffective(w)) continue;
     for (const s of wallToSegments(w, cellSize)) {
       out.push({ x1: s.x1, y1: s.y1, x2: s.x2, y2: s.y2 });
     }

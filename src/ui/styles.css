@@ -3003,6 +3003,15 @@ body.notes-open .mini-map {
   letter-spacing: 0;
 }
 
+/* Phase 113 — `display: flex` above overrides the `hidden` attribute's
+   default `display: none`. Restore the hidden behavior so the door
+   state-row + door-row toggles actually disappear when the editor's
+   render() flips the field. */
+.wall-editor-toggle[hidden],
+.wall-editor-row[hidden] {
+  display: none;
+}
+
 .wall-editor-radio {
   margin: 0.2rem 0;
 }

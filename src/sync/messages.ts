@@ -529,6 +529,17 @@ export function deserializeState(s: SerializedSessionState): SessionState {
               out.thickness = (w as { thickness: number }).thickness;
             }
             if (visibility !== undefined) out.visibility = visibility;
+            // Phase 113 — optional `door` field. Defensive: only
+            // honor it if the shape matches `{open: boolean}`. Pre-
+            // 113 peers omit it; receivers default to "not a door".
+            const doorRaw = (w as { door?: unknown }).door;
+            if (
+              doorRaw &&
+              typeof doorRaw === 'object' &&
+              typeof (doorRaw as { open?: unknown }).open === 'boolean'
+            ) {
+              out.door = { open: (doorRaw as { open: boolean }).open };
+            }
             return out;
           })
       : [],

@@ -1077,9 +1077,51 @@ const wallEditor = mountWallEditor({
   getWallById: (id) => store.getState().walls.find((w) => w.id === id) ?? null,
   onChange: (ids, changes) => {
     if (ids.length === 0) return;
+    // Phase 113 — `door: null` from the editor means "remove the
+    // door promotion entirely." The store does a naive spread so a
+    // null value would set `door: null` instead of removing the
+    // field. Translate to a per-id wall-update that omits `door`
+    // and a separate delete via wall-replace would be ideal — but
+    // the simpler path is to apply the non-door changes first, then
+    // replace the wall via wall-add (preserving id) for the door
+    // removal. To keep the patch model simple we just delete +
+    // re-add with a fresh wall object minus `door`.
+    const removeDoor = Object.prototype.hasOwnProperty.call(changes, 'door') &&
+      (changes as { door?: unknown }).door === null;
+    // The store-patch type doesn't accept `door: null`; we already
+    // strip it via `delete` below so the runtime spread merge sees a
+    // sane object. Cast through `unknown` because TypeScript can't
+    // see the delete narrows the union member type.
+    const restChanges = { ...changes } as Record<string, unknown>;
+    if (removeDoor) {
+      delete restChanges.door;
+    }
     store.batch(() => {
       for (const id of ids) {
-        store.applyPatch({ kind: 'wall-update', id, changes });
+        if (Object.keys(restChanges).length > 0) {
+          store.applyPatch({
+            kind: 'wall-update',
+            id,
+            changes: restChanges as Parameters<typeof store.applyPatch>[0] extends {
+              kind: 'wall-update';
+              changes: infer C;
+            }
+              ? C
+              : never,
+          });
+        }
+        if (removeDoor) {
+          // Replace the wall with a fresh copy that has no `door`
+          // field. We can't update-to-undefined via spread, so do it
+          // via remove + re-add of an explicitly-rebuilt wall.
+          const w = store.getState().walls.find((x) => x.id === id);
+          if (w && w.kind === 'segment' && w.door !== undefined) {
+            const { door: _door, ...rest } = w;
+            void _door;
+            store.applyPatch({ kind: 'wall-remove', id });
+            store.applyPatch({ kind: 'wall-add', wall: rest });
+          }
+        }
       }
     });
   },
@@ -1591,6 +1633,17 @@ canvas.addEventListener('contextmenu', (e) => {
     // blocking ON, the menu offers to "Disable" all of them; otherwise
     // it offers to "Enable" all of them. Avoids ambiguous mid-state.
     const anyBlocksSight = selectedWalls.some((x) => x.blocksSight);
+    // Phase 113 — door quick-toggle. If EVERY selected wall is a door,
+    // surface an "Open door(s)" / "Close door(s)" entry above the
+    // sight-blocking toggle. The label flips based on whether any
+    // currently-open door is in the selection (mirrors the
+    // sight-blocking toggle's any-on logic).
+    const allDoors =
+      selectedWalls.length > 0 &&
+      selectedWalls.every((x) => x.kind === 'segment' && x.door !== undefined);
+    const anyOpenDoor = selectedWalls.some(
+      (x) => x.kind === 'segment' && x.door?.open === true,
+    );
     items.push(
       // Phase 85 — open the full wall editor for property + thickness +
       // visibility editing. Kept as the first action so it's the
@@ -1601,6 +1654,36 @@ canvas.addEventListener('contextmenu', (e) => {
         shortcut: 'E',
         onClick: () => wallEditor.openFor(selectedWalls),
       },
+    );
+    if (allDoors) {
+      items.push(
+        { kind: 'separator' },
+        {
+          label: anyOpenDoor
+            ? `Close door${wallCount > 1 ? 's' : ''}`
+            : `Open door${wallCount > 1 ? 's' : ''}`,
+          onClick: () => {
+            const target = !anyOpenDoor;
+            store.batch(() => {
+              for (const sw of selectedWalls) {
+                if (sw.kind !== 'segment' || sw.door === undefined) continue;
+                store.applyPatch({
+                  kind: 'wall-update',
+                  id: sw.id,
+                  changes: { door: { open: target } },
+                });
+              }
+            });
+            announcer.announce(
+              target
+                ? `Door${wallCount > 1 ? 's' : ''} opened.`
+                : `Door${wallCount > 1 ? 's' : ''} closed.`,
+            );
+          },
+        },
+      );
+    }
+    items.push(
       { kind: 'separator' },
       {
         label: anyBlocksSight

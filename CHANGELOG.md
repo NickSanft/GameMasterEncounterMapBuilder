@@ -103,7 +103,58 @@ small-to-large so the lowest-risk change lands first:
 
 - **0.111.0** — Wider walls + "Fill cell" preset (max thickness 12 → 48 px; one-click snap to grid cellSize) ✅
 - **0.112.0** — Block walls (a wall *region* that fills one or more grid cells; new `kind: 'block'` discriminator) ✅
-- **0.113.0** — Door entities (segment walls with toggleable `open` state — closed blocks LoS / movement, open doesn't)
+- **0.113.0** — Door entities (segment walls with toggleable `open` state — closed blocks LoS / movement, open doesn't) ✅
+
+---
+
+## [0.113.0] — 2026-04-26 — Door entities
+
+### Added
+- **Promote any segment wall to a door** via the wall editor's new "Is door" checkbox. Doors keep all the wall properties (sight, movement, visibility, thickness) but gain a toggleable `open` state. When open, they stop contributing to LoS — light sees right through them — without losing their authoring-side identity.
+- **One-click open / close** via the canvas context menu. Right-click a door → "Open door" or "Close door"; the action flips state in a single patch (multi-select aware: right-click after selecting several doors flips them all together).
+- **Visual distinction at the wall layer**: doors render with two short perpendicular tick markers at their midpoint so you can tell a door from a regular wall at a glance even when closed. Open doors render at ~55% opacity with a dashed stroke + the same tick markers — the doorway is still visually "there," it's just clearly passable.
+- **End-to-end LoS integration**: `wallBlocksSightEffective(w)` (new helper) wraps the raw `blocksSight` flag — open doors return false regardless. `collectSightWalls` consumes the effective helper, so the LoS worker, fog masking, and viewer polygons all update within one render cycle of an open/close toggle. No state replay needed.
+- **`wallBlocksMovementEffective`** is exported alongside (mirrors the sight helper) so the future grid-pathing phase can drop in without revisiting door logic.
+
+### Why this matters
+Pre-113, dynamic level state ("the players opened the courtyard gate") had to be authored as delete-and-redraw: delete the wall to "open" it, then re-draw the segment to "close" it back. That broke the undo stack, lost the wall's id (so the GM couldn't restore the same door later), and didn't survive scene save / restore. Doors give the GM a stable entity that flips state in place — exactly the model real dungeons need.
+
+### Architecture
+- **`src/state/types.ts`** — `WallSegment` gains an optional `door?: { open: boolean }`. `WallBlock` does NOT (the doorway shape is inherently a thin opening; promoting a region to a door doesn't make sense). `door` absent = "not a door"; `door: { open: false }` = "closed door"; `door: { open: true }` = "open door."
+- **`src/state/walls.ts`** — three new helpers:
+  - `isDoor(w)` narrows `Wall` to `WallSegment & { door: { open: boolean } }`. Block walls always return false (defensive: even a malformed peer that sneaks `door` onto a block via the wire format is ignored).
+  - `wallBlocksSightEffective(w)` — false when an open door OR `blocksSight === false`; true otherwise. The door wraps the `blocksSight` flag rather than overriding it (so an "arrow slit" door — `blocksSight: false` + `door` — stays transparent when closed too).
+  - `wallBlocksMovementEffective(w)` — same shape.
+- **`src/state/los-compose.ts`** — `collectSightWalls` switched from raw `w.blocksSight` to `wallBlocksSightEffective(w)`. So an open door drops its segment from the LoS occluder list immediately on toggle.
+- **`src/sync/messages.ts`** — `deserializeState` round-trips `door: { open: boolean }` for segment walls. Defensive: only honors the field if the shape matches; pre-113 peers omit it; receivers default to "not a door."
+- **`src/render/layer-walls.ts`** — segment-wall draw pass branches on `door` presence:
+  - **Closed door**: stroke-as-normal, then a perpendicular tick marker at the segment midpoint (length scales with thickness so the door reads at any zoom).
+  - **Open door**: ~55% global alpha + thinner stroke + dashed line, plus the same midpoint tick.
+- **`src/ui/wall-editor.ts`** — added "Is door" checkbox + a "Currently open" sub-toggle that appears only when the editor confirms ALL selected walls are doors. The row is hidden entirely when ANY block wall is in the edit selection (blocks can't be doors). `WallEditorChange` gained `door?: { open: boolean } | null` — `null` is the "remove door promotion" signal.
+- **`src/entries/gm.ts`** wall editor host:
+  - The `onChange` callback translates `door: null` into a remove + re-add patch pair (the store's naive spread can't delete a field, so we rebuild the wall without it). Other changes flow through the standard `wall-update` path.
+  - Right-click context menu adds an "Open door" / "Close door" entry above the existing "Disable sight blocking" toggle when EVERY selected wall is a door. Multi-select aware. Polite announcer fires "Door(s) opened." / "Door(s) closed." for screen-reader users.
+- **`src/ui/styles.css`** — added `.wall-editor-toggle[hidden] { display: none }` so the door state-row actually disappears when the editor toggles its hidden attribute (the parent's `display: flex` was overriding the HTML default).
+
+### UX details
+- **Doors stay visible when open.** A pure delete would remove the wall outline; that's wrong because the doorway is still a feature of the level — the GM (and Spectator) should still see "this is where the door is, it's just open right now." The dashed faded stroke + tick markers give that semantic.
+- **No separate "door" tool.** Author as a regular line, then promote via the editor. Keeps the Walls tool focused on geometry; door state is a property of the resulting wall, not a different entity type.
+- **Block walls are intentionally excluded** from door promotion. A "block door" doesn't have a clear physical interpretation (a 3×3 tile region that's a door?) and the renderer would need a different visual. Future phase if real demand emerges.
+
+### Tests
+- **+7 unit tests** in `src/state/walls.test.ts`: `isDoor` returns false for plain segments + blocks + true for segments with door field; `wallBlocksSightEffective` covers closed-door blocks / open-door doesn't / underlying `blocksSight: false` short-circuits / non-door segments fall through; `wallBlocksMovementEffective` mirrors sight; block walls with malformed door-via-wire field are ignored.
+- **+3 unit tests** in `src/state/los-compose.test.ts`: closed door contributes its segment; open door drops its segment; open door coexists with a normal wall (only the door drops).
+- **+3 Playwright specs** in `e2e/door-toggle.spec.ts` (new): wall editor exposes the "Is door" checkbox + reveals the "Currently open" sub-toggle when checked; right-click on a door surfaces "Open door" + flips to "Close door" after; non-door walls do NOT show the open/close menu entry.
+- **All 1268 unit tests + 304 Playwright specs pass** locally on the first run after one fix (added a `[hidden] { display: none }` rule for `.wall-editor-toggle` since `display: flex` was overriding the HTML default).
+
+### Bundle
+- 94.48 / 96 KB initial-load brotli (+0.56 KB for the door helpers + the wall-editor row + the renderer branch + the gm-side context-menu entry). CSS 11.62 / 12 KB. Lazy chunks unchanged.
+
+### Pre-push checklist
+Caught zero issues — full unit suite + full e2e + visual-regression spec + size-limit all green before push. Sixteen clean phases in a row now (97 + 99 + 100 + 101 + 102 + 103 + 104 + 105 + 106 + 107 + 108 + 109 + 110 + 111 + 112 + 113).
+
+### Chunky-walls trilogy complete
+0.111 + 0.112 + 0.113 wrap up the three-phase response to the user's "walls that take up a full tile + wider walls in general" ask: chunkier authoring (segment thickness 12 → 48 px), region authoring (block walls), and dynamic level state (doors). Wall authoring is now meaningfully more capable than it was three phases ago without any of the existing flows breaking.
 
 ---
 
