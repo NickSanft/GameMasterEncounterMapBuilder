@@ -6,13 +6,18 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## Versioning scheme
 
-While pre-1.0:
+Pre-1.0 (Phases 1 → 125):
 
-- **Minor version** (`0.X.0`) tracks the **phase number** from the development plan. Each phase ships as a minor release.
-- **Patch version** (`0.X.Y`) is used for smaller follow-ups inside a phase (bug fixes, small UX additions that don't warrant a whole phase).
-- **1.0.0** will be cut when the app ships its first stable, remote-play-capable release.
+- **Minor version** (`0.X.0`) tracked the **phase number** from the development plan. Each phase shipped as a minor release.
+- **Patch version** (`0.X.Y`) was used for smaller follow-ups inside a phase (bug fixes, small UX additions that didn't warrant a whole phase).
 
-Every release is an annotated git tag (`vX.Y.Z`) on the commit that introduced the feature.
+Post-1.0 (1.0.0 onward, shipped 2026-04-27):
+
+- **Major** (`X.0.0`) — breaking changes to the wire format, IDB schema, or public surface that aren't backward compatible.
+- **Minor** (`X.Y.0`) — new features, additive changes, opt-in enhancements. Backward compatible.
+- **Patch** (`X.Y.Z`) — bug fixes, perf, doc-only changes. Backward compatible.
+
+Every release is an annotated git tag (`vX.Y.Z`) on the commit that introduced it.
 
 ---
 
@@ -122,7 +127,48 @@ gaps so the v1.0 cut is genuinely "stable + remote-play-capable."
 - **0.123.0** — Bulk token edit (multi-select then "set HP max to N for all" / "add condition to all") ✅
 - **0.124.0** — Hex grid mode (cosmetic overlay; tokens / walls / fog still operate on the underlying square grid in v124) ✅
 - **0.125.0** — Test coverage + performance audit (added at user request before the 1.0.0 cut) ✅
-- **1.0.0** — Stable + remote-play-capable cut after the 0.125 work lands.
+- **1.0.0** — Stable + remote-play-capable cut after the 0.125 work lands ✅
+
+---
+
+## [1.0.0] — 2026-04-27 — First stable, remote-play-capable release 🎉
+
+The 1.0.0 cut. This release marks the end of the pre-1.0 phase plan and the start of post-1.0 SemVer (breaking changes only on major bumps; minors add features; patches fix bugs).
+
+### What 1.0 means
+- **Stable feature set.** Every feature shipped in 0.1 → 0.125 is a v1.0 feature. Nothing is documented as "experimental" anymore. No features are gated behind feature flags. The shape of `SessionState` (the wire format + IDB schema) is the v1 contract — pre-1.0 saves continue to load (`deserializeState` defaults missing fields), and post-1.0 saves stay backward compatible until v2.
+- **Remote-play-capable.** Two GMs OR a GM + N spectators can connect across the internet via WebRTC (Phase 62) with a single signaling-message hand-off. The local-first BroadcastChannel transport (Phase 51) works inside one browser without a server. Both transports share one `SyncMessage` envelope (Phase 66) carrying `senderId` / `timestamp` for attribution + clock-relative ordering.
+- **Suite-passing.** 1383 unit tests + 331 Playwright e2e specs green on every commit going back to Phase 95. Coverage (Phase 125) at 89.93% statements / 91.33% branches / 94.47% functions on the testable surface (`src/state/`).
+
+### What's in 1.0 — the pillars
+- **Map authoring** — paint backgrounds (Phase 11), grid (Phase 1, hex overlay Phase 124), tokens (Phase 4) with HP / conditions / death saves / facing / size / catalog presets / per-token color, walls (Phase 56) with sight + movement + thickness + visibility + door + block-walls + corner-resize + presets, AoE templates (Phase 65), draw strokes (Phase 60), annotations (Phase 33).
+- **Tactical play** — initiative tracker with auto-roll (Phases 30, 53, 69), turn timer (Phase 93), conditions with round-counted timers (Phase 70), death-save tracker (Phase 71), damage / heal dialog (Phase 50) with concentration prompts (Phase 86), distance ruler with diagonal-rule choice + presets (Phases 27, 91, 115), AoE templates with two-finger touch rotate (Phase 104), movement indicator showing the path's tactical cost (Phases 81, 91, 114), token movement undo (Phase 122), bulk token edit (Phase 123).
+- **Sync + multiplayer** — local BroadcastChannel transport (Phase 51), remote WebRTC transport (Phase 62) with per-player permissions (Phase 82), per-spectator hidden tokens (Phase 109), persistent player ids surviving page reload (Phase 110), latency tracking (Phase 83), conflict-merge for accidentally double-booked GM tabs (Phase 84), gm-takeover archive recovery (Phase 99), spectator viewport mirror (Phase 28), follow-the-camera (Phase 29) + follow-the-fog (Phase 56) toggles, player chat (Phase 119), player annotation suggestions (Phase 120).
+- **Workflow** — multi-scene catalog with thumbnails (Phase 39 + 121), scenes import / export (Phase 98), snapshot history with restore (Phase 97), camera bookmarks (Phase 102), recent backgrounds (Phase 108), background presets (Phase 49), command palette (Phase 95), slash command input (Phase 74), notes panel (Phase 38), combat log (Phase 94), dice tray with full 5e expression parser + animation + history recall (Phases 31, 73, 107), template + token libraries (Phase 41 + 89).
+- **Visual polish** — five themes (Phases 36 + 59), prefers-reduced-motion / prefers-contrast / colorblind-marker support (Phases 25 + 80), accessibility canvas-outline + ARIA-live announcer (Phases 86 + 90), help overlay (Phase 23), onboarding tour (Phase 61), atmospheric weather (Phase 79), time-of-day tint (Phase 80), token lighting (Phase 57), animated GIF tokens (Phase 81).
+
+### Bundle (the v1.0 deliverable size)
+```
+JavaScript (initial load, brotli):  101.14 / 110 KB
+JavaScript (lazy chunks, brotli):    18.67 /  20 KB
+CSS (all chunks, brotli):            12.38 /  14 KB
+HTML entries (brotli):                1.32 /   2 KB
+Service worker + manifest (brotli):   2.12 /   2.5 KB
+```
+
+Three HTML entry points (`index.html` landing, `gm.html` GM view, `spectator.html` Spectator view) share one shell + one bundle. Lazy chunks (help-overlay, settings-modal, remote-play-modal, dice-animation) load on-demand.
+
+### Documented limitations (call-outs for v1.0 users)
+- **Hex grid is cosmetic in v1.0.** Tokens still snap to the underlying rectangular cellSize × cellSize grid; walls / fog / distance helpers all operate on the square grid. Hex-aware semantics is a multi-phase post-1.0 project. (Phase 124)
+- **Spectator-side `gm-only` chat / per-token-visibility filters are good-faith.** A tampered Spectator build could read `gm-only` chat off the wire. Strict server-mediated enforcement is out of scope for the local-first sync model. (Phase 119)
+- **Single-writer (GM) state model.** Spectators have read-only authoritative state plus fire-and-forget channels (chat, dice, pings, annotation suggestions). Spectator-to-Spectator routing (chat DMs, etc.) would need addressed envelopes — out of scope for v1. (Phases 51, 82, 119, 120)
+
+### Next up (post-1.0 wishlist, no commitment)
+- True hex semantics: hex distance helper, hex-snap token placement, hex-aware wall geometry, hex-shaped fog cells.
+- Spectator-to-Spectator chat DMs.
+- Per-Spectator drag permissions on owned tokens.
+- A vetted server-mediated mode for stricter content control.
+- A real perf benchmark suite with regression detection.
 
 ---
 
