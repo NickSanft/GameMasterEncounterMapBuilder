@@ -17,6 +17,7 @@ import {
   WALL_HANDLE_SCREEN_PX,
 } from '../state/walls.js';
 import type { ID } from '../state/types.js';
+import { clampMoveAgainstWalls } from '../state/movement.js';
 
 interface LassoInProgress {
   startWorldX: number;
@@ -270,11 +271,28 @@ export function createSelectTool(ctx: InputContext): Tool {
             const t = state.tokens.find((x) => x.id === id);
             if (t) {
               if (gridDX !== 0 || gridDY !== 0) {
-                store.applyPatch({
-                  kind: 'token-update',
-                  id,
-                  changes: { x: t.x + gridDX, y: t.y + gridDY },
-                });
+                // Phase 114 — clamp the move against any walls whose
+                // `wallBlocksMovementEffective` is true (segment +
+                // block walls; open doors don't block). The clamp is
+                // PER-TOKEN: if the group drag would push some
+                // tokens through a wall but not others, the blocked
+                // ones land at the latest reachable cell while the
+                // unblocked ones reach the requested destination.
+                const clamped = clampMoveAgainstWalls(
+                  t.x,
+                  t.y,
+                  t.x + gridDX,
+                  t.y + gridDY,
+                  state.walls,
+                  cellSize,
+                );
+                if (clamped.cellX !== t.x || clamped.cellY !== t.y) {
+                  store.applyPatch({
+                    kind: 'token-update',
+                    id,
+                    changes: { x: clamped.cellX, y: clamped.cellY },
+                  });
+                }
               }
               continue;
             }

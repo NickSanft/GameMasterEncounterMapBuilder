@@ -105,6 +105,58 @@ small-to-large so the lowest-risk change lands first:
 - **0.112.0** — Block walls (a wall *region* that fills one or more grid cells; new `kind: 'block'` discriminator) ✅
 - **0.113.0** — Door entities (segment walls with toggleable `open` state — closed blocks LoS / movement, open doesn't) ✅
 
+**Queued (Phases 114 → 124, then 1.0.0)** — final pre-1.0 batch.
+Eleven phases across movement realism, wall polish, player
+collaboration, QoL, and a hex-grid mode. Closes the major remaining
+gaps so the v1.0 cut is genuinely "stable + remote-play-capable."
+
+- **0.114.0** — `blocksMovement` enforcement (the flag from Phase 54 finally does something) ✅
+- **0.115.0** — Diagonal movement rules (5e / 5e-alt / Chebyshev / Euclidean — settings dropdown the ruler + indicator both consume)
+- **0.116.0** — Drag-to-resize block corners (deferred from Phase 112)
+- **0.117.0** — Wall presets (saveable templates: stone-exterior, wooden-divider, etc.)
+- **0.118.0** — Snap-to-grid-edge wall drawing (toggle in walls-settings)
+- **0.119.0** — Player chat panel (text chat over the existing sync channel; per-message visibility)
+- **0.120.0** — Player-side annotations (Spectator drops a marker; GM sees + approves / dismisses)
+- **0.121.0** — Auto-generated scene thumbnails (renderer snapshot at scene save)
+- **0.122.0** — Token movement undo (`Z` reverts just the last token move, not the whole-state undo)
+- **0.123.0** — Bulk token edit (multi-select then "set HP max to N for all" / "add condition to all")
+- **0.124.0** — Hex grid mode (currently square only — biggest lift; touches every layer that uses cellSize × cellSize math)
+- **1.0.0** — Stable + remote-play-capable cut after the 0.124 work lands.
+
+---
+
+## [0.114.0] — 2026-04-26 — `blocksMovement` enforcement
+
+### Added
+- **Walls actually block token drags now.** The `blocksMovement` flag has existed on every wall since Phase 54 but did nothing — the drag commit happily moved tokens through walls. Phase 114 wires the flag to the drag path: when a token's straight-line move from start to end crosses a movement-blocking wall, the move is clamped to the latest reachable cell along the line.
+- **Open doors don't block** — the clamp uses `wallBlocksMovementEffective` (Phase 113), so an open door is fully passable.
+- **Block walls block via their perimeter** — the same `wallToSegments` expansion the LoS path uses (Phase 112) feeds into the clamp helper, so a 3×3 block wall blocks any drag whose line crosses any of its 4 sides.
+- **Arrow-key nudges respect the clamp too** — pressing an arrow key into a wall is now a silent no-op instead of teleporting the token through.
+
+### Why this matters
+Before 114, a GM could draw walls for visual / LoS purposes but the players' tokens could still be slammed through them. The flag was on every wall, defaulting to `true`, but had zero runtime effect — the user had reasonably assumed it did something. Phase 114 makes it actually mean what it says.
+
+### Architecture
+- **`src/state/movement.ts`** (new, ~190 lines) — pure helper. `clampMoveAgainstWalls(startCellX, startCellY, endCellX, endCellY, walls, cellSize)` returns `{cellX, cellY, blocked}`. Algorithm:
+  1. Collect every wall whose `wallBlocksMovementEffective` is true. Block walls expand to their 4 perimeter segments via `wallToSegments`.
+  2. Bresenham-walk the cells from start to end.
+  3. For each step, test the segment from prev-cell-center to next-cell-center against every blocker. The first crossing stops the walk; the prev cell becomes the clamped destination.
+- **Pure straight-line movement** — Phase 114 deliberately doesn't pathfind around obstacles. A drag that would route around a corner gets clamped at the corner; the GM can follow up with a second drag to continue. Matches the existing "you control the path" interaction model. A future grid-pathfinder phase could route automatically.
+- **`segmentsIntersect`** + Bresenham helpers exported alongside for testability.
+- **`src/input/tool-select.ts`** — drag-commit path now calls `clampMoveAgainstWalls` per token (group drags clamp each token independently — tokens that can move further still reach their requested destination, blocked ones land at their personal clamp). When the clamp returns the same cell as the start, the token-update patch is skipped entirely.
+- **`src/entries/gm.ts`** — arrow-key nudge handler clamps the same way. A nudge into a wall is silently a no-op.
+
+### Tests
+- **+19 unit tests** in `src/state/movement.test.ts` (new): Bresenham horizontal / 45° / negative deltas / start-equals-end; segmentsIntersect for crossing / parallel / touching-endpoints / non-overlapping; clampMoveAgainstWalls passthrough cases (no walls / start=end / blocksMovement=false / open doors); blocking cases (clamp at cell-before-wall / clamp at start when first step blocked / closed doors block / block walls block via perimeter / parallel-to-move walls don't block / diagonal moves blocked by perpendicular walls / multiple walls — first crossing wins).
+- **+3 Playwright specs** in `e2e/blocks-movement.spec.ts` (new): no walls = drag goes through; a wall clamps the drag short; an open door does NOT block the drag.
+- **All 1287 unit tests + 307 Playwright specs pass** locally on the first run.
+
+### Bundle
+- 94.96 / 96 KB initial-load brotli (+0.48 KB for the movement helper + the two clamp wirings). CSS 11.62 / 12 KB. Lazy chunks unchanged.
+
+### Pre-push checklist
+Caught zero issues — full unit suite + full e2e + visual-regression spec + size-limit all green before push. Seventeen clean phases in a row now (97 → 114).
+
 ---
 
 ## [0.113.0] — 2026-04-26 — Door entities

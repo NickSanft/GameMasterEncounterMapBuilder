@@ -195,6 +195,7 @@ import { createFogWorkerClient } from '../render/fog-worker-client.js';
 import FogWorker from '../render/fog-worker.js?worker';
 import { collectLights, collectSightWalls, collectViewers } from '../state/los-compose.js';
 import { cellsToReveal } from '../state/auto-reveal.js';
+import { clampMoveAgainstWalls } from '../state/movement.js';
 import { detectGridFromBlob } from '../state/grid-detect-blob.js';
 import {
   addBookmark,
@@ -2676,12 +2677,25 @@ function moveSelection(dx: number, dy: number): boolean {
     for (const id of ids) {
       const t = state.tokens.find((t) => t.id === id);
       if (t) {
-        store.applyPatch({
-          kind: 'token-update',
-          id,
-          changes: { x: t.x + dx, y: t.y + dy },
-        });
-        moved = true;
+        // Phase 114 — clamp arrow-key nudges against walls too. A
+        // single-cell nudge into a closed wall becomes a silent no-op
+        // (the clamp returns the start cell), matching the drag path.
+        const clamped = clampMoveAgainstWalls(
+          t.x,
+          t.y,
+          t.x + dx,
+          t.y + dy,
+          state.walls,
+          cellSize,
+        );
+        if (clamped.cellX !== t.x || clamped.cellY !== t.y) {
+          store.applyPatch({
+            kind: 'token-update',
+            id,
+            changes: { x: clamped.cellX, y: clamped.cellY },
+          });
+          moved = true;
+        }
         continue;
       }
       const a = state.annotations.find((a) => a.id === id);
