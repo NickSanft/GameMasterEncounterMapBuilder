@@ -632,6 +632,18 @@ body.view {
   color: white;
 }
 
+/* Phase 118 — Walls tool: snap-to-grid checkbox row */
+.walls-settings-snap {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.78rem;
+  color: var(--fg);
+  cursor: pointer;
+  user-select: none;
+  margin-top: 0.25rem;
+}
+
 /* Session menu (GM, top-right) */
 .session-menu {
   position: absolute;

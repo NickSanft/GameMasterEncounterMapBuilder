@@ -12,6 +12,13 @@ export type WallsToolMode = 'line' | 'block';
 
 export interface WallsToolOptions {
   mode: WallsToolMode;
+  /**
+   * Phase 118 — when `true`, line-mode vertex placements snap to the
+   * nearest grid-cell corner. Block-mode is unaffected (it already
+   * snaps to cells by definition). Default `false` so freehand
+   * authoring still works for diagonal / angled walls.
+   */
+  snapToGrid: boolean;
 }
 
 export interface WallsToolOptionsRef {
@@ -19,7 +26,7 @@ export interface WallsToolOptionsRef {
 }
 
 export function createWallsToolOptionsRef(
-  options: WallsToolOptions = { mode: 'line' },
+  options: WallsToolOptions = { mode: 'line', snapToGrid: false },
 ): WallsToolOptionsRef {
   return { current: options };
 }
@@ -157,18 +164,38 @@ export function createWallsTool(ctx: WallsToolContext): Tool {
     }
 
     const overlay = ensureOverlay();
+    // Phase 118 — snap-to-grid-edge. When `snapToGrid` is on, vertex
+    // placements snap to the nearest cell corner so straight wall
+    // grids fall together cleanly. Cursor preview during pointermove
+    // also uses the snapped position so the rubber-band line shows
+    // where the next click will commit, not where the mouse is.
+    const placement = snapWorldToGridEdge(world);
     const prev = overlay.vertices[overlay.vertices.length - 1];
     if (prev) {
       // Commit the segment prev → world as a concrete Wall patch.
       store.applyPatch({
         kind: 'wall-add',
-        wall: createWall({ x1: prev.x, y1: prev.y, x2: world.x, y2: world.y }),
+        wall: createWall({ x1: prev.x, y1: prev.y, x2: placement.x, y2: placement.y }),
       });
     }
-    overlay.vertices = [...overlay.vertices, { x: world.x, y: world.y }];
-    overlay.cursor = { x: world.x, y: world.y };
+    overlay.vertices = [...overlay.vertices, { x: placement.x, y: placement.y }];
+    overlay.cursor = { x: placement.x, y: placement.y };
     renderer.requestRender();
     e.preventDefault();
+  }
+
+  /**
+   * Phase 118 — when `snapToGrid` is on, round the world position to
+   * the nearest cell corner. Otherwise pass through unchanged. Pure
+   * — caller decides what to do with the result.
+   */
+  function snapWorldToGridEdge(world: { x: number; y: number }): { x: number; y: number } {
+    if (!wallsToolOptions.current.snapToGrid) return world;
+    const cs = store.getState().grid.cellSize;
+    return {
+      x: Math.round(world.x / cs) * cs,
+      y: Math.round(world.y / cs) * cs,
+    };
   }
 
   function onPointerMove(e: PointerEvent) {
@@ -180,7 +207,10 @@ export function createWallsTool(ctx: WallsToolContext): Tool {
     const overlay = wallsOverlay.current;
     if (!overlay || overlay.vertices.length === 0) return;
     const world = pointerToWorld(canvas, renderer, e);
-    overlay.cursor = { x: world.x, y: world.y };
+    // Phase 118 — preview the SNAPPED cursor too, so the rubber-band
+    // line shows the GM where the next click will commit.
+    const snapped = snapWorldToGridEdge(world);
+    overlay.cursor = { x: snapped.x, y: snapped.y };
     renderer.requestRender();
   }
 

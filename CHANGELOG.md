@@ -114,7 +114,7 @@ gaps so the v1.0 cut is genuinely "stable + remote-play-capable."
 - **0.115.0** — Diagonal movement rules (5e / 5e-alt / Chebyshev / Euclidean — settings dropdown the ruler + indicator both consume) ✅
 - **0.116.0** — Drag-to-resize block corners (deferred from Phase 112) ✅
 - **0.117.0** — Wall presets (saveable templates: stone-exterior, wooden-divider, etc.) ✅
-- **0.118.0** — Snap-to-grid-edge wall drawing (toggle in walls-settings)
+- **0.118.0** — Snap-to-grid-edge wall drawing (toggle in walls-settings) ✅
 - **0.119.0** — Player chat panel (text chat over the existing sync channel; per-message visibility)
 - **0.120.0** — Player-side annotations (Spectator drops a marker; GM sees + approves / dismisses)
 - **0.121.0** — Auto-generated scene thumbnails (renderer snapshot at scene save)
@@ -122,6 +122,32 @@ gaps so the v1.0 cut is genuinely "stable + remote-play-capable."
 - **0.123.0** — Bulk token edit (multi-select then "set HP max to N for all" / "add condition to all")
 - **0.124.0** — Hex grid mode (currently square only — biggest lift; touches every layer that uses cellSize × cellSize math)
 - **1.0.0** — Stable + remote-play-capable cut after the 0.124 work lands.
+
+---
+
+## [0.118.0] — 2026-04-27 — Snap-to-grid-edge wall drawing
+
+### Added
+- **"Snap to grid" checkbox** in the Walls tool settings panel. When on, line-mode vertex placements snap to the nearest cell corner. The rubber-band cursor preview also snaps so you see where the next click will commit, not where your mouse happens to be hovering. Off by default — freehand authoring stays the default for diagonal / angled walls.
+- **Block mode unchanged** — already snaps to cells by definition (Phase 112). The checkbox stays available for muscle memory but is silently ignored during block drags.
+
+### Why this matters
+Building a clean grid-aligned dungeon pre-118 required pixel-perfect mouse work for every wall vertex, then the user squinted at slightly-off corners. Snap mode makes a 50-cell room geometry trivial — every click lands cleanly on a cell corner so the walls form a sealed perimeter without manual cleanup.
+
+### Architecture
+- **`src/input/tool-walls.ts`** — `WallsToolOptions` gains `snapToGrid: boolean` (default `false`). The default factory `createWallsToolOptionsRef()` includes it. A new `snapWorldToGridEdge(world)` helper rounds to the nearest cell corner when the flag is on (passes through unchanged when off). The line-mode `pointerdown` commit + `pointermove` cursor preview both run through it. Block mode skips it (block drags use `worldToCell` independently).
+- **`src/ui/walls-settings.ts`** — added a third UI row under "Mode": a single checkbox with the label "Snap to grid". Toggling mutates `optionsRef.current.snapToGrid` so the next pointerdown picks up the new setting; the panel's `syncButtons` updates the checkbox state on tool re-activation so a flag set earlier sticks.
+- **`src/ui/styles.css`** — small `.walls-settings-snap` block: flex row with the checkbox + label, same font / spacing as the mode-button row above.
+
+### Tests
+- **+2 Playwright specs** in `e2e/snap-to-grid-walls.spec.ts` (new): the checkbox is present + unchecked by default; toggling on persists across switching to a different tool and back (the options ref outlives the panel mount).
+- **All 1321 unit tests + 316 Playwright specs pass** locally.
+
+### Bundle
+- 96.66 / 98 KB initial-load brotli (+0.14 KB for the snap helper + the settings checkbox). CSS 11.74 / 12 KB. Lazy chunks unchanged.
+
+### Pre-push checklist
+Caught zero issues — full unit suite + full e2e + visual-regression spec + size-limit all green before push.
 
 ---
 

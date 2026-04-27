@@ -51,10 +51,35 @@ export function mountWallsSettings(
   }
   panel.appendChild(modeRow);
 
+  // Phase 118 — snap-to-grid-edge toggle. Only meaningful in line
+  // mode (block mode already snaps to cells by definition); the
+  // checkbox stays available in both modes for muscle-memory but the
+  // tool ignores it during block drags.
+  const snapLabel = document.createElement('div');
+  snapLabel.className = 'walls-settings-label';
+  snapLabel.textContent = 'Snap';
+  panel.appendChild(snapLabel);
+
+  const snapRow = document.createElement('label');
+  snapRow.className = 'walls-settings-snap';
+  const snapInput = document.createElement('input');
+  snapInput.type = 'checkbox';
+  snapInput.dataset.field = 'snap-to-grid';
+  snapInput.title = 'Snap line-mode vertices to the nearest cell corner';
+  const snapText = document.createElement('span');
+  snapText.textContent = 'Snap to grid';
+  snapRow.appendChild(snapInput);
+  snapRow.appendChild(snapText);
+  snapRow.addEventListener('change', () => {
+    optionsRef.current = { ...optionsRef.current, snapToGrid: snapInput.checked };
+  });
+  panel.appendChild(snapRow);
+
   function syncButtons() {
     for (const [id, btn] of modeButtons) {
       btn.classList.toggle('active', id === optionsRef.current.mode);
     }
+    snapInput.checked = optionsRef.current.snapToGrid;
   }
 
   function syncVisibility(toolId: string | null) {
