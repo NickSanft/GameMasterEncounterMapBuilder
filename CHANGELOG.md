@@ -119,10 +119,52 @@ gaps so the v1.0 cut is genuinely "stable + remote-play-capable."
 - **0.120.0** — Player-side annotations (Spectator drops a marker; GM sees + approves / dismisses) ✅
 - **0.121.0** — Auto-generated scene thumbnails (renderer snapshot at scene save) ✅
 - **0.122.0** — Token movement undo (`Z` reverts just the last token move, not the whole-state undo) ✅
-- **0.123.0** — Bulk token edit (multi-select then "set HP max to N for all" / "add condition to all")
+- **0.123.0** — Bulk token edit (multi-select then "set HP max to N for all" / "add condition to all") ✅
 - **0.124.0** — Hex grid mode (currently square only — biggest lift; touches every layer that uses cellSize × cellSize math)
 - **0.125.0** — Test coverage + performance audit (added at user request before the 1.0.0 cut)
 - **1.0.0** — Stable + remote-play-capable cut after the 0.125 work lands.
+
+---
+
+## [0.123.0] — 2026-04-27 — Bulk token edit
+
+### Added
+- **Bulk-edit modal** for the current selection. Three actions in v123:
+  - **Set HP max** — input a new max value, applies to every selected token that already tracks HP. Tokens without HP tracking are skipped. `current` clamps down so it never exceeds the new max (so a token at 8/10 HP whose new max is 6 ends up at 6/6).
+  - **Add condition** — pick a preset, applies to every selected token that doesn't already have it.
+  - **Remove condition** — drops the chosen condition + any Phase 70 expiration timer from every selected token that has it.
+- **Single-undo semantics.** Each Apply runs inside `store.batch()` so the whole bulk action is one undo step, not N.
+- **Command palette entry** — *"Bulk edit selected tokens…"* (group **Tokens**). Opens the modal regardless of selection size; the modal shows the count up-front and each Apply is a no-op when no tokens are affected.
+- **Polite-announce on apply / no-op** — "Set HP max on 5 tokens" / "Added poisoned to 3 tokens" / "No tokens affected — Set HP max on was a no-op."
+
+### Why this matters
+Pre-123 the GM's only path to apply the same change to many tokens was to open the editor on each one individually (or, for HP, the Phase 92 quick-HP-adjust shortcut). Mid-encounter, the orc squad all rolls poisoned together — pre-123 that's 6 token editor opens; with bulk edit it's 1 modal + 1 click. Same for "set the goblin volunteers' max HP to 4" (catalog tokens default to a generic max).
+
+### Architecture
+- **`src/state/bulk-token-edit.ts`** (new, ~115 lines) — pure helpers. `bulkSetHpMax`, `bulkAddCondition`, `bulkRemoveCondition` all return a list of `{tokenId, changes: Partial<Token>}` operations. Each helper filters out:
+  - Unselected tokens (defensive — the modal only feeds selection.ids, but the API is robust against misuse).
+  - Tokens that would be no-ops (already at the target HP max with safe current; already / not having the condition).
+  - Invalid inputs (non-finite / negative HP max; empty conditionId).
+  Removed conditions also strip the Phase 70 expiration timer if present, so a re-added condition doesn't pick up a stale countdown.
+- **`src/ui/bulk-edit-modal.ts`** (new, ~210 lines) — three-fieldset modal with the standard backdrop + focus-trap pattern. Each apply button calls the helper, wraps the ops in `store.batch(() => {...})`, fires the announcer, and closes. Esc / backdrop-click / × close.
+- **`src/entries/gm.ts`** — mounts `bulkEditModal` next to the existing damage-heal dialog. Registers a single command palette entry.
+- **`src/ui/styles.css`** — new `.bulk-edit-modal` block + nested `.bulk-edit-section` / `.bulk-edit-summary` / `.bulk-edit-hint` / `.bulk-edit-apply` rules. Each fieldset has a card-style border so the three actions are visually distinct.
+
+### UX details
+- **Selection captured at modal-open time.** Closing + reopening picks up the current selection; changes mid-modal don't refresh the count (would need a subscribe + render). Acceptable v1 — the user's flow is "select → command palette → apply → close."
+- **Custom condition ids supported.** The condition select uses `CONDITION_PRESETS`, but the underlying helpers accept arbitrary ids (matches the existing `addCondition` / `removeCondition` contract). A future polish could surface a free-text input for "tracking my homebrew flag."
+- **No bulk visibility / size / color YET.** Three actions cover the most common combat workflows (HP, conditions). Adding more is a matter of new sections in the same modal + new helper functions.
+
+### Tests
+- **+13 unit tests** in `src/state/bulk-token-edit.test.ts` (new): bulkSetHpMax (sets max for hp-bearing tokens; clamps current; skips no-HP tokens; skips already-at-target; skips unselected; rejects non-finite / negative); bulkAddCondition (adds when missing; skips empty id; skips unselected); bulkRemoveCondition (removes + clears expiration; skips not-having; skips empty id); countAffected.
+- **+3 Playwright specs** in `e2e/bulk-edit.spec.ts` (new): command palette opens the modal showing all three sections; modal summary reflects the selection size after a 2-token lasso; Esc closes the modal.
+- **All 1373 unit tests + 329 Playwright specs pass** locally.
+
+### Bundle
+- 100.89 / 110 KB initial-load brotli (+0.87 KB for the helpers + the modal + the wiring). CSS 12.38 / 14 KB (+0.12 KB for the modal styles). Lazy chunks unchanged.
+
+### Pre-push checklist
+Caught zero issues — full unit suite + full e2e + visual-regression specs + size-limit all green before push.
 
 ---
 

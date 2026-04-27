@@ -157,6 +157,7 @@ import { mountInitiativeModal } from '../ui/initiative-modal.js';
 import { mountDiagnosticsOverlay } from '../ui/diagnostics-overlay.js';
 import { mountHelpOverlay } from '../ui/help-overlay.js';
 import { mountDamageHealDialog } from '../ui/damage-heal-dialog.js';
+import { mountBulkEditModal } from '../ui/bulk-edit-modal.js';
 import { mountDicePanel } from '../ui/dice-panel.js';
 import { mountSlashCommandInput } from '../ui/slash-command-input.js';
 import { rollInitiativeForUnlinkedTokens } from '../state/initiative.js';
@@ -1359,6 +1360,16 @@ const damageHealDialog = mountDamageHealDialog({
 });
 
 const notesPanel = mountNotesPanel({ preferences });
+
+// Phase 123 — bulk-edit modal. Opens via the command palette
+// (group "Tokens"). Operates on the current selection at open time;
+// each Apply button runs inside store.batch() so the bulk action
+// shows up as a single undo step.
+const bulkEditModal = mountBulkEditModal({
+  store,
+  selection,
+  onAnnounce: (msg) => announcer.announce(msg),
+});
 
 // ─── Phase 61 — Onboarding tour ──────────────────────────────────
 // `openOnboardingTour` constructs a fresh controller every time so
@@ -3385,6 +3396,17 @@ function slugForFilename(name: string): string {
     hint: 'Review pending annotation suggestions from spectators',
     group: 'Panels',
     run: () => annotationProposalsPanel.toggle(),
+  });
+  // Phase 123 — bulk-edit modal for the current selection. Always
+  // listed so users can discover it; the modal shows the active
+  // selection count up-front and each Apply button is a no-op when
+  // it doesn't affect any of the selected tokens.
+  reg.register({
+    id: 'bulk-edit-tokens',
+    label: 'Bulk edit selected tokens…',
+    hint: 'Set HP max, add / remove conditions across the selection',
+    group: 'Tokens',
+    run: () => bulkEditModal.open(),
   });
   reg.register({
     id: 'open-shortcuts',
