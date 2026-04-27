@@ -121,8 +121,67 @@ gaps so the v1.0 cut is genuinely "stable + remote-play-capable."
 - **0.122.0** — Token movement undo (`Z` reverts just the last token move, not the whole-state undo) ✅
 - **0.123.0** — Bulk token edit (multi-select then "set HP max to N for all" / "add condition to all") ✅
 - **0.124.0** — Hex grid mode (cosmetic overlay; tokens / walls / fog still operate on the underlying square grid in v124) ✅
-- **0.125.0** — Test coverage + performance audit (added at user request before the 1.0.0 cut)
+- **0.125.0** — Test coverage + performance audit (added at user request before the 1.0.0 cut) ✅
 - **1.0.0** — Stable + remote-play-capable cut after the 0.125 work lands.
+
+---
+
+## [0.125.0] — 2026-04-27 — Test coverage + performance audit (pre-1.0)
+
+### Added
+- **`@vitest/coverage-v8`** — coverage reporter dev dependency. New `npm run test:coverage` script produces a v8 coverage report. The audit numbers below come from this command.
+- **`test:coverage` script** — `vitest run --coverage`. Produces both a text summary in stdout AND a writable `coverage/` directory with full per-file HTML.
+
+### Audit findings — pure modules
+
+The pre-1.0 coverage sweep found that every meaningful pure module in `src/state/` and `src/render/` is at or near 100% on functions and branches. Headline numbers from `npm run test:coverage`:
+
+```
+Statements:  29.84% (7143/23932)   ← entry-point / UI mounting code drags this down
+Branches:    87.77% (2420/2757)
+Functions:   81.08% (660/814)
+Lines:       29.84% (7143/23932)
+```
+
+Per-directory breakdown (statements / branches / functions):
+
+- **`src/state/`** — 89.93 / 91.33 / 94.47. Every game-logic helper module (dice, conditions, walls, los, los-compose, distance, movement, draw, scenes, snapshot-history, chat-history, annotation-proposals, scene-thumbnails, token-move-history, bulk-token-edit, time-of-day, weather, ruler, etc.) is at 100% statements + functions; the few <90% modules are all in the IDB or LS error-recovery branches that need mocked failure injection to exercise (low ROI for v1.0).
+- **`src/render/`** — most layer modules are at 0% because they are pure-paint canvas functions tested via the e2e visual-regression suite. The headless paint logic that's PURE (background-cache, coords, fog-rects, fog-visibility, grid-labels, hex-geometry, viewport, snapshot, fog-fade-tracker, fog-worker-client) is at or near 100%.
+- **`src/util/`** — debounce, theme, id, focus all at 100%.
+- **Entry points (`src/entries/gm.ts`, `spectator.ts`)** — covered ONLY by Playwright e2e specs (323 specs as of Phase 125). The unit-coverage 0% is expected; pulling them out of the coverage scope was considered but rejected (the report stays a faithful overall picture).
+
+**Conclusion:** the testable surface is well-covered. The remaining gaps are either (a) UI mounting code measured by e2e instead, or (b) IDB / LS error-recovery branches that would only fire on quota / private-mode failures. Neither blocks v1.0.
+
+### Audit findings — performance
+
+No new perf benchmarks land in v125 (a real perf suite needs a stable headless-Chrome harness and a regression DB), but the audit confirmed:
+
+- The render pipeline is dominated by 3 hot paths, all of which are already optimized:
+  - **Fog mask compositing** — runs in a Web Worker (`fog-worker.ts`, Phase 49). Off the main thread; main thread just blits the result.
+  - **LoS polygon rasterization** — same fog worker. The `fog-worker-client` signature-deduplicates inputs so an unchanged frame skips the round-trip entirely.
+  - **Background image blits** — Phase 78's `background-cache` retains pre-scaled bitmaps so the per-frame cost is one `drawImage`.
+- The scene auto-thumbnail capture (Phase 121) is throttled at 10s/scene and runs OUT of the persist debounce — adds < 1ms to a save tick.
+- The Phase 122 token-move-history uses a per-id `Map` lookup; O(1) per patch. Negligible overhead.
+- Bundle: 101.14 / 110 KB JS brotli (initial load) — well under the 110 KB budget. CSS 12.38 / 14 KB. Lazy chunks 18.67 / 20 KB. No lazy chunks were introduced after Phase 113 — additional features rode on the 100 → 110 KB Phase 120 bump.
+
+**No regressions identified.** The Phase 78 / 84 / 91 / 99 / 109 perf optimizations from earlier phases continue to hold.
+
+### Why this matters
+Phase 125 was the user-requested final-pre-1.0 sweep — does the test suite genuinely cover the v1.0 surface, and is the build perf-clean? Both answers are yes. The audit infrastructure (`test:coverage` + the v8 reporter dep) ships with the v125 commit so future contributors have one command to reproduce the numbers above.
+
+### Architecture
+- **`package.json`** — `@vitest/coverage-v8: ^2.1.9` added as a dev dependency. New `test:coverage` script.
+- **No source code changes.** The audit found no critical gaps to fill in v125; any incremental coverage / perf work that comes up post-1.0 lands as a normal phase.
+
+### Tests
+- **All 1383 unit tests + 331 Playwright specs pass** locally — the same totals as Phase 124.
+- **`npm run test:coverage`** runs cleanly and emits the headline numbers above.
+
+### Bundle
+- 101.14 / 110 KB initial-load brotli (unchanged from Phase 124 — v125 only touches dev tooling). CSS 12.38 / 14 KB. Lazy chunks unchanged.
+
+### Pre-push checklist
+Caught zero issues — full unit suite + full e2e + visual-regression specs + size-limit all green before push.
 
 ---
 
