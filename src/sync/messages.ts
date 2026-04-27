@@ -338,7 +338,26 @@ export type SyncMessage =
    * receiving their own probe back.
    */
   | { type: 'latency-probe'; id: number }
-  | { type: 'latency-probe-reply'; id: number };
+  | { type: 'latency-probe-reply'; id: number }
+  /**
+   * Phase 119 — player chat. Pure broadcast: every connected peer
+   * receives the message + filters on visibility. The sender adds
+   * the message to its own `chatHistory` BEFORE sending so it shows
+   * immediately + the BroadcastChannel self-echo guard prevents
+   * doubling. Spectator-side filtering of `gm-only` is good-faith
+   * (a tampered build can read gm-only off the wire); the GM-side
+   * doesn't filter — they see everything by design.
+   */
+  | {
+      type: 'chat';
+      messageId: string;
+      senderId: string;
+      senderName: string;
+      senderRole: 'gm' | 'spectator';
+      text: string;
+      visibility: 'shared' | 'gm-only';
+      timestamp: number;
+    };
 
 export function serializeState(s: SessionState): SerializedSessionState {
   return {

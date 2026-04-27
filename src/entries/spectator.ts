@@ -32,6 +32,12 @@ import { mountDiagnosticsOverlay } from '../ui/diagnostics-overlay.js';
 import { mountHelpOverlay } from '../ui/help-overlay.js';
 import { mountDicePanel } from '../ui/dice-panel.js';
 import { mountSlashCommandInput } from '../ui/slash-command-input.js';
+import {
+  createChatHistory,
+  spectatorShouldRenderChat,
+} from '../state/chat-history.js';
+import { mountChatPanel } from '../ui/chat-panel.js';
+import { nid } from '../util/id.js';
 import { mountMiniMap } from '../ui/mini-map.js';
 import { createPingManager } from '../state/ping-manager.js';
 import { createDamageFxManager } from '../state/damage-fx-manager.js';
@@ -338,6 +344,38 @@ const dicePanel = mountDicePanel({
     const stamped = { ...roll, senderName: ownIdentity().name };
     channel?.send({ type: 'dice-roll', roll: stamped });
     announcer.announce(`You rolled ${roll.source}: ${roll.total}.`);
+  },
+});
+
+// Phase 119 — Spectator chat panel. Per-message visibility lets a
+// player whisper to the GM (gm-only on the wire); other Spectators
+// filter those out via `spectatorShouldRenderChat`. Toggle with `c`.
+const chatHistory = createChatHistory();
+const chatPanel = mountChatPanel({
+  history: chatHistory,
+  viewMode: 'spectator',
+  onSend: (text, visibility) => {
+    const ownIdent = ownIdentity();
+    const msg = {
+      id: nid(),
+      senderId: playerId,
+      senderName: ownIdent.name,
+      senderRole: 'spectator' as const,
+      text,
+      visibility,
+      timestamp: Date.now(),
+    };
+    chatHistory.add(msg);
+    channel?.send({
+      type: 'chat',
+      messageId: msg.id,
+      senderId: msg.senderId,
+      senderName: msg.senderName,
+      senderRole: msg.senderRole,
+      text: msg.text,
+      visibility: msg.visibility,
+      timestamp: msg.timestamp,
+    });
   },
 });
 
@@ -654,6 +692,24 @@ if (channel) {
       // Phase 77 — replay the GM's damage / heal floating-number
       // animation locally. Self-echo dropped at the envelope layer.
       damageFxManager.add(msg.tokenId, msg.amount);
+    } else if (msg.type === 'chat') {
+      // Phase 119 — chat from another peer. Spectators FILTER
+      // gm-only messages (private notes / whispers); everything else
+      // gets added to the local history (id-dedupe makes re-broadcasts
+      // a no-op).
+      const chatMsg = {
+        id: msg.messageId,
+        senderId: msg.senderId,
+        senderName: msg.senderName,
+        senderRole: msg.senderRole,
+        text: msg.text,
+        visibility: msg.visibility,
+        timestamp: msg.timestamp,
+      };
+      if (spectatorShouldRenderChat(chatMsg)) {
+        chatHistory.add(chatMsg);
+        announcer.announce(`${msg.senderName || 'GM'} said: ${msg.text}`);
+      }
     } else if (msg.type === 'permissions') {
       // Phase 82 — only act on permissions broadcasts targeted at
       // our own playerId; messages for other Spectators are
@@ -733,6 +789,12 @@ window.addEventListener('keydown', (e) => {
   // editable field is already focused (handled above).
   if (e.key === '/') {
     slashInput.open();
+    e.preventDefault();
+    return;
+  }
+  // Phase 119 — `c` toggles the chat panel.
+  if (e.key === 'c' && !e.shiftKey && !e.altKey) {
+    chatPanel.toggle();
     e.preventDefault();
     return;
   }

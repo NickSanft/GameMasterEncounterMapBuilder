@@ -54,6 +54,8 @@ import { mountToolbar } from '../ui/toolbar.js';
 import { mountSessionMenu } from '../ui/session-menu.js';
 import { mountCombatLogPanel } from '../ui/combat-log-panel.js';
 import { createCombatLog } from '../state/combat-log.js';
+import { createChatHistory } from '../state/chat-history.js';
+import { mountChatPanel } from '../ui/chat-panel.js';
 import { attachCombatLogObserver } from '../state/combat-log-observer.js';
 import { mountCommandPalette } from '../ui/command-palette.js';
 import { createCommandRegistry } from '../state/command-registry.js';
@@ -1162,6 +1164,39 @@ const combatLogPanel = mountCombatLogPanel({ log: combatLog });
 // Reference once so the unused-binding lint stays happy; the handle
 // lives for the lifetime of the page.
 void combatLogObserver;
+
+// Phase 119 — player chat. In-memory ring buffer; messages broadcast
+// over the existing sync channel; the GM sees everything (including
+// `gm-only`) by design. The panel itself is hidden until the user
+// toggles it via the command palette / session menu.
+const chatHistory = createChatHistory();
+const chatPanel = mountChatPanel({
+  history: chatHistory,
+  viewMode: 'gm',
+  onSend: (text, visibility) => {
+    const ownIdent = ownIdentity();
+    const msg = {
+      id: nid(),
+      senderId: playerId,
+      senderName: ownIdent.name,
+      senderRole: 'gm' as const,
+      text,
+      visibility,
+      timestamp: Date.now(),
+    };
+    chatHistory.add(msg);
+    channel?.send({
+      type: 'chat',
+      messageId: msg.id,
+      senderId: msg.senderId,
+      senderName: msg.senderName,
+      senderRole: msg.senderRole,
+      text: msg.text,
+      visibility: msg.visibility,
+      timestamp: msg.timestamp,
+    });
+  },
+});
 
 // Phase 99 — conflict-loser archive. Captures the about-to-be-
 // overwritten state when the GM resolves a Phase 84 conflict by
@@ -2401,6 +2436,23 @@ if (channel) {
       // self-echoes via senderId, so we don't need a second dedup
       // layer here.
       damageFxManager.add(msg.tokenId, msg.amount);
+    } else if (msg.type === 'chat') {
+      // Phase 119 — chat from another peer. The GM sees EVERY chat
+      // message regardless of visibility (gm-only messages are
+      // private notes / whispers the GM is meant to see). The
+      // history's id-dedupe guard makes a re-broadcast a no-op.
+      chatHistory.add({
+        id: msg.messageId,
+        senderId: msg.senderId,
+        senderName: msg.senderName,
+        senderRole: msg.senderRole,
+        text: msg.text,
+        visibility: msg.visibility,
+        timestamp: msg.timestamp,
+      });
+      // Polite-announce so screen readers + GMs not currently looking
+      // at the panel know a message arrived.
+      announcer.announce(`${msg.senderName || 'Player'} said: ${msg.text}`);
     } else if (msg.type === 'latency-probe') {
       // Phase 83 — peer is asking for an RTT measurement; echo back
       // immediately. We pass the probe id verbatim so the original
@@ -3168,6 +3220,14 @@ function slugForFilename(name: string): string {
     label: 'Toggle Combat Log panel',
     group: 'Panels',
     run: () => combatLogPanel.toggle(),
+  });
+  // Phase 119 — player chat panel (toggle).
+  reg.register({
+    id: 'toggle-chat',
+    label: 'Toggle Chat panel',
+    hint: 'Text chat over the sync channel',
+    group: 'Panels',
+    run: () => chatPanel.toggle(),
   });
   reg.register({
     id: 'open-shortcuts',

@@ -115,13 +115,55 @@ gaps so the v1.0 cut is genuinely "stable + remote-play-capable."
 - **0.116.0** — Drag-to-resize block corners (deferred from Phase 112) ✅
 - **0.117.0** — Wall presets (saveable templates: stone-exterior, wooden-divider, etc.) ✅
 - **0.118.0** — Snap-to-grid-edge wall drawing (toggle in walls-settings) ✅
-- **0.119.0** — Player chat panel (text chat over the existing sync channel; per-message visibility)
+- **0.119.0** — Player chat panel (text chat over the existing sync channel; per-message visibility) ✅
 - **0.120.0** — Player-side annotations (Spectator drops a marker; GM sees + approves / dismisses)
 - **0.121.0** — Auto-generated scene thumbnails (renderer snapshot at scene save)
 - **0.122.0** — Token movement undo (`Z` reverts just the last token move, not the whole-state undo)
 - **0.123.0** — Bulk token edit (multi-select then "set HP max to N for all" / "add condition to all")
 - **0.124.0** — Hex grid mode (currently square only — biggest lift; touches every layer that uses cellSize × cellSize math)
-- **1.0.0** — Stable + remote-play-capable cut after the 0.124 work lands.
+- **0.125.0** — Test coverage + performance audit (added at user request before the 1.0.0 cut)
+- **1.0.0** — Stable + remote-play-capable cut after the 0.125 work lands.
+
+---
+
+## [0.119.0] — 2026-04-27 — Player chat panel
+
+### Added
+- **Sliding chat panel** pinned to the right edge of the viewport (mirrors the combat-log + notes panel layout). GM toggles it via the command palette ("Toggle Chat panel" — group **Panels**); Spectator toggles via the `c` keyboard shortcut. Panel includes a scrolling message log, a bottom Send form, and a per-message visibility toggle.
+- **Per-message visibility**:
+  - GM-side: a *"Private (GM only)"* checkbox marks the next message as `gm-only` (private GM notes — Spectators filter on receive).
+  - Spectator-side: a *"Whisper to GM"* checkbox marks the next message `gm-only` (other Spectators filter; the GM still sees it).
+- **In-memory ring buffer** (cap 200) per tab session — chat is fire-and-forget, like the Phase 94 combat log. On reload the panel starts empty + sees only messages that arrive after that moment.
+- **Stable id-based dedupe** in the history store so a re-broadcast / sync echo of an already-received message is a silent no-op. Eviction at the cap also frees the dedupe slot, so a long-running session that wraps the buffer can still re-receive an old id.
+- **Polite-announce on receive** — both sides fire `announcer.announce("X said: …")` when a message arrives, so screen-reader users + GMs not currently looking at the panel know when chat is happening.
+
+### Why this matters
+Pre-119 the only cross-peer text channel was the dice tray's parsed roll history (Phase 73). For a "the wizard whispers to the warlock at the table" interaction, GMs had to use voice or a separate app. Phase 119 closes that gap with a deliberately minimal text chat — no markdown, no images, no persistence, no DMs between Spectators (the architecture only supports broadcast → filter, and the Spectator-side filter is good-faith only). It's the simplest thing that addresses the actual pain.
+
+### Architecture
+- **`src/state/chat-history.ts`** (new, ~115 lines) — pure helper. `createChatHistory({maxEntries?})` returns `{add, entries, size, clear, subscribe}`. Id-based dedupe via a Set sized to track the buffer; eviction at the cap removes the oldest entry's id from the dedupe set so the slot can be reused. `spectatorShouldRenderChat(msg)` is a one-line filter the Spectator side calls before adding to its local history.
+- **`src/sync/messages.ts`** — added a `chat` SyncMessage variant: `{type: 'chat', messageId, senderId, senderName, senderRole, text, visibility, timestamp}`. Pure broadcast: every connected peer receives it + filters on `visibility`. The Phase 66 envelope's self-echo guard prevents the sender from re-receiving its own message.
+- **`src/ui/chat-panel.ts`** (new, ~180 lines) — sliding panel with a header (title + Clear + ×), a message list (live-updates via `history.subscribe`), and a Send form (visibility checkbox + text input + Send button). Auto-scrolls to bottom on new messages so the latest is always visible. `viewMode` swaps the visibility toggle copy: GM sees *"Private (GM only)"*, Spectator sees *"Whisper to GM"*. Both wire to `gm-only` on the wire.
+- **`src/entries/gm.ts`** + **`src/entries/spectator.ts`** — both mount a chat panel + register a chat sync handler. Send path: stamp `id = nid()`, `senderId = playerId`, `senderName` from identityPrefs, `timestamp = Date.now()`; add to local history first (so the sender sees it immediately), then broadcast. Receive path: gm always adds; spectator filters via `spectatorShouldRenderChat`. Both fire `announcer.announce`.
+- **GM**: command palette command *"Toggle Chat panel"* (group **Panels**, alongside Notes + Combat Log).
+- **Spectator**: keyboard `c` shortcut (no command palette — Spectators don't have one).
+- **`src/ui/styles.css`** — new `.chat-panel` block + nested `.chat-row` / `.chat-row-meta` / `.chat-row-body` / `.chat-input-row` rules. Shared messages get the default panel-card styling; `gm-only` messages get an accent-tinted background + an "private" / "whisper" tag in the meta row so it's visually obvious.
+
+### UX details
+- **No persistence by design.** Chat history is per-tab session (matches combat log). A future polish could persist to localStorage like Phase 107's dice history; for the v1 cut, ephemeral keeps the privacy story simple.
+- **Spectator-side filter is good-faith.** A tampered Spectator build could read `gm-only` messages off the wire. To enforce strictly the GM would need to mediate (each Spectator → GM relay), which is a much bigger architecture change. Documented in the helper's source.
+- **No support for DMs between Spectators.** Architecture is broadcast → filter; spectator-to-spectator routing would need addressed envelopes. Out of scope for v119.
+
+### Tests
+- **+12 unit tests** in `src/state/chat-history.test.ts` (new): starts empty; arrival ordering; id-dedupe (re-broadcast no-op); empty-id rejected; cap eviction (oldest evicted); eviction frees the dedupe slot; clear empties + notifies / silent no-op when already empty; post-clear re-add works; subscribe / unsubscribe round-trip. `spectatorShouldRenderChat` returns true for shared / false for gm-only.
+- **+3 Playwright specs** in `e2e/chat-panel.spec.ts` (new): GM palette opens the panel; GM message round-trips to a connected Spectator (real BroadcastChannel hop); GM-only message renders on the GM but does NOT render on the Spectator.
+- **All 1333 unit tests + 319 Playwright specs pass** locally.
+
+### Bundle
+- **JS budget bumped 98 → 100 KB.** Phase 119 added ~1.3 KB JS (the chat history + the panel + the wiring on both entries); landed at 97.99 / 98 KB which would have been 10 B under — too tight to leave for Phase 120's annotations. CSS budget bumped 12 → 14 KB; landed at 11.99 / 12 KB (10 B under) so the same proactive bump applies. Lazy chunks unchanged.
+
+### Pre-push checklist
+Caught zero issues — full unit suite + full e2e + visual-regression spec + size-limit (after the proactive 98 → 100 KB JS bump) all green before push.
 
 ---
 
