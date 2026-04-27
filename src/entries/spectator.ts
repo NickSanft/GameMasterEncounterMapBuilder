@@ -132,7 +132,17 @@ const renderer = createRenderer({
   canvas,
   mode: 'spectator',
   camera: initialCamera,
-  getState: () => store.getState(),
+  // Phase 109 — filter tokens hidden from this Spectator before the
+  // renderer + every layer that reads state.tokens (token glyphs,
+  // initiative-active outline, drag overlays) sees them. The other
+  // state slices (fog, walls, AoEs, annotations) pass through
+  // unchanged. Returning the same object identity when no tokens are
+  // hidden keeps perf parity with pre-109 for the common case.
+  getState: () => {
+    const raw = store.getState();
+    if (permissions.hiddenTokenIds.size === 0) return raw;
+    return { ...raw, tokens: filterVisibleTokens(raw.tokens) };
+  },
   // Phase 81 (revisit) — animated GIFs handled by the DOM overlay
   // (mounted below); canvas falls back to the colored circle for them.
   getImage: (id) =>
@@ -177,17 +187,51 @@ renderer.onFrame(() => animatedTokenOverlay.update());
 
 fogWorkerClient.onUpdate(() => renderer.requestRender());
 
+// Phase 82 — own permissions, pushed by the GM via the `permissions`
+// SyncMessage. Default = full permissions (matches the GM-side
+// store's behavior for never-restricted Spectators); overrides
+// arrive on identity broadcast + on subsequent GM toggles.
+//
+// Phase 109 — `hiddenTokenIds` carries the set of tokens the GM has
+// hidden from THIS Spectator. The renderer + LoS / light collectors
+// below filter against it so the affected tokens never enter the
+// Spectator's render path (no glyph, no sight halo, no torch).
+//
+// Hoisted to the top of the entry so the LoS / fog functions below
+// can read it without hitting TDZ on first invocation (`refreshLos()`
+// fires immediately after the function declarations land).
+const permissions: { canRoll: boolean; hiddenTokenIds: Set<string> } = {
+  canRoll: true,
+  hiddenTokenIds: new Set(),
+};
+
 function refreshLos(): void {
   const state = store.getState();
   if (preferences.get().losMode === 'off') return;
+  // Phase 109 — drop tokens hidden from this Spectator before
+  // collecting viewers + lights. So a hidden NPC's vision doesn't
+  // illuminate cells for this player + a hidden torchbearer's
+  // light halo doesn't betray its existence.
+  const visibleTokens = filterVisibleTokens(state.tokens);
   fogWorkerClient.requestLos(
-    collectViewers(state.tokens, state.grid),
+    collectViewers(visibleTokens, state.grid),
     collectSightWalls(state.walls),
     // Phase 57 — lights compose with viewer polygons in the spectator
     // fog mask: a cell only shows if some viewer can see it AND some
     // light reaches it (when any lights are configured on the map).
-    collectLights(state.tokens, state.grid),
+    collectLights(visibleTokens, state.grid),
   );
+}
+
+/**
+ * Phase 109 — drop tokens hidden from this Spectator. Returns the
+ * input array unchanged when no tokens are hidden (common case) so
+ * we don't allocate a new array every frame for the no-restriction
+ * majority of sessions.
+ */
+function filterVisibleTokens<T extends { id: string }>(tokens: readonly T[]): T[] {
+  if (permissions.hiddenTokenIds.size === 0) return tokens as T[];
+  return tokens.filter((t) => !permissions.hiddenTokenIds.has(t.id));
 }
 
 function refreshFogRects(): void {
@@ -296,12 +340,6 @@ const dicePanel = mountDicePanel({
   },
 });
 
-// Phase 82 — own permissions, pushed by the GM via the `permissions`
-// SyncMessage. Default = full permissions (matches the GM-side
-// store's behavior for never-restricted Spectators); overrides
-// arrive on identity broadcast + on subsequent GM toggles.
-const permissions: { canRoll: boolean } = { canRoll: true };
-
 // Phase 74 — slash-command input (Spectator). Same `/` hotkey as
 // the GM side. `/init` is GM-only (the Spectator can't author
 // initiative entries); the dispatcher returns an inline error.
@@ -384,12 +422,16 @@ const persist = debounce(async () => {
 function updateCanvasLabel() {
   if (!canvas) return;
   const state = store.getState();
-  const tokenCount = state.tokens.length;
+  // Phase 109 — drop tokens hidden from this Spectator before counting
+  // so the aria-label doesn't betray a hidden NPC's existence ("3 tokens
+  // visible, 5 total" with only 2 actually-visible tokens would be a leak).
+  const visibleSet = filterVisibleTokens(state.tokens);
+  const tokenCount = visibleSet.length;
   const total = state.grid.cols * state.grid.rows;
   let revealed = 0;
   for (let i = 0; i < state.fog.length; i++) if (state.fog[i] === 1) revealed++;
   const pct = total > 0 ? Math.round((revealed / total) * 100) : 0;
-  const visibleTokens = state.tokens.filter((t) => {
+  const visibleTokens = visibleSet.filter((t) => {
     const gx = Math.floor(t.x);
     const gy = Math.floor(t.y);
     if (gx < 0 || gy < 0 || gx >= state.grid.cols || gy >= state.grid.rows) return false;
@@ -398,7 +440,7 @@ function updateCanvasLabel() {
   const tokenLabel = visibleTokens === 1 ? '1 token' : `${visibleTokens} tokens`;
   canvas.setAttribute(
     'aria-label',
-    `Spectator battle map. ${tokenLabel} visible. ${pct}% of map revealed. ${tokenCount} total tokens in session.`,
+    `Spectator battle map. ${tokenLabel} visible. ${pct} percent of map revealed. ${tokenCount} total tokens in session.`,
   );
 }
 
@@ -612,6 +654,20 @@ if (channel) {
       // filter narrows it.)
       if (msg.targetId === playerId) {
         permissions.canRoll = msg.permissions.canRoll;
+        // Phase 109 — pre-109 senders omit `hiddenTokenIds`; default
+        // to "no tokens hidden" so back-compat holds and the renderer
+        // sees everything. Subsequent GM toggles arrive as full lists.
+        const ids = msg.permissions.hiddenTokenIds ?? [];
+        permissions.hiddenTokenIds = new Set(ids);
+        // Re-collect LoS + re-render + re-derive the canvas aria-label
+        // now that the visible token set may have changed. The aria-
+        // label refresh normally rides on store-subscribe (only fires
+        // on state patches); permissions live outside the store, so
+        // we have to nudge it explicitly here.
+        refreshLos();
+        refreshFogRects();
+        renderer.requestRender();
+        updateCanvasLabel();
       }
     } else if (msg.type === 'latency-probe') {
       // Phase 83 — peer is asking for an RTT measurement; echo

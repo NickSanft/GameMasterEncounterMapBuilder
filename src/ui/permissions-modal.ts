@@ -141,10 +141,20 @@ export function mountPermissionsModal(
     return li;
   }
 
+  /**
+   * Phase 109 — narrowed the field type from `keyof SpectatorPermissions`
+   * (which now includes the `hiddenTokenIds: string[]` field) to just
+   * the boolean-valued names. The hidden-tokens UI lives in the token
+   * editor, not this modal.
+   */
+  type BooleanPermField = {
+    [K in keyof SpectatorPermissions]: SpectatorPermissions[K] extends boolean ? K : never;
+  }[keyof SpectatorPermissions];
+
   function buildToggle(
     playerId: string,
     current: SpectatorPermissions,
-    field: keyof SpectatorPermissions,
+    field: BooleanPermField,
     label: string,
   ): HTMLLabelElement {
     const wrap = document.createElement('label');

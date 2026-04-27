@@ -1034,6 +1034,19 @@ const tokenEditor = mountTokenEditor({
   selection,
   imageLoader,
   feetPerSquare: () => preferences.get().feetPerSquare,
+  // Phase 109 — per-Spectator visibility. Callbacks read the lazily-
+  // mounted identityRegistry + permissionsStore (both declared lower
+  // in the file) via closures, so TDZ doesn't fire at module init —
+  // these only execute when the user opens the editor.
+  getConnectedSpectators: () =>
+    identityRegistry
+      .list()
+      .filter((p) => p.role === 'spectator')
+      .map((p) => ({ id: p.id, name: p.name, color: p.color })),
+  isTokenHiddenForSpectator: (playerId, tokenId) =>
+    permissionsStore.isTokenHidden(playerId, tokenId),
+  setTokenHiddenForSpectator: (playerId, tokenId, hidden) =>
+    permissionsStore.setTokenHidden(playerId, tokenId, hidden),
 });
 const annotationEditor = mountAnnotationEditor({ store });
 // Phase 85 — in-place wall editor. Opened from the right-click
@@ -1912,6 +1925,29 @@ const permissionsModal = mountPermissionsModal({
   },
 });
 
+// Phase 109 — when ANY permissions change (the modal's `onChange`
+// fires for the modal's edits, but the token editor mutates the
+// store directly via `setTokenHidden`), broadcast the resulting
+// permissions to EVERY connected Spectator. Cheap: a single
+// snapshot iteration; no-op when no permissions exist; the
+// Spectator-side handler ignores messages whose targetId doesn't
+// match its own playerId.
+//
+// We re-broadcast EVERY player's permissions on every change rather
+// than diffing because:
+//   1. The store's subscribe doesn't tell us WHICH playerId changed.
+//   2. A `forgetToken` call from a token-remove fires once for ALL
+//      affected players — broadcasting the full set keeps each
+//      Spectator's view in sync without us tracking which ones lost
+//      a hidden id.
+permissionsStore.subscribe(() => {
+  if (!channel) return;
+  const snap = permissionsStore.snapshot();
+  for (const [targetId, perms] of Object.entries(snap)) {
+    channel.send({ type: 'permissions', targetId, permissions: perms });
+  }
+});
+
 // Re-broadcast identity when the user edits name / color. Phase 67
 // switched the source from `preferences` to `identityPrefs`; the
 // signature-cache guard (`lastBroadcastIdentity`) still ensures
@@ -2407,6 +2443,21 @@ store.subscribe((patch) => {
   // The renderer reads `state.timeOfDay` directly during draw, so
   // there's no separate "overlay" to update — just the picker UI.
   timeOfDayPicker.setTime(s.timeOfDay);
+  // Phase 109 — when a token is removed (delete, scene-reset, sync-
+  // applied remote remove), drop its id from every Spectator's
+  // hidden-list so the persisted blob doesn't accumulate ghost ids
+  // of long-gone tokens. forgetToken is a no-op when no Spectator
+  // hides that id, so the cost is negligible.
+  if (patch?.kind === 'token-remove') {
+    permissionsStore.forgetToken(patch.id);
+  } else if (patch?.kind === 'session-reset') {
+    // A full reset wipes every token; clear every Spectator's hidden
+    // list rather than walking the now-empty token list per id.
+    for (const [pid, perms] of Object.entries(permissionsStore.snapshot())) {
+      if (perms.hiddenTokenIds.length === 0) continue;
+      permissionsStore.set(pid, { ...perms, hiddenTokenIds: [] });
+    }
+  }
   if (!channel) return;
   if (patch) {
     channel.send({ type: 'patch', patch: toSerializablePatch(patch) });

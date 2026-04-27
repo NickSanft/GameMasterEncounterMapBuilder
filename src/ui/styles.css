@@ -5386,6 +5386,65 @@ body.reduced-motion .tour-popover {
   color: var(--accent);
 }
 
+/* ───── Phase 109 — Per-Spectator token visibility ──────────────────
+   Token editor section: a row per connected Spectator with a swatch
+   + name + checkbox. Checked = the Spectator can see this token;
+   unchecked = hidden from them. Lives below the conditions fieldset
+   in the token editor and is hidden when no permissions callbacks are
+   wired (Spectator-side / minimal test mounts). */
+
+.token-editor .visibility-fieldset {
+  margin-top: 0.5rem;
+}
+
+.visibility-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  margin-top: 0.4rem;
+}
+
+.visibility-row {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.35rem 0.5rem;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.88rem;
+}
+
+.visibility-row:hover {
+  background: var(--hover-overlay);
+}
+
+.visibility-swatch {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--fg-muted);
+  flex-shrink: 0;
+  border: 1px solid var(--border);
+}
+
+.visibility-name {
+  color: var(--fg);
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.visibility-empty {
+  margin: 0.4rem 0 0;
+  color: var(--fg-muted);
+  font-style: italic;
+  font-size: 0.85rem;
+}
+
 /* ───── Phase 108 — Recent backgrounds modal ────────────────────────
    List-view of recently-applied background images with a small
    thumbnail per row, the friendly name (or "(unnamed map)"), and a

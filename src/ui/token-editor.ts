@@ -50,6 +50,27 @@ export interface TokenEditorOptions {
    * cellSize. Defaults to D&D 5e's 5 ft per square when not supplied.
    */
   feetPerSquare?(): number;
+  /**
+   * Phase 109 — per-Spectator visibility integration. All three
+   * callbacks are optional; omitting any of them hides the
+   * "Visibility" section entirely (Spectator-side / e2e tests that
+   * don't mount the permissions store still work).
+   *
+   * - `getConnectedSpectators()` returns the live list of connected
+   *   players (sourced from the IdentityRegistry), filtered to
+   *   role==='spectator'. Empty list → the section shows a hint
+   *   instead of an empty checkbox list.
+   * - `isTokenHiddenForSpectator(playerId, tokenId)` mirrors the
+   *   per-spectator hidden-tokens store entry; the checkbox is
+   *   checked when the token is VISIBLE (not hidden).
+   * - `setTokenHiddenForSpectator(playerId, tokenId, hidden)` toggles
+   *   the hidden state. The host re-broadcasts permissions inside
+   *   the store's subscribe so the Spectator's render updates within
+   *   one BroadcastChannel hop.
+   */
+  getConnectedSpectators?(): readonly { id: string; name: string; color?: string }[];
+  isTokenHiddenForSpectator?(playerId: string, tokenId: string): boolean;
+  setTokenHiddenForSpectator?(playerId: string, tokenId: string, hidden: boolean): void;
 }
 
 export function mountTokenEditor(opts: TokenEditorOptions): TokenEditorHandle {
@@ -260,6 +281,17 @@ export function mountTokenEditor(opts: TokenEditorOptions): TokenEditorHandle {
         <div class="condition-timers" data-field="condition-timers" hidden></div>
       </fieldset>
 
+      <!-- Phase 109 — per-Spectator visibility. Each connected
+           Spectator gets a checkbox; checked means the Spectator can
+           see this token, unchecked means hidden. The host wires the
+           callbacks; omitting them hides the entire fieldset. -->
+      <fieldset class="visibility-fieldset" data-field="visibility-fieldset" hidden>
+        <legend>Visible to</legend>
+        <p class="settings-hint">Uncheck a Spectator to hide this token from them. Default: visible to everyone.</p>
+        <div class="visibility-list" data-field="visibility-list" role="group" aria-label="Per-Spectator token visibility"></div>
+        <p class="visibility-empty" data-field="visibility-empty" hidden>No Spectators connected. When a player joins, they'll appear here.</p>
+      </fieldset>
+
       <hr />
       <div class="modal-footer">
         <button type="button" data-action="save-library" title="Save this token's appearance to the library for reuse">Save to Library</button>
@@ -292,6 +324,15 @@ export function mountTokenEditor(opts: TokenEditorOptions): TokenEditorHandle {
   const prevBtn = modal.querySelector<HTMLButtonElement>('[data-action="prev"]')!;
   const nextBtn = modal.querySelector<HTMLButtonElement>('[data-action="next"]')!;
   const cycleGroup = modal.querySelector<HTMLDivElement>('[data-field="cycle-group"]')!;
+  const visibilityFieldset = modal.querySelector<HTMLFieldSetElement>(
+    '[data-field="visibility-fieldset"]',
+  )!;
+  const visibilityList = modal.querySelector<HTMLDivElement>(
+    '[data-field="visibility-list"]',
+  )!;
+  const visibilityEmpty = modal.querySelector<HTMLParagraphElement>(
+    '[data-field="visibility-empty"]',
+  )!;
   const counter = modal.querySelector<HTMLSpanElement>('[data-field="counter"]')!;
   const hasSightInput = modal.querySelector<HTMLInputElement>('[data-field="hasSight"]')!;
   const sightDetails = modal.querySelector<HTMLDivElement>('[data-field="sight-details"]')!;
@@ -423,7 +464,53 @@ export function mountTokenEditor(opts: TokenEditorOptions): TokenEditorHandle {
     syncConditionUI(token.conditions, token.conditionExpirations);
     syncRotationUI(token.rotation);
     syncInitiativeModUI(token.initiativeMod);
+    syncVisibilityUI(token.id);
     syncCounter();
+  }
+
+  /**
+   * Phase 109 — populate the per-Spectator visibility checkboxes.
+   * One row per currently-connected Spectator; checked = visible to
+   * that Spectator. Hidden entirely when the host didn't supply the
+   * permissions callbacks (Spectator-side / minimal test mounts).
+   */
+  function syncVisibilityUI(tokenId: string): void {
+    const getSpecs = opts.getConnectedSpectators;
+    const isHidden = opts.isTokenHiddenForSpectator;
+    const setHidden = opts.setTokenHiddenForSpectator;
+    if (!getSpecs || !isHidden || !setHidden) {
+      visibilityFieldset.hidden = true;
+      return;
+    }
+    visibilityFieldset.hidden = false;
+    const spectators = getSpecs();
+    visibilityList.replaceChildren();
+    if (spectators.length === 0) {
+      visibilityEmpty.hidden = false;
+      return;
+    }
+    visibilityEmpty.hidden = true;
+    for (const spec of spectators) {
+      const row = document.createElement('label');
+      row.className = 'visibility-row';
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.checked = !isHidden(spec.id, tokenId);
+      cb.dataset.spectatorId = spec.id;
+      cb.addEventListener('change', () => {
+        setHidden(spec.id, tokenId, !cb.checked);
+      });
+      const swatch = document.createElement('span');
+      swatch.className = 'visibility-swatch';
+      if (spec.color) swatch.style.background = spec.color;
+      const name = document.createElement('span');
+      name.className = 'visibility-name';
+      name.textContent = spec.name || '(unnamed)';
+      row.appendChild(cb);
+      row.appendChild(swatch);
+      row.appendChild(name);
+      visibilityList.appendChild(row);
+    }
   }
 
   function syncInitiativeModUI(mod: number) {

@@ -318,7 +318,13 @@ export type SyncMessage =
   | {
       type: 'permissions';
       targetId: string;
-      permissions: { canRoll: boolean };
+      /**
+       * Phase 109 — `hiddenTokenIds` now travels with the permissions
+       * payload so the targeted Spectator can filter its render path
+       * accordingly. Pre-109 senders omitted it; the Spectator-side
+       * handler defaults missing arrays to `[]` so back-compat holds.
+       */
+      permissions: { canRoll: boolean; hiddenTokenIds?: string[] };
     }
   /**
    * Phase 83 — round-trip-time probe. The local entry sends one of

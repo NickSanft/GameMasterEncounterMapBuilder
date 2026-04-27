@@ -94,8 +94,54 @@ _Polish:_
 - **0.106.0** — Scene search / filter ✅ (text filter in the Scenes modal once the catalog grows past ~10)
 - **0.107.0** — Dice expression history recall (up-arrow in the slash-command input cycles previous rolls) ✅
 - **0.108.0** — Recent backgrounds quick switcher (mirrors the Phase 75 recent-scenes pattern but for backgrounds) ✅
-- **0.109.0** — Per-spectator token visibility (extend Phase 82's permissions to "GM hides individual tokens from individual players")
+- **0.109.0** — Per-spectator token visibility (extend Phase 82's permissions to "GM hides individual tokens from individual players") ✅
 - **0.110.0** — Persistent player names across reloads (stable cross-session player IDs — flagged in Phase 82 as future)
+
+---
+
+## [0.109.0] — 2026-04-26 — Per-Spectator token visibility
+
+### Added
+- **Hide individual tokens from individual Spectators** via the token editor's new "Visible to" section. One row per currently-connected Spectator with a checkbox; checked = visible, unchecked = hidden from that Spectator. Default for every (Spectator, token) pair is visible.
+- **End-to-end concealment**: a token hidden from a Spectator does NOT contribute its glyph, name, sight halo, or torch to that Spectator's render path. The aria-label on the Spectator's canvas reports a reduced "tokens visible" count too — no metadata leak about how many hidden NPCs are on the map.
+- **Sync over the existing `permissions` channel**: extends the Phase 82 message envelope with a `hiddenTokenIds` field. Pre-109 Spectators (or older builds) silently ignore the field; the Spectator-side handler defaults missing arrays to `[]` so back-compat holds in both directions.
+- **Auto-cleanup on token delete**: deleting a token (any path — context menu, Delete key, scene-reset, sync-applied remote remove) drops its id from every Spectator's hidden list, so the persisted blob doesn't accumulate ghost ids of long-gone tokens. A scene-reset patches every Spectator's hidden list to empty in one batch.
+
+### Why this matters
+Phase 82 introduced per-Spectator capability flags (the only one shipped was `canRoll`). Phase 109 fills the much-bigger ask of per-Spectator *content* visibility — the ability to surprise individual players. A traitor NPC standing in plain sight can now be shown only to the traitor's player; a loot drop can be visible only to the rogue who searched the chest; a stalking monster can be invisible to the party's lead scout when the GM wants to roll perception. Without Phase 109 the GM had to open / close the spectator's tab every time something needed to be hidden — Phase 109 makes it a one-click toggle.
+
+### Architecture
+- **`src/state/spectator-permissions.ts`** — extended `SpectatorPermissions` with `hiddenTokenIds: string[]`. New convenience methods on the store: `isTokenHidden(playerId, tokenId)`, `setTokenHidden(playerId, tokenId, hidden)`, and `forgetToken(tokenId)` (drop from EVERY Spectator's list — used on token delete). The store normalizes `hiddenTokenIds` (sorted + deduped) on every write so the persisted JSON is deterministic and equality checks are cheap. The `isDefault(perms)` predicate now requires BOTH `canRoll === true` AND `hiddenTokenIds.length === 0` before a row gets compacted out of localStorage.
+- **`src/sync/messages.ts`** — `permissions` SyncMessage's payload now includes `hiddenTokenIds?: string[]`. Optional for forward-compat; pre-109 senders omit it.
+- **`src/entries/spectator.ts`**:
+  - The local `permissions` ref grew a `hiddenTokenIds: Set<string>` field (Set so the per-token `has()` check is O(1) inside the render filter).
+  - New `filterVisibleTokens(tokens)` helper drops tokens whose id is in the hidden set. Returns the input array unchanged when no tokens are hidden — perf parity for the no-restriction common case.
+  - `refreshLos()` filters tokens before collecting viewers + lights, so a hidden NPC's vision doesn't illuminate cells + a hidden torchbearer's halo doesn't betray its existence.
+  - `getState()` (the renderer's source-of-truth callback) returns `{...raw, tokens: filterVisibleTokens(raw.tokens)}` when any tokens are hidden, so every layer that reads `state.tokens` (token glyphs, initiative-active outline, drag overlays, damage FX) sees the filtered list. Other state slices pass through unchanged.
+  - The `permissions` message handler kicks `refreshLos()` + `refreshFogRects()` + `renderer.requestRender()` + `updateCanvasLabel()` after applying so the UI updates within one BroadcastChannel hop. The aria-label is the only render-adjacent surface that doesn't ride on store-subscribe (permissions live outside the store), so we have to nudge it explicitly here.
+- **`src/entries/gm.ts`**:
+  - `mountTokenEditor` now receives three new optional callbacks: `getConnectedSpectators`, `isTokenHiddenForSpectator`, `setTokenHiddenForSpectator`. All three are wired to the existing `identityRegistry` + `permissionsStore` via closures — TDZ-safe because the callbacks only fire when the editor opens, well after module init.
+  - **New `permissionsStore.subscribe(...)` listener** broadcasts the FULL permissions snapshot to every Spectator on every change. We re-broadcast all entries (rather than diffing) for two reasons: (1) the store's subscribe doesn't tell us WHICH playerId changed, and (2) `forgetToken` fires once for ALL affected players, so broadcasting the full set keeps each Spectator in sync without us tracking which ones lost a hidden id.
+  - **Cleanup hook** in the existing store-subscribe: `token-remove` patches call `permissionsStore.forgetToken(patch.id)`; `session-reset` clears every Spectator's hidden list in one pass.
+- **`src/ui/token-editor.ts`** — added a `<fieldset class="visibility-fieldset">` between conditions and the modal footer with one `<label>` row per connected Spectator (color swatch + name + checkbox). Hidden entirely when the host omits the new callbacks (Spectator-side / minimal test mounts). The fieldset re-populates on every `fillFromToken` so cycling between selected tokens updates the checkbox states correctly.
+- **`src/ui/permissions-modal.ts`** — narrowed the `buildToggle` field generic from `keyof SpectatorPermissions` (which now includes the array-typed `hiddenTokenIds`) to a `BooleanPermField` mapped type so the per-row toggles compile against the broader interface.
+
+### UX details
+- **The "Visible to" section is the only point of authorship.** No aggregate "Spectator X currently can't see N tokens" view in the permissions modal; the per-token UX puts the action at the workflow point ("I'm editing this NPC; I want to hide it from Jordan").
+- **Hidden ≠ deleted from the Spectator's perspective.** State sync still carries the token (otherwise re-applying visibility wouldn't work without a full state-resend) — the Spectator's renderer just filters it out. That makes the GM-reveals-a-hidden-token operation instantaneous (single permissions hop, no state replay).
+- **Initiative remains visible.** A hidden token still appears in the Spectator's initiative bar if it's in the order. We deliberately scoped to renderer + LoS / lights; hiding from initiative would let the GM run a hidden ambush, but is a separate phase since it touches the initiative bar's renderer + the round-clock semantics.
+- **Hide cleanup is via `forgetToken`, not via state subscriptions on the Spectator.** Dropping ids when a token is removed is a GM-side concern; the Spectator's filter is `has()`-against-a-Set, which is fine even if the set has a few stale ids (they just don't match anything).
+
+### Tests
+- **+10 unit tests** in `src/state/spectator-permissions.test.ts` (extending the Phase 82 suite): `isTokenHidden` defaults false for unknown players; `setTokenHidden(true)` adds + flips; `setTokenHidden(false)` removes; idempotent set is a no-op (no notify); list is sorted + deduped on write; per-Spectator scoping (hiding from Alice doesn't touch Bob); `forgetToken` drops the id from every Spectator + notifies once / silent no-op when no Spectator hides that id; an entry with only `hiddenTokenIds = []` + default canRoll is NOT persisted; `hiddenTokenIds` round-trips through localStorage; pre-109 blobs without `hiddenTokenIds` default to empty.
+- **+3 Playwright specs** in `e2e/per-spectator-token-visibility.spec.ts` (new): visibility fieldset is hidden when no Spectators are connected; fieldset lists connected Spectators + unchecking hides the token end-to-end (verified via the Spectator's canvas aria-label flipping `1 token visible` → `0 token visible` and back); hiding a token from one Spectator does not affect a second Spectator (two Spectator pages in the same context, target one, verify the other's aria-label is unaffected).
+- **All 1233 unit tests + 292 Playwright specs pass** locally on the first run after one fix (added an explicit `updateCanvasLabel()` call to the Spectator's `permissions` message handler — the aria-label normally rides on store-subscribe but permissions live outside the store).
+
+### Bundle
+- **JS budget bumped 92 → 94 KB.** Phase 109 landed at 92.31 / 92 KB which would have been 307 B over (the new permissions-store helpers + the token-editor's visibility fieldset + the GM-side broadcast subscribe added a few hundred bytes). CSS 11.51 / 12 KB. Lazy chunks unchanged.
+
+### Pre-push checklist
+Caught zero issues — full unit suite + full e2e + visual-regression spec + size-limit (after the proactive 92 → 94 KB bump) all green before push. Twelve clean phases in a row now (97 + 99 + 100 + 101 + 102 + 103 + 104 + 105 + 106 + 107 + 108 + 109).
 
 ---
 
