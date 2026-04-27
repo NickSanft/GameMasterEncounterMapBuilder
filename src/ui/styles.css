@@ -3012,6 +3012,101 @@ body.notes-open .mini-map {
   display: none;
 }
 
+/* ───── Phase 117 — Wall presets chip strip ─────────────────────────
+   Sits at the top of the wall editor body. Built-in chips first, user
+   chips after, "+ Save…" button on the right. User chips have a small
+   × inside for delete. */
+
+.wall-editor-presets {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.6rem;
+  padding-bottom: 0.6rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.wall-editor-presets-label {
+  font-size: 0.78rem;
+  color: var(--fg-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  flex-shrink: 0;
+}
+
+.wall-editor-presets-chips {
+  display: flex;
+  gap: 0.3rem;
+  flex-wrap: wrap;
+  flex: 1;
+}
+
+.wall-editor-preset-chip {
+  display: inline-flex;
+  align-items: stretch;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.wall-editor-preset-chip.is-builtin {
+  border-color: var(--accent);
+}
+
+.wall-editor-preset-apply {
+  appearance: none;
+  background: transparent;
+  color: var(--fg);
+  border: none;
+  padding: 0.28rem 0.6rem;
+  font-family: inherit;
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+
+.wall-editor-preset-apply:hover {
+  background: var(--hover-overlay);
+  color: var(--accent);
+}
+
+.wall-editor-preset-delete {
+  appearance: none;
+  background: transparent;
+  color: var(--fg-muted);
+  border: none;
+  border-left: 1px solid var(--border);
+  padding: 0 0.4rem;
+  font-family: inherit;
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+
+.wall-editor-preset-delete:hover {
+  background: var(--hover-overlay);
+  color: var(--fg);
+}
+
+.wall-editor-presets-save {
+  appearance: none;
+  background: transparent;
+  color: var(--fg-muted);
+  border: 1px dashed var(--border);
+  border-radius: 999px;
+  padding: 0.28rem 0.65rem;
+  font-family: inherit;
+  font-size: 0.78rem;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.wall-editor-presets-save:hover {
+  background: var(--hover-overlay);
+  color: var(--fg);
+  border-color: var(--accent);
+}
+
 .wall-editor-radio {
   margin: 0.2rem 0;
 }

@@ -23,6 +23,12 @@ import {
   clampThickness,
 } from '../state/walls.js';
 import { attachFocusTrap, rememberFocus, restoreFocus } from '../util/focus.js';
+import {
+  listPresets,
+  savePreset,
+  removePreset,
+  type WallPreset,
+} from '../state/wall-presets.js';
 
 export interface WallEditorHandle {
   /**
@@ -96,6 +102,17 @@ export function mountWallEditor(opts: WallEditorOptions): WallEditorHandle {
         Toggle behavior + adjust the line thickness. Drag the endpoint
         handles on the canvas to move the wall in place.
       </p>
+
+      <!-- Phase 117 — preset chips. Built-ins ship with the app
+           (stone-exterior, interior-divider, window, secret-passage,
+           wooden-door-closed); user-saved presets append after.
+           Click to apply to every selected wall in one batch. -->
+      <div class="wall-editor-presets" data-field="presets-row">
+        <span class="wall-editor-presets-label">Presets</span>
+        <div class="wall-editor-presets-chips" data-field="presets-chips" role="group" aria-label="Wall property presets"></div>
+        <button type="button" class="wall-editor-presets-save" data-field="presets-save"
+          title="Save the current values as a reusable preset">+ Save…</button>
+      </div>
 
       <div class="wall-editor-row">
         <label class="wall-editor-toggle">
@@ -177,6 +194,9 @@ export function mountWallEditor(opts: WallEditorOptions): WallEditorHandle {
   const doorEl = modal.querySelector<HTMLInputElement>('[data-field="door"]')!;
   const doorStateRow = modal.querySelector<HTMLLabelElement>('[data-field="door-state-row"]')!;
   const doorOpenEl = modal.querySelector<HTMLInputElement>('[data-field="door-open"]')!;
+  // Phase 117 — preset chip strip + Save-as-preset button.
+  const presetsChips = modal.querySelector<HTMLDivElement>('[data-field="presets-chips"]')!;
+  const presetsSaveBtn = modal.querySelector<HTMLButtonElement>('[data-field="presets-save"]')!;
   // Phase 111 — surface the Fill-cell preset only when the host wired
   // a `getCellSize` provider. Tests / minimal mounts can omit it.
   if (opts.getCellSize) {
@@ -198,6 +218,80 @@ export function mountWallEditor(opts: WallEditorOptions): WallEditorHandle {
     return out;
   }
 
+  /**
+   * Phase 117 — paint the chip strip from `listPresets()`. Built-ins
+   * + user presets, in display order. User chips get a small × inside
+   * for delete; built-ins do not (they're protected by the store).
+   */
+  function renderPresets(): void {
+    const presets = listPresets();
+    presetsChips.replaceChildren();
+    for (const preset of presets) {
+      const chip = document.createElement('div');
+      chip.className = `wall-editor-preset-chip${preset.isBuiltin ? ' is-builtin' : ' is-user'}`;
+      chip.dataset.presetId = preset.id;
+
+      const apply = document.createElement('button');
+      apply.type = 'button';
+      apply.className = 'wall-editor-preset-apply';
+      apply.textContent = preset.name;
+      apply.title = describePreset(preset);
+      apply.addEventListener('click', () => {
+        if (editingIds.length === 0) return;
+        opts.onChange(editingIds, presetToChange(preset));
+        render();
+      });
+      chip.appendChild(apply);
+
+      if (!preset.isBuiltin) {
+        const del = document.createElement('button');
+        del.type = 'button';
+        del.className = 'wall-editor-preset-delete';
+        del.setAttribute('aria-label', `Delete preset ${preset.name}`);
+        del.title = 'Delete this preset';
+        del.textContent = '×';
+        del.addEventListener('click', (e) => {
+          e.stopPropagation();
+          removePreset(preset.id);
+          renderPresets();
+        });
+        chip.appendChild(del);
+      }
+      presetsChips.appendChild(chip);
+    }
+  }
+
+  /**
+   * Phase 117 — turn a preset into the editor's onChange diff. The
+   * `door: null` signal removes the door promotion (the host's
+   * onChange wrapper translates that into a remove + re-add patch).
+   */
+  function presetToChange(p: WallPreset): import('./wall-editor.js').WallEditorChange {
+    const change: import('./wall-editor.js').WallEditorChange = {
+      blocksSight: p.blocksSight,
+      blocksMovement: p.blocksMovement,
+    };
+    if (p.thickness !== undefined) change.thickness = p.thickness;
+    if (p.visibility !== undefined) change.visibility = p.visibility;
+    // door is tri-state on the preset: undefined = leave alone,
+    // {open} = set, null = remove. The editor's WallEditorChange
+    // mirrors the same shape; we only forward `door` when it's
+    // explicitly set on the preset (presets that don't mention
+    // doors leave the wall's door state untouched).
+    if (p.door !== undefined) change.door = p.door;
+    return change;
+  }
+
+  function describePreset(p: WallPreset): string {
+    const parts: string[] = [];
+    if (p.thickness !== undefined) parts.push(`thickness ${p.thickness}px`);
+    if (!p.blocksSight) parts.push('sight-transparent');
+    if (!p.blocksMovement) parts.push('movement-transparent');
+    if (p.visibility === 'gm') parts.push('GM-only');
+    if (p.door) parts.push(p.door.open ? 'open door' : 'closed door');
+    return parts.length === 0 ? 'Default wall' : parts.join(', ');
+  }
+
   function render() {
     const walls = liveWalls();
     if (walls.length === 0) {
@@ -206,6 +300,10 @@ export function mountWallEditor(opts: WallEditorOptions): WallEditorHandle {
       close();
       return;
     }
+
+    // Phase 117 — refresh the chip strip on every render so a newly
+    // saved (or deleted) preset shows up immediately.
+    renderPresets();
 
     titleEl.textContent =
       walls.length === 1 ? 'Edit wall' : `Edit walls (${walls.length})`;
@@ -386,6 +484,32 @@ export function mountWallEditor(opts: WallEditorOptions): WallEditorHandle {
   doorOpenEl.addEventListener('change', () => {
     opts.onChange(editingIds, { door: { open: doorOpenEl.checked } });
     render();
+  });
+
+  // Phase 117 — Save as preset. Captures the FIRST selected wall's
+  // values (the same ones the editor's slider / checkboxes show)
+  // under a user-supplied name, so a "stout wood door (open)" can
+  // be re-applied to other walls in one click later.
+  presetsSaveBtn.addEventListener('click', () => {
+    const walls = liveWalls();
+    if (walls.length === 0) return;
+    const w = walls[0]!;
+    const name = window.prompt('Name for the new preset:', '');
+    if (name === null) return;
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    const preset: Parameters<typeof savePreset>[0] = {
+      name: trimmed,
+      blocksSight: w.blocksSight,
+      blocksMovement: w.blocksMovement,
+    };
+    if (w.kind === 'segment' && w.thickness !== undefined) {
+      preset.thickness = w.thickness;
+    }
+    if (w.visibility !== undefined) preset.visibility = w.visibility;
+    if (w.kind === 'segment' && w.door !== undefined) preset.door = w.door;
+    savePreset(preset);
+    renderPresets();
   });
 
   deleteBtn.addEventListener('click', () => {

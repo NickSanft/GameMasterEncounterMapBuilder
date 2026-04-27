@@ -113,7 +113,7 @@ gaps so the v1.0 cut is genuinely "stable + remote-play-capable."
 - **0.114.0** — `blocksMovement` enforcement (the flag from Phase 54 finally does something) ✅
 - **0.115.0** — Diagonal movement rules (5e / 5e-alt / Chebyshev / Euclidean — settings dropdown the ruler + indicator both consume) ✅
 - **0.116.0** — Drag-to-resize block corners (deferred from Phase 112) ✅
-- **0.117.0** — Wall presets (saveable templates: stone-exterior, wooden-divider, etc.)
+- **0.117.0** — Wall presets (saveable templates: stone-exterior, wooden-divider, etc.) ✅
 - **0.118.0** — Snap-to-grid-edge wall drawing (toggle in walls-settings)
 - **0.119.0** — Player chat panel (text chat over the existing sync channel; per-message visibility)
 - **0.120.0** — Player-side annotations (Spectator drops a marker; GM sees + approves / dismisses)
@@ -122,6 +122,42 @@ gaps so the v1.0 cut is genuinely "stable + remote-play-capable."
 - **0.123.0** — Bulk token edit (multi-select then "set HP max to N for all" / "add condition to all")
 - **0.124.0** — Hex grid mode (currently square only — biggest lift; touches every layer that uses cellSize × cellSize math)
 - **1.0.0** — Stable + remote-play-capable cut after the 0.124 work lands.
+
+---
+
+## [0.117.0] — 2026-04-26 — Wall presets
+
+### Added
+- **Wall editor gets a preset chip strip** at the top with five built-ins: *Stone exterior* (thickness 8, opaque), *Interior divider* (thin, opaque), *Window* (sight-transparent, movement-blocking), *Secret passage* (GM-only visibility), *Wooden door (closed)* (Phase 113 door, thickness 4). Click any chip to apply the bundle to every selected wall in one batch.
+- **"+ Save…" button** captures the FIRST selected wall's current values (thickness, sight / movement, visibility, door state) under a user-supplied name, persisting to localStorage. The new chip appears at the end of the strip + survives across modal close + re-open + page reload.
+- **Per-user-preset delete** — small × inside the chip drops the entry. Built-ins are protected (no × button + the store ignores remove calls for `b:`-prefixed ids).
+- **Up to `MAX_USER_PRESETS = 20`** user presets persisted; oldest evicted on new save so the localStorage blob stays bounded.
+
+### Why this matters
+Pre-117, every wall was edited cell-by-cell. A dungeon with 30 stone-exterior walls, 50 interior dividers, and 8 secret passages required 88 individual edits — set thickness 8, ensure GM-only on the 8 secrets, etc. Phase 117 turns that into 88 single-clicks (or 88 right-click → preset). And the chip strip is multi-select aware, so dragging a lasso over 12 walls + clicking *Stone exterior* sets them all in one undo step.
+
+### Architecture
+- **`src/state/wall-presets.ts`** (new, ~200 lines) — pure helpers + a versioned localStorage envelope. API: `listPresets()` (built-ins + user, in display order), `savePreset(opts)` (returns the saved entry, generates id), `removePreset(id)` (silent no-op for built-ins + unknown ids), `_resetUserPresets()` (test-only). 
+  - **Built-ins live in code** (`BUILTIN_PRESETS`), not in storage. An app upgrade can add new built-ins without a migration.
+  - **Defensive parsing** — drops persisted entries missing required fields (id / name / blocksSight / blocksMovement booleans), drops wrong-version blobs, falls back to built-ins-only on JSON parse failure. Forces `isBuiltin: false` on every persisted entry so a malformed peer can't grant delete-immunity to a user preset.
+- **`src/ui/wall-editor.ts`** — added a preset chip strip above the existing fields. The render function calls a new `renderPresets()` helper on every render, so a freshly saved (or deleted) preset appears immediately. Each chip is `[apply button] [× delete button]` (the × omitted on built-ins). Clicking apply translates the preset to a `WallEditorChange` via `presetToChange(p)` and forwards to `opts.onChange` — the existing host wrapper handles the multi-select batching + the door-promotion remove path. Save button hijacks `window.prompt` for the name + writes through `savePreset`.
+- **`src/ui/styles.css`** — new `.wall-editor-presets` block. Pill-shaped chips (built-ins border-accented, user chips neutral); the Save button uses a dashed border to distinguish it visually from the apply chips.
+
+### UX details
+- **Block walls silently ignore `thickness`** when a preset is applied — they don't have a thickness to set. The other preset fields (visibility, blocksSight / Movement) still apply.
+- **Door promotion via preset** — the Wooden Door built-in carries `door: { open: false }`. Applying it to a non-door wall promotes it; applying to a door overwrites the open state. A future polish could add an "unset door" preset (using the `door: null` signal the editor's onChange already handles).
+- **Save captures ONLY the first selected wall's values** — multi-select Save would need a "which set of values?" choice that's hard to disambiguate. The chip-strip view is multi-select-aware (apply hits all selected); save is single-source.
+
+### Tests
+- **+16 unit tests** in `src/state/wall-presets.test.ts` (new): built-ins always present (5 expected); built-ins flagged isBuiltin=true; the wooden-door / secret-passage / window built-ins carry their distinguishing fields; save adds a user entry after the built-ins; save trims name + falls back to "Untitled preset"; remove drops a user preset; remove is a silent no-op for built-in + unknown ids; cap eviction at MAX_USER_PRESETS; round-trips through localStorage; defensive parsing for malformed JSON / version mismatch / missing-field entries; forces isBuiltin=false on persisted entries.
+- **+4 Playwright specs** in `e2e/wall-presets.spec.ts` (new): chips + Save button render with the 5 built-ins; clicking *Stone exterior* sets the thickness output to "8.0 px"; Save creates a user chip that persists across modal close + re-open; user preset has a × button that removes the chip.
+- **All 1321 unit tests + 314 Playwright specs pass** locally (the same `scenes.spec.ts:56` parallel flake from earlier phases reappeared once; passes in isolation, CI runs serially with retries=2, absorbed).
+
+### Bundle
+- **JS budget bumped 96 → 98 KB.** Phase 117 added ~0.9 KB JS (the wall-presets store + the chip-strip render path); landed at 96.52 / 96 KB which would have been 524 B over. CSS 11.74 / 12 KB. Lazy chunks unchanged.
+
+### Pre-push checklist
+Caught zero issues — full unit suite + full e2e + visual-regression spec + size-limit (after the proactive 96 → 98 KB bump) all green before push.
 
 ---
 
