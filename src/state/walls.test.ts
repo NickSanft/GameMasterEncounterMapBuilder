@@ -12,6 +12,8 @@ import {
   distanceSquaredToSegment,
   hitTestWalls,
   hitTestWallEndpoint,
+  hitTestBlockCorner,
+  applyBlockCornerDrag,
   clampThickness,
   wallLength,
   WALL_HIT_TOLERANCE_PX,
@@ -381,5 +383,109 @@ describe('Phase 112 — hitTestWalls block path', () => {
     const seg = createWall({ x1: 0, y1: 25, x2: 50, y2: 25 });
     // Segment was drawn AFTER the block → should win on overlap.
     expect(hitTestWalls([block, seg], 25, 25, cellSize)?.id).toBe(seg.id);
+  });
+});
+
+describe('Phase 116 — hitTestBlockCorner', () => {
+  const cellSize = 50;
+
+  it('returns null when no walls are selected', () => {
+    const block = createWallBlock({ cellX: 0, cellY: 0, cellsWide: 2, cellsTall: 2 });
+    expect(hitTestBlockCorner([block], new Set(), 0, 0, cellSize, 12)).toBeNull();
+  });
+
+  it('returns null for selected segment walls (segments have no corners)', () => {
+    const seg = createWall({ x1: 0, y1: 0, x2: 100, y2: 100 });
+    expect(
+      hitTestBlockCorner([seg], new Set([seg.id]), 0, 0, cellSize, 12),
+    ).toBeNull();
+  });
+
+  it('hits the TL corner', () => {
+    const block = createWallBlock({ cellX: 1, cellY: 1, cellsWide: 2, cellsTall: 2 });
+    // Block: cells (1,1)..(2,2). TL world position is (50, 50).
+    const hit = hitTestBlockCorner([block], new Set([block.id]), 50, 50, cellSize, 12);
+    expect(hit).not.toBeNull();
+    expect(hit!.corner).toBe('tl');
+  });
+
+  it('hits the BR corner', () => {
+    const block = createWallBlock({ cellX: 1, cellY: 1, cellsWide: 2, cellsTall: 2 });
+    // BR world position = (cellX + cellsWide) * cellSize = 150.
+    const hit = hitTestBlockCorner([block], new Set([block.id]), 150, 150, cellSize, 12);
+    expect(hit).not.toBeNull();
+    expect(hit!.corner).toBe('br');
+  });
+
+  it('returns null when point is outside the tolerance band', () => {
+    const block = createWallBlock({ cellX: 1, cellY: 1, cellsWide: 2, cellsTall: 2 });
+    // 100 px away from any corner.
+    expect(
+      hitTestBlockCorner([block], new Set([block.id]), 200, 200, cellSize, 12),
+    ).toBeNull();
+  });
+
+  it('respects selectedIds (unselected blocks ignored)', () => {
+    const a = createWallBlock({ cellX: 1, cellY: 1, cellsWide: 1, cellsTall: 1 });
+    const b = createWallBlock({ cellX: 5, cellY: 5, cellsWide: 1, cellsTall: 1 });
+    // Click on `a`'s TL corner but only `b` is selected.
+    expect(
+      hitTestBlockCorner([a, b], new Set([b.id]), 50, 50, cellSize, 12),
+    ).toBeNull();
+  });
+});
+
+describe('Phase 116 — applyBlockCornerDrag', () => {
+  const cellSize = 50;
+
+  it('TL drag: move TL down-right while BR stays pinned', () => {
+    const block = createWallBlock({ cellX: 0, cellY: 0, cellsWide: 4, cellsTall: 4 });
+    // Drag TL toward (cell 2, cell 2) — world (100, 100). Snaps to edge.
+    const next = applyBlockCornerDrag(block, 'tl', 100, 100, cellSize);
+    expect(next).toEqual({ cellX: 2, cellY: 2, cellsWide: 2, cellsTall: 2 });
+  });
+
+  it('BR drag: move BR up-left while TL stays pinned', () => {
+    const block = createWallBlock({ cellX: 0, cellY: 0, cellsWide: 4, cellsTall: 4 });
+    const next = applyBlockCornerDrag(block, 'br', 100, 100, cellSize);
+    expect(next).toEqual({ cellX: 0, cellY: 0, cellsWide: 2, cellsTall: 2 });
+  });
+
+  it('TR drag: independent x + y axes (top changes; right changes)', () => {
+    const block = createWallBlock({ cellX: 1, cellY: 1, cellsWide: 3, cellsTall: 3 });
+    // Block edges: left=1 right=4 top=1 bottom=4. Drag TR to world (300, 100):
+    // dragEdgeX = 300/50 = 6, dragEdgeY = 100/50 = 2.
+    const next = applyBlockCornerDrag(block, 'tr', 300, 100, cellSize);
+    expect(next).toEqual({ cellX: 1, cellY: 2, cellsWide: 5, cellsTall: 2 });
+  });
+
+  it('BL drag: left + bottom both move', () => {
+    const block = createWallBlock({ cellX: 1, cellY: 1, cellsWide: 3, cellsTall: 3 });
+    // Drag BL to (0, 250): dragEdgeX = 0, dragEdgeY = 5.
+    const next = applyBlockCornerDrag(block, 'bl', 0, 250, cellSize);
+    expect(next).toEqual({ cellX: 0, cellY: 1, cellsWide: 4, cellsTall: 4 });
+  });
+
+  it('clamps to a 1×1 minimum (drag past the opposite corner)', () => {
+    const block = createWallBlock({ cellX: 0, cellY: 0, cellsWide: 4, cellsTall: 4 });
+    // Drag BR way past the TL corner (negative world coords).
+    const next = applyBlockCornerDrag(block, 'br', -200, -200, cellSize);
+    expect(next.cellsWide).toBe(1);
+    expect(next.cellsTall).toBe(1);
+  });
+
+  it('clamps cellX/cellY to ≥ 0 (drag TL into negative world space)', () => {
+    const block = createWallBlock({ cellX: 2, cellY: 2, cellsWide: 4, cellsTall: 4 });
+    // BR is at (6, 6). Drag TL to (-150, -150) → dragEdge negative,
+    // clamped to (0, 0). New width = 6, height = 6.
+    const next = applyBlockCornerDrag(block, 'tl', -150, -150, cellSize);
+    expect(next).toEqual({ cellX: 0, cellY: 0, cellsWide: 6, cellsTall: 6 });
+  });
+
+  it('snaps drag positions between cells to the nearest edge', () => {
+    const block = createWallBlock({ cellX: 0, cellY: 0, cellsWide: 4, cellsTall: 4 });
+    // BR drag to world (130, 130) → dragEdgeX = round(130/50) = 3, dragEdgeY = 3.
+    const next = applyBlockCornerDrag(block, 'br', 130, 130, cellSize);
+    expect(next).toEqual({ cellX: 0, cellY: 0, cellsWide: 3, cellsTall: 3 });
   });
 });

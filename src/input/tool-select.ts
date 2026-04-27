@@ -14,7 +14,10 @@ import { tokensInStackAt, cycleStackSelection } from '../state/token-stack.js';
 import {
   hitTestWalls,
   hitTestWallEndpoint,
+  hitTestBlockCorner,
+  applyBlockCornerDrag,
   WALL_HANDLE_SCREEN_PX,
+  BLOCK_CORNER_HANDLE_SCREEN_PX,
 } from '../state/walls.js';
 import type { ID } from '../state/types.js';
 import { clampMoveAgainstWalls } from '../state/movement.js';
@@ -29,9 +32,15 @@ interface LassoInProgress {
 export function createSelectTool(ctx: InputContext): Tool {
   const { canvas, renderer, store, selection, dragOverlay, lassoOverlay } = ctx;
   const endpointDrag = ctx.endpointDrag;
+  // Phase 116 — block-wall corner-resize ref. Optional; the resize
+  // path silently no-ops when the host didn't wire it.
+  const blockResize = ctx.blockResize;
   let activePointerId: number | null = null;
   let isDragging = false;
   let isEndpointDrag = false;
+  let isBlockResize = false;
+  let blockResizeCorner: 'tl' | 'tr' | 'bl' | 'br' | null = null;
+  let blockResizeWallId: string | null = null;
   let dragStartWorldX = 0;
   let dragStartWorldY = 0;
   let lasso: LassoInProgress | null = null;
@@ -55,6 +64,42 @@ export function createSelectTool(ctx: InputContext): Tool {
     if (e.button !== 0 || ctx.isSpaceHeld()) return;
     const world = pointerToWorld(canvas, renderer, e);
     const state = store.getState();
+
+    // Phase 116 — block-wall CORNER-handle hit-test BEFORE the
+    // segment endpoint test. Corners only exist on selected blocks;
+    // hitting one starts a resize drag (the renderer paints the
+    // ghost rectangle live, the wall-update patch commits at
+    // pointerup). Block walls don't have segment endpoints, so the
+    // two paths can't both fire on the same click.
+    if (blockResize && selection.ids.size > 0) {
+      const tol = (BLOCK_CORNER_HANDLE_SCREEN_PX + 3) /
+        Math.max(renderer.camera.zoom, 0.05);
+      const hit = hitTestBlockCorner(
+        state.walls,
+        selection.ids,
+        world.x,
+        world.y,
+        state.grid.cellSize,
+        tol,
+      );
+      if (hit) {
+        blockResize.current = {
+          wallId: hit.wall.id,
+          cellX: hit.wall.cellX,
+          cellY: hit.wall.cellY,
+          cellsWide: hit.wall.cellsWide,
+          cellsTall: hit.wall.cellsTall,
+        };
+        isBlockResize = true;
+        blockResizeCorner = hit.corner;
+        blockResizeWallId = hit.wall.id;
+        activePointerId = e.pointerId;
+        canvas.setPointerCapture(e.pointerId);
+        renderer.requestRender();
+        e.preventDefault();
+        return;
+      }
+    }
 
     // Phase 85 — endpoint-handle hit-test FIRST when there are
     // selected walls. The handle's hit area is generously sized at
@@ -182,6 +227,27 @@ export function createSelectTool(ctx: InputContext): Tool {
   function onPointerMove(e: PointerEvent) {
     if (e.pointerId !== activePointerId) return;
 
+    // Phase 116 — block-corner resize move handler. Update the
+    // prospective geometry via `applyBlockCornerDrag`; the renderer
+    // paints the ghost rectangle.
+    if (isBlockResize && blockResize?.current && blockResizeCorner && blockResizeWallId) {
+      const world = pointerToWorld(canvas, renderer, e);
+      const state = store.getState();
+      const wall = state.walls.find((w) => w.id === blockResizeWallId);
+      if (wall && wall.kind === 'block') {
+        const next = applyBlockCornerDrag(
+          wall,
+          blockResizeCorner,
+          world.x,
+          world.y,
+          state.grid.cellSize,
+        );
+        blockResize.current = { wallId: wall.id, ...next };
+        renderer.requestRender();
+      }
+      return;
+    }
+
     if (isEndpointDrag && endpointDrag?.current) {
       const world = pointerToWorld(canvas, renderer, e);
       endpointDrag.current = {
@@ -225,6 +291,42 @@ export function createSelectTool(ctx: InputContext): Tool {
       canvas.releasePointerCapture(e.pointerId);
     } catch {
       /* no-op */
+    }
+
+    // Phase 116 — block-corner resize commit. The renderer's ghost
+    // preview matches `blockResize.current`; on pointerup we apply
+    // it as a `wall-update` patch (skipped when nothing actually
+    // changed). Then clear the ref so the renderer goes back to
+    // painting the committed geometry.
+    if (isBlockResize && blockResize?.current) {
+      const drag = blockResize.current;
+      isBlockResize = false;
+      blockResizeCorner = null;
+      blockResizeWallId = null;
+      blockResize.current = null;
+      const state = store.getState();
+      const w = state.walls.find((x) => x.id === drag.wallId);
+      if (w && w.kind === 'block') {
+        const same =
+          w.cellX === drag.cellX &&
+          w.cellY === drag.cellY &&
+          w.cellsWide === drag.cellsWide &&
+          w.cellsTall === drag.cellsTall;
+        if (!same) {
+          store.applyPatch({
+            kind: 'wall-update',
+            id: w.id,
+            changes: {
+              cellX: drag.cellX,
+              cellY: drag.cellY,
+              cellsWide: drag.cellsWide,
+              cellsTall: drag.cellsTall,
+            },
+          });
+        }
+      }
+      renderer.requestRender();
+      return;
     }
 
     if (isEndpointDrag && endpointDrag?.current) {
@@ -420,8 +522,16 @@ export function createSelectTool(ctx: InputContext): Tool {
         endpointDrag.current = null;
         renderer.requestRender();
       }
+      // Phase 116 — also clear any in-flight block resize on tool deactivate.
+      if (blockResize?.current) {
+        blockResize.current = null;
+        renderer.requestRender();
+      }
       isDragging = false;
       isEndpointDrag = false;
+      isBlockResize = false;
+      blockResizeCorner = null;
+      blockResizeWallId = null;
       activePointerId = null;
       lasso = null;
     },

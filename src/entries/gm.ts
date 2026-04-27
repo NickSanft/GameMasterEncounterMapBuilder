@@ -12,6 +12,7 @@ import {
   createDrawOverlayRef,
   createWallsOverlayRef,
   createEndpointDragRef,
+  createBlockResizeRef,
 } from '../input/context.js';
 import { createToolManager } from '../input/tool-manager.js';
 import { createSelectTool } from '../input/tool-select.js';
@@ -265,6 +266,10 @@ const aoeOverlayRef = createAoeOverlayRef();
 const drawOverlayRef = createDrawOverlayRef();
 const wallsOverlayRef = createWallsOverlayRef();
 const endpointDragRef = createEndpointDragRef();
+// Phase 116 — block-wall corner-resize in-flight overlay. Set by the
+// Select tool when a click lands on a selected block's corner handle;
+// cleared on pointerup after the wall-update patch commits.
+const blockResizeRef = createBlockResizeRef();
 const drawToolOptionsRef = createDrawToolOptionsRef({
   color: DEFAULT_STROKE_COLOR,
   width: DEFAULT_STROKE_WIDTH,
@@ -343,6 +348,8 @@ const renderer = createRenderer({
   getBlockPreview: () => blockPreviewRef.current,
   // Phase 85 — endpoint drag for the in-place wall editor.
   getEndpointDrag: () => endpointDragRef.current,
+  // Phase 116 — block-wall corner-resize ghost.
+  getBlockResize: () => blockResizeRef.current,
   getLosPolygons: () =>
     preferences.get().losMode === 'off'
       ? null
@@ -518,6 +525,7 @@ const inputContext = {
   dragOverlay: dragOverlayRef,
   // Phase 85 — endpoint drag for the in-place wall editor.
   endpointDrag: endpointDragRef,
+  blockResize: blockResizeRef,
   lassoOverlay: lassoOverlayRef,
   lastPlaced: lastPlacedRef,
   measurementOverlay: measurementOverlayRef,

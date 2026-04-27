@@ -132,6 +132,20 @@ interface CreateRendererOptions {
     cellsTall: number;
   } | null;
   /**
+   * Phase 116 — block-corner resize overlay from the Select tool.
+   * While a GM is mid-drag of a selected block's corner handle, this
+   * returns the prospective new geometry; the renderer paints the
+   * ghost rectangle live so the resize previews before the patch
+   * commits at pointerup. GM-only.
+   */
+  getBlockResize?(): {
+    wallId: ID;
+    cellX: number;
+    cellY: number;
+    cellsWide: number;
+    cellsTall: number;
+  } | null;
+  /**
    * Phase 85 — endpoint drag overlay for the in-place wall editor.
    * When a GM is mid-drag of a single wall endpoint, the renderer
    * uses this to paint the wall with the dragged endpoint at the
@@ -210,6 +224,7 @@ export function createRenderer(opts: CreateRendererOptions): Renderer {
     getFogRects,
     getWallsOverlay,
     getBlockPreview,
+    getBlockResize,
     getEndpointDrag,
     getLosPolygons,
     getLightPolygons,
@@ -362,6 +377,8 @@ export function createRenderer(opts: CreateRendererOptions): Renderer {
         // block-mode drag preview ghost (the Walls tool sets it).
         cellSize: state.grid.cellSize,
         blockPreview: getBlockPreview ? getBlockPreview() : null,
+        // Phase 116 — block-corner resize ghost from the Select tool.
+        blockResize: getBlockResize ? getBlockResize() : null,
       });
     }
     // LoS visibility polygons — GM-only yellow outline so the GM sees

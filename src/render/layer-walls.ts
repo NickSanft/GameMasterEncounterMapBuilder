@@ -88,6 +88,19 @@ export interface WallsRenderOptions {
    * the in-flight position so the GM gets visual feedback at 60fps.
    */
   endpointDrag?: { wallId: ID; endpoint: 1 | 2; x: number; y: number } | null;
+  /**
+   * Phase 116 — block-wall corner-resize overlay. When a GM is mid-
+   * drag of a block-wall corner, the renderer paints the prospective
+   * geometry as a ghost rectangle (similar to the block-create
+   * preview) so the resize previews live before the patch commits.
+   */
+  blockResize?: {
+    wallId: ID;
+    cellX: number;
+    cellY: number;
+    cellsWide: number;
+    cellsTall: number;
+  } | null;
 }
 
 const WALL_COLOR = '#63b3ed';
@@ -325,7 +338,48 @@ export function drawWalls(
         ctx.setLineDash([]);
       }
       ctx.strokeRect(x, y, wpx, hpx);
+      // Phase 116 — corner handles on highlighted (selected) blocks.
+      // GM-only and only when the block isn't being mid-resized
+      // (the resize ghost below replaces the original outline).
+      if (isHighlighted && isGm && options.blockResize?.wallId !== w.id) {
+        const handleSizePx = (12 + 0) / safeZoom; // matches BLOCK_CORNER_HANDLE_SCREEN_PX in walls.ts
+        const half = handleSizePx / 2;
+        ctx.fillStyle = WALL_HIGHLIGHT_COLOR;
+        ctx.strokeStyle = '#1a1a1a';
+        ctx.lineWidth = 1.5 / safeZoom;
+        const cornersPx: Array<[number, number]> = [
+          [x, y],
+          [x + wpx, y],
+          [x, y + hpx],
+          [x + wpx, y + hpx],
+        ];
+        for (const [cx, cy] of cornersPx) {
+          ctx.fillRect(cx - half, cy - half, handleSizePx, handleSizePx);
+          ctx.strokeRect(cx - half, cy - half, handleSizePx, handleSizePx);
+        }
+      }
     }
+    ctx.setLineDash([]);
+  }
+
+  // Phase 116 — block-corner resize ghost. While a corner is being
+  // dragged, paint the prospective new geometry as a dashed
+  // translucent rectangle (same visual as the block-create preview).
+  const blockResize = isGm ? options.blockResize ?? null : null;
+  if (blockResize && blockResize.cellsWide > 0 && blockResize.cellsTall > 0) {
+    const cs = options.cellSize;
+    const x = blockResize.cellX * cs;
+    const y = blockResize.cellY * cs;
+    const wpx = blockResize.cellsWide * cs;
+    const hpx = blockResize.cellsTall * cs;
+    ctx.fillStyle = WALL_HIGHLIGHT_COLOR;
+    ctx.globalAlpha = 0.3;
+    ctx.fillRect(x, y, wpx, hpx);
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = WALL_HIGHLIGHT_COLOR;
+    ctx.lineWidth = 1.5 / safeZoom;
+    ctx.setLineDash([dashLen, dashLen]);
+    ctx.strokeRect(x, y, wpx, hpx);
     ctx.setLineDash([]);
   }
 

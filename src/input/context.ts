@@ -24,6 +24,12 @@ export interface InputContext {
    * can omit it.
    */
   endpointDrag?: EndpointDragRef;
+  /**
+   * Phase 116 — set when a Select-tool drag begins on a selected
+   * block-wall's corner handle. Optional so non-select tools can
+   * omit it.
+   */
+  blockResize?: BlockResizeRef;
   lassoOverlay: LassoOverlayRef;
   lastPlaced: LastPlacedRef;
   measurementOverlay: MeasurementOverlayRef;
@@ -95,6 +101,31 @@ export interface EndpointDragRef {
 }
 
 export function createEndpointDragRef(): EndpointDragRef {
+  return { current: null };
+}
+
+/**
+ * Phase 116 — block-wall corner-resize in-flight state. Set by the
+ * Select tool's pointerdown when the click landed on a selected
+ * block's corner handle; updated on pointermove; cleared on
+ * pointerup after the `wall-update` patch commits. The renderer
+ * reads the value to paint the prospective new geometry as a ghost
+ * rectangle (similar to the block-create preview from Phase 112).
+ */
+export interface BlockResizeState {
+  wallId: ID;
+  /** Cell coords of the prospective new geometry. */
+  cellX: number;
+  cellY: number;
+  cellsWide: number;
+  cellsTall: number;
+}
+
+export interface BlockResizeRef {
+  current: BlockResizeState | null;
+}
+
+export function createBlockResizeRef(): BlockResizeRef {
   return { current: null };
 }
 

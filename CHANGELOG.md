@@ -112,7 +112,7 @@ gaps so the v1.0 cut is genuinely "stable + remote-play-capable."
 
 - **0.114.0** — `blocksMovement` enforcement (the flag from Phase 54 finally does something) ✅
 - **0.115.0** — Diagonal movement rules (5e / 5e-alt / Chebyshev / Euclidean — settings dropdown the ruler + indicator both consume) ✅
-- **0.116.0** — Drag-to-resize block corners (deferred from Phase 112)
+- **0.116.0** — Drag-to-resize block corners (deferred from Phase 112) ✅
 - **0.117.0** — Wall presets (saveable templates: stone-exterior, wooden-divider, etc.)
 - **0.118.0** — Snap-to-grid-edge wall drawing (toggle in walls-settings)
 - **0.119.0** — Player chat panel (text chat over the existing sync channel; per-message visibility)
@@ -122,6 +122,47 @@ gaps so the v1.0 cut is genuinely "stable + remote-play-capable."
 - **0.123.0** — Bulk token edit (multi-select then "set HP max to N for all" / "add condition to all")
 - **0.124.0** — Hex grid mode (currently square only — biggest lift; touches every layer that uses cellSize × cellSize math)
 - **1.0.0** — Stable + remote-play-capable cut after the 0.124 work lands.
+
+---
+
+## [0.116.0] — 2026-04-26 — Drag-to-resize block-wall corners
+
+### Added
+- **Selected block walls now expose 4 corner handles.** Drag any handle to resize the block in cell coordinates — the opposite corner stays pinned, the dragged corner moves to the snapped cell edge, and a translucent ghost rectangle previews the new geometry live before the patch commits at pointerup. Closes the explicit "drag-to-resize" deferral from Phase 112.
+- **No more delete-and-redraw** for adjusting a misjudged block. Resize works the same for any corner (TL / TR / BL / BR); the pinned-opposite-corner semantic matches every "marquee resize" pattern users already know from photo editors and design tools.
+- **Cell-edge snapping** — the dragged corner snaps to the nearest grid edge (not a fractional position). Both axes resize independently for TR / BL drags, so dragging just down moves only the bottom edge.
+- **Min size of 1×1 cells** — clamped automatically; a drag past the opposite corner just shrinks the block to 1×1 along that axis.
+- **Cell coords clamped to ≥ 0** — TL drags into negative world space cap at the grid origin.
+
+### Why this matters
+Phase 112 shipped block walls with a documented "drag-to-resize is a future polish; for now blocks are edited via re-draw." Phase 116 closes that gap. After a 30-cell encounter design where you accidentally made the boss room one row too short, you can now extend it without losing the block's id (the wall stays the same entity through the resize — sync, selection, undo, and Phase 113 door promotion all keep working uniformly).
+
+### Architecture
+- **`src/state/walls.ts`** — three new exports:
+  - `BlockCorner = 'tl' | 'tr' | 'bl' | 'br'` — corner identifier.
+  - `hitTestBlockCorner(walls, selectedIds, px, py, cellSize, tolerancePx)` returns `{wall, corner}` for the closest corner of any selected block within tolerance, or `null`. Walls iterate in reverse so the most-recently-drawn wins on ties (matches `hitTestWalls`'s mental model). Segment walls in the selection are skipped — they have endpoint handles via Phase 85, not corners.
+  - `applyBlockCornerDrag(wall, corner, dragWorldX, dragWorldY, cellSize)` returns the new geometry. Pure math: snap `dragWorld` to the nearest cell edge, then compute the new bounding box such that the opposite corner stays pinned. Clamps width/height to ≥ 1, cellX/cellY to ≥ 0.
+  - `BLOCK_CORNER_HANDLE_SCREEN_PX = 12` — handle render + hit-test size.
+- **`src/input/context.ts`** — added `BlockResizeRef` (in-flight prospective geometry) + `createBlockResizeRef()`. Optional `blockResize?` on `InputContext`.
+- **`src/input/tool-select.ts`** — `pointerdown` now hit-tests block corners BEFORE segment endpoints (the two are mutually exclusive — segments don't have corners, blocks don't have endpoints — but the corner test runs first because it has a slightly larger tolerance band and the order shouldn't matter). Mid-drag `pointermove` updates `blockResize.current` via `applyBlockCornerDrag`; `pointerup` commits a `wall-update` patch with the new `cellX/cellY/cellsWide/cellsTall` (skipped when nothing changed). The deactivate path clears the in-flight ref to avoid a stuck ghost when the GM switches tools mid-drag.
+- **`src/render/layer-walls.ts`** — `WallsRenderOptions` gained `blockResize?` (the ghost overlay). The block render loop paints corner handles on highlighted blocks (12 × 12 yellow accent squares with a contrast outline, scaled by zoom for visual consistency); the wall whose id matches `blockResize.wallId` skips its own handle paint so the ghost rectangle is the only visual during the drag.
+- **`src/render/renderer.ts`** + **`src/entries/gm.ts`** — single new `getBlockResize` callback wired through, mirroring the Phase 112 `getBlockPreview` pattern.
+
+### UX details
+- **Corner handles are GM-only.** The Spectator never sees them (Phase 85 collapsed `highlights` + `endpointDrag` to empty/null on Spectator side; the new `blockResize` does the same).
+- **Ghost color is the highlight accent** (yellow), distinct from the Phase 112 block-create preview (wall-color blue). This makes "resize in flight" visually distinguishable from "creating a new block in flight."
+- **No min-size visual cue** at the 1×1 limit. The ghost just stops shrinking. A future polish could pulse the affected edge red to signal the clamp; for now, the snap is silent.
+
+### Tests
+- **+13 unit tests** in `src/state/walls.test.ts`: `hitTestBlockCorner` (no selection / segments-have-no-corners / TL hit / BR hit / outside tolerance / respects selectedIds); `applyBlockCornerDrag` (TL drag pins BR / BR drag pins TL / TR drag — independent axes / BL drag — left + bottom both move / clamps to 1×1 minimum / clamps cellX/cellY to ≥ 0 / snaps to nearest cell edge).
+- **+2 Playwright specs** in `e2e/block-corner-resize.spec.ts` (new): authoring + selecting + corner-drag runs end-to-end without errors and the canvas stays alive after; block walls without selection are NOT affected by a "would-be corner drag" attempt.
+- **All 1305 unit tests + 310 Playwright specs pass** locally.
+
+### Bundle
+- 95.64 / 96 KB initial-load brotli (+0.56 KB for the helpers + the tool-select branch + the renderer pass + the gm-side wiring). CSS 11.62 / 12 KB. Lazy chunks unchanged.
+
+### Pre-push checklist
+Caught zero issues — full unit suite + full e2e + visual-regression spec + size-limit all green before push.
 
 ---
 

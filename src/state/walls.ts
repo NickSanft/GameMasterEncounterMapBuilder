@@ -209,6 +209,139 @@ export function blockWallBounds(w: WallBlock, cellSize: number): BlockBounds {
 }
 
 /**
+ * Phase 116 — block-wall corner identifiers. The four corners are
+ * cell-edge positions (not cell centers): top-left, top-right,
+ * bottom-left, bottom-right. Used by the in-place block resize to
+ * pin the OPPOSITE corner while the dragged corner moves.
+ */
+export type BlockCorner = 'tl' | 'tr' | 'bl' | 'br';
+
+/** Phase 116 — corner-handle screen size (matches segment endpoint handle). */
+export const BLOCK_CORNER_HANDLE_SCREEN_PX = 12;
+
+export interface BlockCornerHit {
+  wall: WallBlock;
+  corner: BlockCorner;
+}
+
+/**
+ * Phase 116 — find the closest block-wall corner under `(px, py)`
+ * within `tolerancePx` (world-pixel tolerance, scale-corrected by
+ * the caller). Only walls in `selectedIds` are considered — corners
+ * are an authoring affordance for the GM's current selection, not
+ * an always-on hit target.
+ *
+ * Walls iterated in reverse so the most-recently-drawn wins on a
+ * tie (matches `hitTestWalls`'s mental "top layer" ordering).
+ */
+export function hitTestBlockCorner(
+  walls: readonly Wall[],
+  selectedIds: ReadonlySet<string>,
+  px: number,
+  py: number,
+  cellSize: number,
+  tolerancePx: number,
+): BlockCornerHit | null {
+  if (selectedIds.size === 0) return null;
+  const tolSq = tolerancePx * tolerancePx;
+  for (let i = walls.length - 1; i >= 0; i--) {
+    const w = walls[i]!;
+    if (w.kind !== 'block') continue;
+    if (!selectedIds.has(w.id)) continue;
+    const corners: Array<{ corner: BlockCorner; cx: number; cy: number }> = [
+      { corner: 'tl', cx: w.cellX * cellSize, cy: w.cellY * cellSize },
+      { corner: 'tr', cx: (w.cellX + w.cellsWide) * cellSize, cy: w.cellY * cellSize },
+      { corner: 'bl', cx: w.cellX * cellSize, cy: (w.cellY + w.cellsTall) * cellSize },
+      {
+        corner: 'br',
+        cx: (w.cellX + w.cellsWide) * cellSize,
+        cy: (w.cellY + w.cellsTall) * cellSize,
+      },
+    ];
+    for (const c of corners) {
+      const dx = px - c.cx;
+      const dy = py - c.cy;
+      if (dx * dx + dy * dy <= tolSq) {
+        return { wall: w, corner: c.corner };
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * Phase 116 — given a block wall, the dragged corner, and the drag's
+ * current world-pixel position, return the new block geometry. The
+ * OPPOSITE corner is pinned — its cell-edge position doesn't move.
+ *
+ * The dragged position is snapped to the nearest cell EDGE (not cell
+ * center) and clamped so the resulting block is at least 1×1 with
+ * non-negative cell coords.
+ */
+export function applyBlockCornerDrag(
+  wall: WallBlock,
+  corner: BlockCorner,
+  dragWorldX: number,
+  dragWorldY: number,
+  cellSize: number,
+): { cellX: number; cellY: number; cellsWide: number; cellsTall: number } {
+  // Snap the drag position to the nearest cell edge.
+  const dragEdgeX = Math.max(0, Math.round(dragWorldX / cellSize));
+  const dragEdgeY = Math.max(0, Math.round(dragWorldY / cellSize));
+  // Existing edges in cell coords.
+  const leftX = wall.cellX;
+  const topY = wall.cellY;
+  const rightX = wall.cellX + wall.cellsWide;
+  const bottomY = wall.cellY + wall.cellsTall;
+  switch (corner) {
+    case 'tl': {
+      // Opposite (BR) is fixed at (rightX, bottomY).
+      const newLeft = Math.min(dragEdgeX, rightX - 1);
+      const newTop = Math.min(dragEdgeY, bottomY - 1);
+      return {
+        cellX: Math.max(0, newLeft),
+        cellY: Math.max(0, newTop),
+        cellsWide: rightX - Math.max(0, newLeft),
+        cellsTall: bottomY - Math.max(0, newTop),
+      };
+    }
+    case 'tr': {
+      // Opposite (BL) is fixed at (leftX, bottomY).
+      const newRight = Math.max(leftX + 1, dragEdgeX);
+      const newTop = Math.min(dragEdgeY, bottomY - 1);
+      return {
+        cellX: leftX,
+        cellY: Math.max(0, newTop),
+        cellsWide: newRight - leftX,
+        cellsTall: bottomY - Math.max(0, newTop),
+      };
+    }
+    case 'bl': {
+      // Opposite (TR) is fixed at (rightX, topY).
+      const newLeft = Math.min(dragEdgeX, rightX - 1);
+      const newBottom = Math.max(topY + 1, dragEdgeY);
+      return {
+        cellX: Math.max(0, newLeft),
+        cellY: topY,
+        cellsWide: rightX - Math.max(0, newLeft),
+        cellsTall: newBottom - topY,
+      };
+    }
+    case 'br': {
+      // Opposite (TL) is fixed at (leftX, topY).
+      const newRight = Math.max(leftX + 1, dragEdgeX);
+      const newBottom = Math.max(topY + 1, dragEdgeY);
+      return {
+        cellX: leftX,
+        cellY: topY,
+        cellsWide: newRight - leftX,
+        cellsTall: newBottom - topY,
+      };
+    }
+  }
+}
+
+/**
  * Phase 85 — clamp a (possibly-untrusted) thickness value to the
  * editor's allowed range. Used by the wall editor and the wire-format
  * deserializer so a malformed peer can't make a wall render at width
