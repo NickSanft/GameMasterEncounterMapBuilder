@@ -131,6 +131,48 @@ gaps so the v1.0 cut is genuinely "stable + remote-play-capable."
 
 ---
 
+## [1.3.0] — 2026-04-29 — Spectator owned-token quick-edit popover
+
+Phase 128 — closes the player-owned-tokens trilogy. v1.1 shipped the field + GM authoring; v1.2 added the actual drag wiring; v1.3 adds the rest of the in-play workflow: a Spectator can adjust HP and toggle conditions on tokens they own without going through the GM.
+
+### Added
+- **Quick-edit popover** — right-click on a token you own → a small floating popover anchored at the click point opens with two affordances:
+  - **HP nudge buttons** (-5, -1, +1, +5) clamped to [0, max]. Hidden when the token doesn't track HP at all (`Token.hp === null`).
+  - **Condition checkboxes** — one per Phase 50 preset condition (15 standard 5e conditions plus the two extras). Toggling adds / removes the condition; removal also strips any Phase 70 expiration timer so a re-added condition doesn't pick up a stale countdown.
+- **Auto-refresh on patch round-trip** — the popover re-renders from the live store on every patch so HP / condition state stays in sync after the GM-authoritative update lands.
+- **`token-claim-update` SyncMessage** carrying `{tokenId, changes: Partial<Token>}`. The wire format is permissive (any Partial<Token>) for forward-compat, but the GM-side handler **enforces an allowlist**: only `hp`, `conditions`, and `conditionExpirations` make it into the resulting `token-update` patch. Anything else (label, color, x/y, ownerId, light, losRadius) is dropped silently — defense against a tampered spectator client trying to rename / recolor / reassign ownership.
+
+### Why this matters
+With v1.2 a player could *move* their token; with v1.3 they can also damage it, heal it, mark themselves Poisoned when an effect lands, etc. — without "GM, can you mark me poisoned?" interruptions. The GM stays authoritative (the patch flows through `store.applyPatch` so undo history, snapshot history, combat log all see it the same way as a GM-authored change).
+
+### Architecture
+- **`src/sync/messages.ts`** — adds the `token-claim-update` variant.
+- **`src/ui/spectator-owned-token-popover.ts`** (new, ~210 lines) — pure UI module. `mountOwnedTokenPopover({getToken, onClaimUpdate})` returns `{open, close, refresh, isOpen, destroy}`. `open(tokenId, screenX, screenY)` positions the popover at the click point + populates from `getToken`. `refresh()` re-renders if open — host calls this on store changes. Outside-click + Escape close.
+- **`src/entries/spectator.ts`** —
+  - mounts `mountOwnedTokenPopover` after the drag wiring.
+  - adds a `contextmenu` listener on the canvas: hit-tests against tokens, opens the popover only if the hit token's `ownerId === playerId`. Other right-clicks fall through (no `preventDefault`).
+  - calls `ownedTokenPopover.refresh()` inside the existing store-subscribe so HP / condition state stays current after every patch.
+- **`src/entries/gm.ts`** — adds the `token-claim-update` branch in `channel.onMessage`. Validates token existence + `ownerId === env.senderId`, then filters `msg.changes` down to `{hp, conditions, conditionExpirations}` before applying via `store.applyPatch`. No-op when nothing in the allowlist survives.
+- **`src/ui/styles.css`** — new `.owned-token-popover` block + nested rules for the header / HP row / condition list. Accent-bordered floating panel matching the Phase 120 annotation-prompt visual language.
+
+### UX details
+- **No browser context menu interference.** The contextmenu handler only `preventDefault`s when the click landed on an owned token; other right-clicks pass through normally.
+- **One popover at a time.** Right-clicking a different owned token while another popover is open swaps the popover to the new token + repositions it. Closing leaves no residual state.
+- **Allowlist failure is silent.** A tampered spectator client sending `token-claim-update` with `changes.label = "..."` sees the GM apply nothing — no error UI, no notification. The cost-of-defense is minimal (defensive read only).
+- **Conditions list is the standard 16-entry preset.** A future polish could allow custom condition ids (matching the existing `addCondition` permissive contract), but the popover keeps it simple in v1.3.
+
+### Tests
+- **+2 Playwright specs** in `e2e/spectator-quick-edit.spec.ts` (new): right-click on UNOWNED token does NOT open the popover; HP -1 from the popover decrements GM-authoritative HP via the round-trip.
+- **All 1387 unit tests + 338 Playwright specs pass** locally.
+
+### Bundle
+- 103.12 / 110 KB initial-load brotli (+0.98 KB for the popover module + the contextmenu handler + the GM allowlist branch). CSS 12.57 / 14 KB (+0.19 KB for the popover styles). Lazy chunks unchanged.
+
+### Pre-push checklist
+Caught zero issues — full unit suite + full e2e + visual-regression specs + size-limit all green before push.
+
+---
+
 ## [1.2.0] — 2026-04-29 — Spectator drag for owned tokens
 
 Phase 127 — second of three phases on the player-owned-tokens track. v1.1.0 shipped the GM-authoring side (Token.ownerId field + "Owned by" dropdown + visual indicator dot). v1.2.0 adds the actual behavior: a Spectator can drag any token whose `ownerId` matches their playerId, and the move syncs back to the GM authoritative store.

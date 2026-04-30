@@ -49,6 +49,10 @@ import {
   createMeasurementOverlayRef,
 } from '../input/context.js';
 import { attachSpectatorDrag } from '../input/tool-spectator-drag.js';
+import { mountOwnedTokenPopover } from '../ui/spectator-owned-token-popover.js';
+import { hitTestToken } from '../input/hit-test.js';
+import { screenToWorld } from '../render/coords.js';
+import type { Token } from '../state/types.js';
 import { createMeasureTool, createRulerToolOptionsRef } from '../input/tool-measure.js';
 import { mountRulerSettings } from '../ui/ruler-settings.js';
 import { RULER_PRESETS } from '../state/ruler.js';
@@ -574,6 +578,9 @@ store.subscribe((patch) => {
   updateCanvasLabelDebounced();
   refreshLos();
   refreshFogRects();
+  // Phase 128 — keep the owned-token popover's HP / condition state
+  // in sync after the GM-authoritative token-update round-trips back.
+  ownedTokenPopover.refresh();
   if (patch?.kind === 'token-update' && patch.changes.imageId) {
     imageLoader.invalidate(patch.changes.imageId);
   } else if (patch?.kind === 'background-update' && patch.changes.imageId) {
@@ -625,6 +632,40 @@ attachSpectatorDrag({
   onCommit: (tokenId, x, y) => {
     channel?.send({ type: 'token-claim-move', tokenId, x, y });
   },
+});
+
+// Phase 128 — owned-token quick-edit popover. Right-clicking on a
+// token you own opens a small floating popover with HP +/- buttons
+// + condition checkboxes. Each change broadcasts a constrained
+// `token-claim-update` SyncMessage; the GM enforces the allowlist
+// (hp / conditions / conditionExpirations) before applying.
+const ownedTokenPopover = mountOwnedTokenPopover({
+  getToken: (tokenId) =>
+    store.getState().tokens.find((t) => t.id === tokenId) ?? null,
+  onClaimUpdate: (tokenId, changes) => {
+    channel?.send({ type: 'token-claim-update', tokenId, changes });
+  },
+});
+
+canvas.addEventListener('contextmenu', (e) => {
+  // Only intercept right-clicks on tokens we own; otherwise let the
+  // default context menu through (or the browser's no-op for canvas).
+  const rect = canvas.getBoundingClientRect();
+  const world = screenToWorld(
+    renderer.camera,
+    e.clientX - rect.left,
+    e.clientY - rect.top,
+  );
+  const state = store.getState();
+  const hit: Token | null = hitTestToken(
+    state.tokens,
+    state.grid,
+    world.x,
+    world.y,
+  );
+  if (!hit || hit.ownerId !== playerId) return;
+  e.preventDefault();
+  ownedTokenPopover.open(hit.id, e.clientX, e.clientY);
 });
 
 // Phase 62 — Remote Play modal (Spectator side). Populate the

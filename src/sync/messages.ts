@@ -412,6 +412,34 @@ export type SyncMessage =
       tokenId: string;
       x: number;
       y: number;
+    }
+  /**
+   * Phase 128 — Spectator-side claim-and-update for HP / conditions
+   * on a token they own. Same single-writer carve-out as the Phase 127
+   * `token-claim-move`, but for non-positional fields. The GM tab is
+   * still authoritative — when it receives this:
+   *   1. Validates `tokenId` exists.
+   *   2. Validates `token.ownerId === envelope.senderId`.
+   *   3. **Enforces the allowlist** — only `hp`, `conditions`, and
+   *      `conditionExpirations` fields make it into the resulting
+   *      `token-update` patch. Anything else (label, color, x/y,
+   *      ownerId, light, losRadius, etc.) is dropped silently. This
+   *      is the v1.3 contract — a spectator can heal / damage their
+   *      token + manage its conditions, but can't rename it, change
+   *      its color, hand ownership over to themselves, etc.
+   *   4. Applies a normal `token-update` patch via `store.applyPatch`,
+   *      which then rebroadcasts as a regular patch so all peers
+   *      converge.
+   *
+   * The shape mirrors `StatePatch`'s `token-update.changes` but is
+   * constrained to the allowlisted fields. The wire format carries
+   * a Partial<Token> for forward-compat — if a future phase widens
+   * the allowlist, peers don't need to update their parsers.
+   */
+  | {
+      type: 'token-claim-update';
+      tokenId: string;
+      changes: Partial<Token>;
     };
 
 export function serializeState(s: SessionState): SerializedSessionState {

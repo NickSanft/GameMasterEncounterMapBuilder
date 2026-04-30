@@ -6149,6 +6149,126 @@ body.reduced-motion .tour-popover {
   border-color: var(--accent);
 }
 
+/* ───── Phase 128 — Spectator owned-token quick-edit popover ───────
+   Right-clicking a token you own opens this floating panel. HP nudge
+   buttons + condition checkboxes; each interaction broadcasts a
+   `token-claim-update` constrained to the GM-side allowlist. */
+
+.owned-token-popover {
+  position: fixed;
+  z-index: 80;
+  min-width: 220px;
+  max-width: 280px;
+  padding: 0.55rem 0.7rem;
+  background: var(--bg-elev);
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+  font-size: 0.85rem;
+}
+
+.owned-token-popover[hidden] {
+  display: none;
+}
+
+.owned-token-popover-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.4rem;
+}
+
+.owned-token-popover-close {
+  appearance: none;
+  background: none;
+  border: none;
+  color: var(--fg-muted);
+  font-size: 1.3rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 0.25rem;
+}
+
+.owned-token-popover-close:hover {
+  color: var(--fg);
+}
+
+.owned-token-popover-hp {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.3rem 0;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+
+.owned-token-popover-hp-label {
+  font-weight: 600;
+  color: var(--fg);
+}
+
+.owned-token-popover-hp-buttons {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.owned-token-popover-hp-buttons button {
+  appearance: none;
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.25rem 0.45rem;
+  font-family: inherit;
+  font-size: 0.78rem;
+  cursor: pointer;
+  font-variant-numeric: tabular-nums;
+}
+
+.owned-token-popover-hp-buttons button:hover {
+  background: var(--hover-overlay);
+  border-color: var(--accent);
+}
+
+.owned-token-popover-conditions {
+  margin: 0.4rem 0 0;
+  padding: 0.3rem 0.45rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.owned-token-popover-conditions legend {
+  padding: 0 0.3rem;
+  font-weight: 600;
+  font-size: 0.78rem;
+}
+
+.owned-token-popover-condition-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.2rem 0.3rem;
+  cursor: pointer;
+  font-size: 0.82rem;
+}
+
+.owned-token-popover-condition-row:hover {
+  background: var(--hover-overlay);
+  border-radius: 3px;
+}
+
+.owned-token-popover-condition-swatch {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  border: 1px solid var(--border);
+}
+
 /* ───── Phase 108 — Recent backgrounds modal ────────────────────────
    List-view of recently-applied background images with a small
    thumbnail per row, the friendly name (or "(unnamed map)"), and a

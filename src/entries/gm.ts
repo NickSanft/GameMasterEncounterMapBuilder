@@ -2521,6 +2521,33 @@ if (channel) {
       announcer.announce(
         `${msg.senderName || 'Player'} suggested an annotation: ${msg.text}`,
       );
+    } else if (msg.type === 'token-claim-update') {
+      // Phase 128 — Spectator updating HP / conditions on a token
+      // they own. Same authoritative-source pattern as Phase 127:
+      // validate ownership, then allowlist-filter `changes` to just
+      // {hp, conditions, conditionExpirations} before applying as a
+      // normal token-update patch. Anything outside the allowlist
+      // (label, color, x/y, ownerId, etc.) is dropped silently —
+      // defense against a tampered spectator client trying to rename
+      // / recolor a token or reassign its ownership.
+      const stateNow = store.getState();
+      const claimedToken = stateNow.tokens.find((t) => t.id === msg.tokenId);
+      if (!claimedToken) return;
+      if (claimedToken.ownerId !== env.senderId) return;
+      const filtered: Partial<typeof claimedToken> = {};
+      if (msg.changes.hp !== undefined) filtered.hp = msg.changes.hp;
+      if (msg.changes.conditions !== undefined) {
+        filtered.conditions = msg.changes.conditions;
+      }
+      if (msg.changes.conditionExpirations !== undefined) {
+        filtered.conditionExpirations = msg.changes.conditionExpirations;
+      }
+      if (Object.keys(filtered).length === 0) return;
+      store.applyPatch({
+        kind: 'token-update',
+        id: msg.tokenId,
+        changes: filtered,
+      });
     } else if (msg.type === 'token-claim-move') {
       // Phase 127 — Spectator dragging a token they own. We're the
       // authoritative source: validate ownership against the envelope's
