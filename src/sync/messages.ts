@@ -622,6 +622,11 @@ export function deserializeState(s: SerializedSessionState): SessionState {
                 blocksMovement: w.blocksMovement !== false,
               };
               if (visibility !== undefined) out.visibility = visibility;
+              // Phase 131 — `shape` is optional; pre-131 saves omit it
+              // and load as 'rect'. Anything outside the known set
+              // collapses to 'rect' for safety.
+              const rawShape = (w as { shape?: unknown }).shape;
+              if (rawShape === 'hex') out.shape = 'hex';
               return out;
             }
             // Segment wall (explicit or pre-112 default).

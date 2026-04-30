@@ -131,6 +131,60 @@ gaps so the v1.0 cut is genuinely "stable + remote-play-capable."
 
 ---
 
+## [1.6.0] — 2026-04-29 — Hex-aware walls
+
+Phase 131 — third of four phases on the **true hex semantics** track. v1.5 made tokens snap to hexes; v1.6 makes the WALLS hex-aware too. Block walls in hex mode are single-hex regions, LoS works against them, and movement clamping is back on for hex.
+
+### Added
+- **`WallBlock.shape: 'rect' | 'hex'`** — new optional discriminator on block walls. `'rect'` (default; every prior phase) keeps the cellsWide × cellsTall AABB shape. `'hex'` ignores cellsWide / cellsTall and renders a single hex polygon centered at offset cell `(cellX, cellY)`. `deserializeState` defaults missing values to `'rect'` for back-compat.
+- **`wallToSegments` hex branch** — hex-shaped blocks return 6 perimeter segments (one per hex edge) instead of 4 rectangle perimeters. The LoS pipeline auto-handles via the existing wallToSegments → fog-worker integration; same for the Phase 114 movement clamp.
+- **`pointInHexBlock` for hit-testing** — point-in-hex via bounding-circle prefilter + 6-segment ray-cast. Used by `hitTestWalls` so right-clicking a hex-shaped block wall picks it for the editor / context menu.
+- **Renderer hex-block fill** — `layer-walls.ts` branches on `w.shape === 'hex'` and paths the hex polygon for both fill + stroke. Highlighted / GM-only / drag-offset all still apply. The Phase 116 corner handles are skipped on hex blocks (no equivalent — multi-hex selections are a Phase 132+ polish).
+- **Walls tool block-mode hex placement** — when grid is hex, the tool's block-mode path:
+  - Snaps the click to the nearest hex via `worldToCell`.
+  - Shows a single-hex preview (drag-extend is ignored).
+  - On commit, creates the WallBlock with `shape: 'hex'`.
+- **Hex-aware movement clamping** — new `clampMoveAgainstWallsHex` helper in `src/state/movement.ts`. Uses an all-or-nothing test: a single line from the start hex's world center to the end hex's world center; any movement-blocking segment crossing that line rejects the move (token stays at start). Wired into both:
+  - The GM tool-select drag commit (replacing the v1.5 "skip clamp on hex" workaround).
+  - The GM-side `token-claim-move` handler (Phase 127) so Spectator drags can't tunnel walls either.
+
+### Why this matters
+With v1.5 a hex-mode user got hex-correct measurements and snap, but walls were either not enforced (token clamp skipped) or enforced badly (rect block walls placed in the square coord space, visible as a square overlay over the hex grid). v1.6 closes the gap: walls render as hex polygons, contribute their 6 edges to LoS, and clamp movement on both GM and Spectator drags.
+
+### Architecture
+- **`src/state/types.ts`** — `WallBlock.shape?: 'rect' | 'hex'` field; same back-compat pattern as `gridShape` (Phase 124) and `Token.ownerId` (Phase 126).
+- **`src/sync/messages.ts`** — `deserializeState` honors the field; non-`'hex'` values collapse to `undefined` (= rect).
+- **`src/state/walls.ts`** —
+  - `wallToSegments` hex branch returns 6 segments via `hexCenter` + `hexVertices`.
+  - `hitTestWalls` hex branch uses `pointInHexBlock` (bounding-circle prefilter + ray-cast even-odd rule).
+- **`src/render/layer-walls.ts`** — fill + stroke branch on `w.shape === 'hex'`; uses `pathHex` from `hex-geometry`. Skips the rect-corner-handle pass for hex blocks.
+- **`src/input/tool-walls.ts`** —
+  - `worldToCell` (local) routes through the Phase 130 grid-coords helper so block-mode pointerdowns snap to hexes on hex grids.
+  - `updateBlockPreviewFrom` shows a single-hex preview on hex grids regardless of drag delta.
+  - `endBlockDrag` tags the new WallBlock with `shape: 'hex'` when grid is hex.
+- **`src/state/movement.ts`** — new `clampMoveAgainstWallsHex` exported alongside the existing square `clampMoveAgainstWalls`.
+- **`src/input/tool-select.ts`** + **`src/entries/gm.ts`** — both call sites branch on `state.grid.gridShape` between the two clamp variants.
+
+### UX details
+- **Hex blocks are single-hex.** Drag-create extends a rect block in square mode (Phase 112); in hex mode the drag delta is ignored and the wall covers exactly the hex you started on. To wall off a corridor, click each hex separately. Multi-hex selection / polyhex blocks are deferred to a Phase 132+ polish.
+- **Clamp is all-or-nothing on hex.** A wall in the line from start hex to end hex rejects the entire move (the token stays at the start). The square path's per-cell partial clamp (Bresenham + step-by-step) doesn't translate cleanly to hex offset coords; per-hex partial clamping along the line is a future polish.
+- **Segment walls work as-is.** Free-angle wall segments don't change between square and hex grids — they're already in world pixel coords. Their LoS / movement contributions work uniformly.
+- **Block walls drawn pre-131 stay rectangular.** `shape` defaults to `'rect'` on deserialize; existing scenes load with their walls visually unchanged.
+
+### Tests
+- **+1 unit test** in `src/state/walls.test.ts`: hex-shaped block returns 6 perimeter segments via `wallToSegments`, each with finite endpoints.
+- **+5 unit tests** in `src/state/movement.test.ts`: `clampMoveAgainstWallsHex` (start === end no-op; no walls passthrough; non-blocksMovement walls ignored; movement-blocking wall rejects the move all-or-nothing; hex-shaped block wall in path rejects the move).
+- **+1 Playwright spec** in `e2e/hex-walls.spec.ts` (new): block mode + hex grid places a wall on click without crashing.
+- **All 1419 unit tests + 342 Playwright specs pass** locally.
+
+### Bundle
+- 103.89 / 110 KB initial-load brotli (+0.26 KB for the hex wall geometry + clamp helper + render branches). CSS unchanged. Lazy chunks unchanged.
+
+### Pre-push checklist
+Caught zero issues — full unit suite + full e2e + visual-regression specs + size-limit all green before push.
+
+---
+
 ## [1.5.0] — 2026-04-29 — Hex token snap (drop + drag + render)
 
 Phase 130 — second of four phases on the **true hex semantics** track. v0.124 shipped the cosmetic overlay; v1.4 made measurements hex-correct; v1.5 makes **token placement + the rendered position** hex-correct too. Drop a token in hex mode → it lands at a hex cell + renders at that hex's center.

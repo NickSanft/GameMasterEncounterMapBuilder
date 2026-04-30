@@ -320,6 +320,16 @@ export interface WallBlock extends WallBase {
   cellsWide: number;
   /** Height in cells (≥ 1). */
   cellsTall: number;
+  /**
+   * Phase 131 — block-wall shape. `'rect'` (default, every prior
+   * phase) renders the (cellsWide × cellsTall) rectangle and uses 4
+   * perimeter segments for LoS. `'hex'` ignores `cellsWide`/`cellsTall`
+   * and renders a single hex polygon at offset cell `(cellX, cellY)`,
+   * with 6 perimeter segments for LoS. Optional + back-compat —
+   * pre-131 saves load with `shape` defaulted to `'rect'` via
+   * `deserializeState`.
+   */
+  shape?: 'rect' | 'hex';
 }
 
 export interface InitiativeEntry {

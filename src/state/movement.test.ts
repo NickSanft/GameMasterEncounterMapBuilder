@@ -8,10 +8,12 @@
 import { describe, it, expect } from 'vitest';
 import {
   clampMoveAgainstWalls,
+  clampMoveAgainstWallsHex,
   bresenhamLine,
   segmentsIntersect,
 } from './movement.js';
 import type { Wall, WallSegment } from './types.js';
+import { hexCenter } from '../render/hex-geometry.js';
 
 const cellSize = 50;
 
@@ -171,5 +173,61 @@ describe('clampMoveAgainstWalls — blocking cases', () => {
     ];
     const r = clampMoveAgainstWalls(0, 0, 10, 0, walls, cellSize);
     expect(r).toEqual({ cellX: 1, cellY: 0, blocked: true });
+  });
+});
+
+describe('Phase 131 — clampMoveAgainstWallsHex', () => {
+  it('start === end → start cell unchanged', () => {
+    const r = clampMoveAgainstWallsHex(3, 4, 3, 4, [], cellSize);
+    expect(r).toEqual({ cellX: 3, cellY: 4, blocked: false });
+  });
+
+  it('no walls → end cell passes through unchanged', () => {
+    const r = clampMoveAgainstWallsHex(0, 0, 5, 5, [], cellSize);
+    expect(r).toEqual({ cellX: 5, cellY: 5, blocked: false });
+  });
+
+  it('walls with blocksMovement=false do NOT block', () => {
+    const a = hexCenter(0, 0, cellSize);
+    const b = hexCenter(2, 0, cellSize);
+    // Wall sitting between A and B but transparent to movement.
+    const walls: Wall[] = [
+      segWall('w1', (a.x + b.x) / 2, a.y - 100, (a.x + b.x) / 2, a.y + 100, false),
+    ];
+    const r = clampMoveAgainstWallsHex(0, 0, 2, 0, walls, cellSize);
+    expect(r.blocked).toBe(false);
+    expect(r.cellX).toBe(2);
+    expect(r.cellY).toBe(0);
+  });
+
+  it('a movement-blocking wall in the line rejects the move (all-or-nothing)', () => {
+    const a = hexCenter(0, 0, cellSize);
+    const b = hexCenter(2, 0, cellSize);
+    // Wall crossing the start→end line, blocksMovement=true.
+    const walls: Wall[] = [
+      segWall('w1', (a.x + b.x) / 2, a.y - 100, (a.x + b.x) / 2, a.y + 100, true),
+    ];
+    const r = clampMoveAgainstWallsHex(0, 0, 2, 0, walls, cellSize);
+    expect(r).toEqual({ cellX: 0, cellY: 0, blocked: true });
+  });
+
+  it('hex-shaped block wall in the path rejects the move', () => {
+    // Hex block centered between (0,0) and (4,0) — its 6 perimeter
+    // segments include edges that cross the start→end line.
+    const block: Wall = {
+      kind: 'block',
+      id: 'b1',
+      cellX: 2,
+      cellY: 0,
+      cellsWide: 1,
+      cellsTall: 1,
+      blocksSight: true,
+      blocksMovement: true,
+      shape: 'hex',
+    };
+    const r = clampMoveAgainstWallsHex(0, 0, 4, 0, [block], cellSize);
+    expect(r.blocked).toBe(true);
+    expect(r.cellX).toBe(0);
+    expect(r.cellY).toBe(0);
   });
 });

@@ -20,7 +20,10 @@ import {
   BLOCK_CORNER_HANDLE_SCREEN_PX,
 } from '../state/walls.js';
 import type { ID } from '../state/types.js';
-import { clampMoveAgainstWalls } from '../state/movement.js';
+import {
+  clampMoveAgainstWalls,
+  clampMoveAgainstWallsHex,
+} from '../state/movement.js';
 import { commitDragToCell } from '../state/grid-coords.js';
 
 interface LassoInProgress {
@@ -386,13 +389,27 @@ export function createSelectTool(ctx: InputContext): Tool {
                   })();
               if (target.col !== t.x || target.row !== t.y) {
                 if (isHex) {
-                  // Phase 131 (TODO) will hex-aware the wall clamp;
-                  // for v1.5 hex drags don't run clampMoveAgainstWalls.
-                  store.applyPatch({
-                    kind: 'token-update',
-                    id,
-                    changes: { x: target.col, y: target.row },
-                  });
+                  // Phase 131 — hex-aware wall clamp. All-or-nothing:
+                  // a movement-blocking wall in the line from start
+                  // hex center to end hex center rejects the move
+                  // (token stays put). Hex-shaped block walls
+                  // contribute their 6 perimeter segments via
+                  // wallToSegments.
+                  const clamped = clampMoveAgainstWallsHex(
+                    t.x,
+                    t.y,
+                    target.col,
+                    target.row,
+                    state.walls,
+                    cellSize,
+                  );
+                  if (clamped.cellX !== t.x || clamped.cellY !== t.y) {
+                    store.applyPatch({
+                      kind: 'token-update',
+                      id,
+                      changes: { x: clamped.cellX, y: clamped.cellY },
+                    });
+                  }
                 } else {
                   // Phase 114 — clamp the move against any walls whose
                   // `wallBlocksMovementEffective` is true (segment +

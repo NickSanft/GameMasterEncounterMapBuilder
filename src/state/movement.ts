@@ -26,6 +26,7 @@
 
 import type { Wall } from './types.js';
 import { wallToSegments, wallBlocksMovementEffective } from './walls.js';
+import { hexCenter } from '../render/hex-geometry.js';
 
 export interface ClampMoveResult {
   /** Final destination cell after clamping (may equal the input end cell). */
@@ -96,6 +97,56 @@ export function clampMoveAgainstWalls(
     curY = next.y;
   }
   return { cellX: curX, cellY: curY, blocked: false };
+}
+
+/**
+ * Phase 131 — hex-aware clamp. The square-grid `clampMoveAgainstWalls`
+ * uses Bresenham + cell-center segments which doesn't translate
+ * cleanly to hex offset coords (Bresenham steps in rectangular
+ * cells; hex neighbors aren't 4- or 8-connected the same way).
+ *
+ * The hex variant uses an all-or-nothing test: a single line from
+ * the start hex's world center to the end hex's world center;
+ * if any movement-blocking wall segment intersects that line, the
+ * move is REJECTED (clamped back to the start). Otherwise the end
+ * hex is reachable.
+ *
+ * Cruder than the per-cell partial clamp the square path does, but
+ * correct: a wall in the path stops the token. A future polish could
+ * walk hex-by-hex along the line + clamp to the latest reachable
+ * hex, but the all-or-nothing version handles the common case.
+ */
+export function clampMoveAgainstWallsHex(
+  startCellX: number,
+  startCellY: number,
+  endCellX: number,
+  endCellY: number,
+  walls: readonly Wall[],
+  cellSize: number,
+): ClampMoveResult {
+  if (startCellX === endCellX && startCellY === endCellY) {
+    return { cellX: startCellX, cellY: startCellY, blocked: false };
+  }
+  // Collect blockers (same as the square path).
+  type Seg = { x1: number; y1: number; x2: number; y2: number };
+  const blockers: Seg[] = [];
+  for (const w of walls) {
+    if (!wallBlocksMovementEffective(w)) continue;
+    for (const s of wallToSegments(w, cellSize)) {
+      blockers.push({ x1: s.x1, y1: s.y1, x2: s.x2, y2: s.y2 });
+    }
+  }
+  if (blockers.length === 0) {
+    return { cellX: endCellX, cellY: endCellY, blocked: false };
+  }
+  const a = hexCenter(startCellX, startCellY, cellSize);
+  const b = hexCenter(endCellX, endCellY, cellSize);
+  for (const s of blockers) {
+    if (segmentsIntersect(a.x, a.y, b.x, b.y, s.x1, s.y1, s.x2, s.y2)) {
+      return { cellX: startCellX, cellY: startCellY, blocked: true };
+    }
+  }
+  return { cellX: endCellX, cellY: endCellY, blocked: false };
 }
 
 /**

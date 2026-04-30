@@ -203,7 +203,10 @@ import { createFogWorkerClient } from '../render/fog-worker-client.js';
 import FogWorker from '../render/fog-worker.js?worker';
 import { collectLights, collectSightWalls, collectViewers } from '../state/los-compose.js';
 import { cellsToReveal } from '../state/auto-reveal.js';
-import { clampMoveAgainstWalls } from '../state/movement.js';
+import {
+  clampMoveAgainstWalls,
+  clampMoveAgainstWallsHex,
+} from '../state/movement.js';
 import { detectGridFromBlob } from '../state/grid-detect-blob.js';
 import {
   addBookmark,
@@ -2568,20 +2571,31 @@ if (channel) {
         // unchanged state.tokens position takes over.
         return;
       }
-      // Clamp against blocksMovement walls (Phase 114). Token coords
-      // are in cells; clampMoveAgainstWalls works in cell space too.
+      // Clamp against blocksMovement walls. Phase 131 — pick the
+      // hex-aware all-or-nothing clamp on hex grids; the square
+      // path keeps the Phase 114 Bresenham + per-cell clamp.
       const startCellX = Math.round(token.x);
       const startCellY = Math.round(token.y);
       const endCellX = Math.round(msg.x);
       const endCellY = Math.round(msg.y);
-      const clamped = clampMoveAgainstWalls(
-        startCellX,
-        startCellY,
-        endCellX,
-        endCellY,
-        state.walls,
-        state.grid.cellSize,
-      );
+      const isHexGrid = state.grid.gridShape === 'hex';
+      const clamped = isHexGrid
+        ? clampMoveAgainstWallsHex(
+            startCellX,
+            startCellY,
+            endCellX,
+            endCellY,
+            state.walls,
+            state.grid.cellSize,
+          )
+        : clampMoveAgainstWalls(
+            startCellX,
+            startCellY,
+            endCellX,
+            endCellY,
+            state.walls,
+            state.grid.cellSize,
+          );
       const finalX = clamped.cellX;
       const finalY = clamped.cellY;
       if (finalX === token.x && finalY === token.y) return;

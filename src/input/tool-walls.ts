@@ -2,6 +2,7 @@ import type { InputContext, WallsOverlayRef } from './context.js';
 import type { Tool } from './tool-manager.js';
 import { pointerToWorld } from './context.js';
 import { createWall, createWallBlock } from '../state/walls.js';
+import { worldToCell as worldToCellShape } from '../state/grid-coords.js';
 
 /**
  * Phase 112 — Walls tool mode. `'line'` is the original click-vertex
@@ -97,15 +98,31 @@ export function createWallsTool(ctx: WallsToolContext): Tool {
   let blockActivePointerId: number | null = null;
 
   function worldToCell(world: { x: number; y: number }): { cx: number; cy: number } {
-    const cs = store.getState().grid.cellSize;
-    return {
-      cx: Math.floor(world.x / cs),
-      cy: Math.floor(world.y / cs),
-    };
+    // Phase 131 — hex-aware cell snap. On hex grids, block mode
+    // creates a single hex-shaped block per click (drag is ignored
+    // for the cellsWide/cellsTall math; the shape is the cell itself).
+    const grid = store.getState().grid;
+    const cell = worldToCellShape(world.x, world.y, grid);
+    return { cx: cell.col, cy: cell.row };
   }
 
   function updateBlockPreviewFrom(currentCell: { cx: number; cy: number }) {
     if (!blockDrag) return;
+    const grid = store.getState().grid;
+    if (grid.gridShape === 'hex') {
+      // Phase 131 — hex mode: preview is a single hex at the current
+      // cell. Cellswide/Tall are ignored downstream (the renderer
+      // routes on `shape: 'hex'`); we still set them to 1 so the
+      // existing preview-rect rendering does something sane.
+      blockPreview.current = {
+        cellX: currentCell.cx,
+        cellY: currentCell.cy,
+        cellsWide: 1,
+        cellsTall: 1,
+      };
+      renderer.requestRender();
+      return;
+    }
     const minX = Math.min(blockDrag.startCellX, currentCell.cx);
     const minY = Math.min(blockDrag.startCellY, currentCell.cy);
     const maxX = Math.max(blockDrag.startCellX, currentCell.cx);
@@ -127,10 +144,14 @@ export function createWallsTool(ctx: WallsToolContext): Tool {
     blockActivePointerId = null;
     blockPreview.current = null;
     if (commit && preview) {
-      store.applyPatch({
-        kind: 'wall-add',
-        wall: createWallBlock(preview),
-      });
+      const grid = store.getState().grid;
+      const wall = createWallBlock(preview);
+      if (grid.gridShape === 'hex') {
+        // Phase 131 — hex grid: tag the new block as hex-shaped.
+        // wallToSegments + the renderer dispatch on `shape === 'hex'`.
+        wall.shape = 'hex';
+      }
+      store.applyPatch({ kind: 'wall-add', wall });
     }
     renderer.requestRender();
   }

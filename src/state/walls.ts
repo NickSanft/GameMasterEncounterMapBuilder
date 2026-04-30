@@ -13,6 +13,7 @@
 
 import type { Wall, WallSegment, WallBlock } from './types.js';
 import { nid } from '../util/id.js';
+import { hexCenter, hexVertices } from '../render/hex-geometry.js';
 
 /** Pixel thickness of the hit-test band around a wall segment. */
 export const WALL_HIT_TOLERANCE_PX = 6;
@@ -175,7 +176,20 @@ export function wallToSegments(w: Wall, cellSize: number): SegmentLike[] {
   if (w.kind === 'segment') {
     return [{ x1: w.x1, y1: w.y1, x2: w.x2, y2: w.y2 }];
   }
-  // Block: 4 perimeter edges, in world pixels.
+  // Phase 131 — hex-shaped block: 6 perimeter edges around the
+  // hex centered at offset cell (cellX, cellY).
+  if (w.shape === 'hex') {
+    const center = hexCenter(w.cellX, w.cellY, cellSize);
+    const verts = hexVertices(center.x, center.y, cellSize);
+    const out: SegmentLike[] = [];
+    for (let i = 0; i < 6; i++) {
+      const a = verts[i]!;
+      const b = verts[(i + 1) % 6]!;
+      out.push({ x1: a.x, y1: a.y, x2: b.x, y2: b.y });
+    }
+    return out;
+  }
+  // Rectangular block: 4 perimeter edges, in world pixels.
   const x1 = w.cellX * cellSize;
   const y1 = w.cellY * cellSize;
   const x2 = (w.cellX + w.cellsWide) * cellSize;
@@ -451,6 +465,14 @@ export function hitTestWalls(
   for (let i = walls.length - 1; i >= 0; i--) {
     const w = walls[i]!;
     if (w.kind === 'block') {
+      // Phase 131 — hex-shaped block uses point-in-hex via bounding-
+      // circle prefilter + segment-side classification. The
+      // bounding-circle test (radius = cellSize) cheaply eliminates
+      // far-away points before the more expensive polygon test.
+      if (w.shape === 'hex') {
+        if (pointInHexBlock(w, px, py, cellSize)) return w;
+        continue;
+      }
       // Phase 112 — point-in-rect for the AABB. No tolerance band
       // since the entire region IS the wall (unlike a 1D segment that
       // benefits from a few px of grace either side).
@@ -471,4 +493,36 @@ export function wallLength(w: Pick<WallSegment, 'x1' | 'y1' | 'x2' | 'y2'>): num
   const dx = w.x2 - w.x1;
   const dy = w.y2 - w.y1;
   return Math.hypot(dx, dy);
+}
+
+/**
+ * Phase 131 — point-in-hex test for a hex-shaped block wall. Computes
+ * the hex's center + 6 vertices, then runs the standard ray-casting
+ * even-odd rule test. Cheap: 6 segment crossings.
+ */
+function pointInHexBlock(
+  w: WallBlock,
+  px: number,
+  py: number,
+  cellSize: number,
+): boolean {
+  const center = hexCenter(w.cellX, w.cellY, cellSize);
+  // Bounding-circle prefilter — outside the hex's circumscribed circle
+  // means definitely outside.
+  const dx = px - center.x;
+  const dy = py - center.y;
+  if (dx * dx + dy * dy > cellSize * cellSize) return false;
+  const verts = hexVertices(center.x, center.y, cellSize);
+  let inside = false;
+  for (let i = 0, j = 5; i < 6; j = i++) {
+    const xi = verts[i]!.x;
+    const yi = verts[i]!.y;
+    const xj = verts[j]!.x;
+    const yj = verts[j]!.y;
+    const intersect =
+      yi > py !== yj > py &&
+      px < ((xj - xi) * (py - yi)) / (yj - yi) + xi;
+    if (intersect) inside = !inside;
+  }
+  return inside;
 }

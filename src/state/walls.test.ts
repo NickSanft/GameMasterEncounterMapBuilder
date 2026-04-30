@@ -281,6 +281,21 @@ describe('Phase 112 — wallToSegments', () => {
       { x1: 10, y1: 20, x2: 10, y2: 30 }, // left
     ]);
   });
+
+  it('Phase 131 — hex-shaped block returns 6 perimeter segments', () => {
+    const block = createWallBlock({ cellX: 0, cellY: 0, cellsWide: 1, cellsTall: 1 });
+    block.shape = 'hex';
+    const segments = wallToSegments(block, 50);
+    expect(segments).toHaveLength(6);
+    // Each segment has finite endpoints (cheap sanity check that the
+    // hex vertex math wired through correctly).
+    for (const s of segments) {
+      expect(Number.isFinite(s.x1)).toBe(true);
+      expect(Number.isFinite(s.y1)).toBe(true);
+      expect(Number.isFinite(s.x2)).toBe(true);
+      expect(Number.isFinite(s.y2)).toBe(true);
+    }
+  });
 });
 
 describe('Phase 112 — blockWallBounds', () => {

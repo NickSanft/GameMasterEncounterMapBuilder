@@ -50,6 +50,7 @@ import {
   WALL_DEFAULT_THICKNESS_PX,
   WALL_HANDLE_SCREEN_PX,
 } from '../state/walls.js';
+import { hexCenter, pathHex } from './hex-geometry.js';
 
 export interface WallsRenderOptions {
   mode: ViewMode;
@@ -312,6 +313,7 @@ export function drawWalls(
       const cs = options.cellSize;
       const draggedDX = dragSet && dragSet.has(w.id) ? dx : 0;
       const draggedDY = dragSet && dragSet.has(w.id) ? dy : 0;
+      const isHexShape = w.shape === 'hex';
       const x = w.cellX * cs + draggedDX;
       const y = w.cellY * cs + draggedDY;
       const wpx = w.cellsWide * cs;
@@ -322,7 +324,19 @@ export function drawWalls(
           ? WALL_GM_ONLY_COLOR
           : WALL_COLOR;
       ctx.globalAlpha = isGmOnly && !isHighlighted ? 0.45 : 0.85;
-      ctx.fillRect(x, y, wpx, hpx);
+      if (isHexShape) {
+        // Phase 131 — hex-shaped block. Fills + outlines a hex
+        // polygon at offset cell (cellX, cellY); cellsWide / cellsTall
+        // are ignored. Drag offset (dx, dy) still applies.
+        const center = hexCenter(w.cellX, w.cellY, cs);
+        const cx = center.x + draggedDX;
+        const cy = center.y + draggedDY;
+        ctx.beginPath();
+        pathHex(ctx, cx, cy, cs);
+        ctx.fill();
+      } else {
+        ctx.fillRect(x, y, wpx, hpx);
+      }
       ctx.globalAlpha = 1;
       // Outline so the block edge stays crisp against textured
       // backgrounds. Highlighted blocks get the accent outline.
@@ -337,7 +351,20 @@ export function drawWalls(
       } else {
         ctx.setLineDash([]);
       }
-      ctx.strokeRect(x, y, wpx, hpx);
+      if (isHexShape) {
+        const center = hexCenter(w.cellX, w.cellY, cs);
+        const cx = center.x + draggedDX;
+        const cy = center.y + draggedDY;
+        ctx.beginPath();
+        pathHex(ctx, cx, cy, cs);
+        ctx.stroke();
+      } else {
+        ctx.strokeRect(x, y, wpx, hpx);
+      }
+      // Phase 131 — hex blocks skip the square-corner handles below
+      // (no equivalent yet; resizing a hex region is a Phase 132+
+      // polish if multi-hex selections become a thing).
+      if (isHexShape) continue;
       // Phase 116 — corner handles on highlighted (selected) blocks.
       // GM-only and only when the block isn't being mid-resized
       // (the resize ghost below replaces the original outline).
