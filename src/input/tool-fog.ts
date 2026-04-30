@@ -2,6 +2,10 @@ import type { InputContext } from './context.js';
 import type { Tool } from './tool-manager.js';
 import { pointerToWorld } from './context.js';
 import type { FogHoverPreview, FogMode, FogPreview } from '../render/layer-fog.js';
+import {
+  worldToHexCell,
+  rectCellsOverlappingHex,
+} from '../render/hex-geometry.js';
 
 export type FogShape = 'rectangle' | 'freehand';
 
@@ -55,6 +59,18 @@ export function createFogTool(
   function cellOfPointer(e: PointerEvent): { x: number; y: number } {
     const world = pointerToWorld(canvas, renderer, e);
     const grid = store.getState().grid;
+    // Phase 132 — hex grids: cellOfPointer returns the (col, row) of
+    // the HEX containing the click. The fog buffer stays rectangular,
+    // so `brushCellsAt` expands the targeted hex into its overlapping
+    // rect cells before painting. Square mode keeps using floor /
+    // cellSize.
+    if (grid.gridShape === 'hex') {
+      const hex = worldToHexCell(world.x, world.y, grid.cellSize);
+      return {
+        x: clamp(hex.col, 0, grid.cols - 1),
+        y: clamp(hex.row, 0, grid.rows - 1),
+      };
+    }
     return {
       x: clamp(Math.floor(world.x / grid.cellSize), 0, grid.cols - 1),
       y: clamp(Math.floor(world.y / grid.cellSize), 0, grid.rows - 1),
@@ -62,10 +78,18 @@ export function createFogTool(
   }
 
   function brushCellsAt(cell: { x: number; y: number }): Array<{ x: number; y: number }> {
+    const grid = store.getState().grid;
+    const { cols, rows } = grid;
+    // Phase 132 — hex mode: ignore brushSize and paint the rect
+    // cells overlapping the targeted hex. Brushing across many
+    // hexes would need a hex-aware brush (a future polish);
+    // single-hex brush per pointermove is the v1.7 minimum.
+    if (grid.gridShape === 'hex') {
+      return rectCellsOverlappingHex(cell.x, cell.y, cols, rows, grid.cellSize);
+    }
     const n = optionsRef.current.brushSize;
     const half = Math.floor((n - 1) / 2);
     const far = n - 1 - half;
-    const { cols, rows } = store.getState().grid;
     const out: Array<{ x: number; y: number }> = [];
     for (let dy = -half; dy <= far; dy++) {
       for (let dx = -half; dx <= far; dx++) {

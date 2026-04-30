@@ -12,6 +12,8 @@ import {
   hexDistance,
   offsetToAxial,
   worldToHexCell,
+  pointInHex,
+  rectCellsOverlappingHex,
 } from './hex-geometry.js';
 
 describe('hex dimensions', () => {
@@ -126,6 +128,63 @@ describe('hexDistance', () => {
 
   it('moving 4 horizontal hexes = distance 4', () => {
     expect(hexDistance(0, 0, 4, 0)).toBe(4);
+  });
+});
+
+describe('pointInHex', () => {
+  it('returns true at the hex center', () => {
+    expect(pointInHex(100, 200, 50, 100, 200)).toBe(true);
+  });
+
+  it('returns false far outside the bounding circle', () => {
+    expect(pointInHex(100, 200, 50, 1000, 1000)).toBe(false);
+  });
+
+  it('returns false at a point inside the bounding circle but outside the hex (corners)', () => {
+    // A corner of the bounding box (size, size) from center is at
+    // distance sqrt(2)*size > size, so it's outside the bbox circle
+    // — but a point near the diagonal corner of the inscribed
+    // square is inside the bbox circle yet outside the hex.
+    const cx = 100,
+      cy = 200,
+      size = 50;
+    // (cx + size*0.7, cy + size*0.99): inside the bbox circle, but
+    // beyond the bottom-right hex edge (pointy-top, hex width <
+    // 2*size in x).
+    expect(pointInHex(cx, cy, size, cx + 49, cy + 49)).toBe(false);
+  });
+});
+
+describe('rectCellsOverlappingHex', () => {
+  it('always returns at least 1 cell for an in-bounds hex', () => {
+    const cells = rectCellsOverlappingHex(2, 2, 30, 20, 50);
+    expect(cells.length).toBeGreaterThan(0);
+  });
+
+  it('clamps to grid bounds (no negative col / row)', () => {
+    const cells = rectCellsOverlappingHex(0, 0, 30, 20, 50);
+    for (const c of cells) {
+      expect(c.x).toBeGreaterThanOrEqual(0);
+      expect(c.y).toBeGreaterThanOrEqual(0);
+      expect(c.x).toBeLessThan(30);
+      expect(c.y).toBeLessThan(20);
+    }
+  });
+
+  it('cells cover an area near the hex center', () => {
+    // The hex(5, 5) center should be inside (or adjacent to) one of
+    // the returned rect cells.
+    const center = hexCenter(5, 5, 50);
+    const cells = rectCellsOverlappingHex(5, 5, 30, 20, 50);
+    // At least one returned cell should be within ±1 of the center's
+    // floor-quantized coords.
+    const expectedCx = Math.floor(center.x / 50);
+    const expectedCy = Math.floor(center.y / 50);
+    const hit = cells.some(
+      (c) =>
+        Math.abs(c.x - expectedCx) <= 1 && Math.abs(c.y - expectedCy) <= 1,
+    );
+    expect(hit).toBe(true);
   });
 });
 

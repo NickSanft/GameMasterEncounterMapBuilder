@@ -131,6 +131,50 @@ gaps so the v1.0 cut is genuinely "stable + remote-play-capable."
 
 ---
 
+## [1.7.0] — 2026-04-30 — Hex-aware fog reveal · **closes the v1.0 hex limitation** 🎉
+
+Phase 132 — fourth and final phase of the **true hex semantics** track. v0.124 → v1.7 closed the v1.0 documented limitation that "hex grid is cosmetic in v1.0." As of v1.7, the four hex-rules-game pillars (distance, snap, walls, fog) all work natively on hex grids.
+
+### Added
+- **Hex-aware fog tool.** When the grid is hex, the Reveal / Hide tool's `cellOfPointer` returns the (col, row) of the **hex** containing the click, and `brushCellsAt` expands the targeted hex into the rectangular fog cells its polygon overlaps. The fog buffer stays rectangular (no wire-format change); the visual hex grid is reflected by painting every rect cell whose center falls inside the targeted hex.
+- **`pointInHex(cx, cy, size, px, py)`** in `src/render/hex-geometry.ts` — bounding-circle prefilter + 6-vertex even-odd ray-cast. Used by the new fog overlap helper + the Phase 131 `pointInHexBlock` (the wall hit-test now reuses it; same algorithm, separate function in `walls.ts` until I unify).
+- **`rectCellsOverlappingHex(col, row, gridCols, gridRows, size)`** — for an offset-coord hex, returns the rect cells whose centers fall inside the hex polygon. Bounding-rect iteration + point-in-hex test. Defensive fallback returns the rect cell containing the hex center if the geometry produces no overlapping cells (shouldn't happen at the conventional sizing but keeps the user's click meaningful).
+
+### Why this matters — and what closes
+With v1.7 the four hex-semantics phases (129 → 132) ship the foundational pillars:
+
+- **Distance** (v1.4): ruler + movement indicator measure cube distance between hex cells.
+- **Snap** (v1.5): token drop / drag commit / render all use hex coords.
+- **Walls** (v1.6): block walls become single-hex regions with 6-edge LoS contributions; movement clamping is back on for hex.
+- **Fog** (v1.7): manual reveal / hide tools paint via hex selection; the rectangular fog buffer stays compatible with every other system that reads it.
+
+The v1.0 CHANGELOG specifically called out "Hex grid is cosmetic in v1.0. Tokens still snap to the underlying rectangular cellSize × cellSize grid; walls / fog / distance helpers all operate on the square grid." All four bullet points are now closed.
+
+### What's still NOT hex-aware (call-outs)
+- **Auto-reveal (Phase 56) is unchanged.** It uses the visibility polygon rasterizer which paints rectangular fog cells whose centers fall inside the polygon. Token positions feed the polygon at hex world centers (Phase 130), so auto-reveal works correctly without changes — but it paints rect cells, not hex cells. The visual fog edge in hex mode still has rect-cell stair-stepping along curved viewer perimeters. A truly hex-grain fog buffer is a wire-format change deferred to a future major.
+- **Fog Rectangle-shape mode in hex.** The rectangle shape continues to paint rect cells, NOT hex cells. The rectangle preview in hex mode is the rect AABB between the two hex coords (interpreted as rect cells); the fill is rect cells. The freehand shape is the hex-aware path; rectangle is documented as "for surgical rect operations on the underlying fog buffer."
+- **Brush size in hex.** Hex mode ignores the brushSize param — each freehand pointermove paints exactly one hex worth of cells. A multi-hex brush would need a hex-cluster generator (radius-1 = center + 6 neighbors, etc.); deferred polish.
+
+### Architecture
+- **`src/render/hex-geometry.ts`** — adds `pointInHex` + `rectCellsOverlappingHex`.
+- **`src/input/tool-fog.ts`** —
+  - `cellOfPointer` branches on `grid.gridShape`. Hex returns `worldToHexCell`; square keeps `floor(x / cellSize)`.
+  - `brushCellsAt` branches the same way. Hex returns `rectCellsOverlappingHex(...)` ignoring brushSize. Square keeps the NxN rectangular brush expansion.
+  - The freehand drag paint loop calls `paintAt(cell)` which uses `brushCellsAt` — so freehand in hex mode walks hex by hex, painting overlapping rect cells per move.
+
+### Tests
+- **+6 unit tests** in `src/render/hex-geometry.test.ts`: `pointInHex` (true at center; false far outside; false at corner outside hex but inside bbox); `rectCellsOverlappingHex` (returns ≥1 cell; clamps to grid bounds; cells cover area near the hex center).
+- **+1 Playwright spec** in `e2e/hex-fog.spec.ts` (new): Reveal tool on hex grid flips fog cells (`X% of fog revealed` aria-label crosses 0%).
+- **All 1425 unit tests + 343 Playwright specs pass** locally.
+
+### Bundle
+- 104.16 / 110 KB initial-load brotli (+0.27 KB for the hex fog helpers + the tool-fog branches). CSS unchanged. Lazy chunks unchanged.
+
+### Pre-push checklist
+Caught zero issues — full unit suite + full e2e + visual-regression specs + size-limit all green before push.
+
+---
+
 ## [1.6.0] — 2026-04-29 — Hex-aware walls
 
 Phase 131 — third of four phases on the **true hex semantics** track. v1.5 made tokens snap to hexes; v1.6 makes the WALLS hex-aware too. Block walls in hex mode are single-hex regions, LoS works against them, and movement clamping is back on for hex.

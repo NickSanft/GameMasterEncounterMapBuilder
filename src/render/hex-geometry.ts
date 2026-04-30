@@ -187,3 +187,89 @@ export function worldToHexCell(
   // about `Object.is(-0, 0) === false` when comparing with `toEqual`.
   return { col: q + (r - (r & 1)) / 2 + 0, row: r + 0 };
 }
+
+/**
+ * Phase 132 — point-in-hex test. Returns true when (px, py) is
+ * inside (or on the boundary of) the hex centered at (cx, cy) with
+ * vertex-radius `size`. Uses the standard ray-cast even-odd rule on
+ * the 6-vertex polygon. Bounding-circle prefilter rejects far-away
+ * points cheaply.
+ */
+export function pointInHex(
+  cx: number,
+  cy: number,
+  size: number,
+  px: number,
+  py: number,
+): boolean {
+  const dx = px - cx;
+  const dy = py - cy;
+  if (dx * dx + dy * dy > size * size) return false;
+  const verts = hexVertices(cx, cy, size);
+  let inside = false;
+  for (let i = 0, j = 5; i < 6; j = i++) {
+    const xi = verts[i]!.x;
+    const yi = verts[i]!.y;
+    const xj = verts[j]!.x;
+    const yj = verts[j]!.y;
+    const intersect =
+      yi > py !== yj > py &&
+      px < ((xj - xi) * (py - yi)) / (yj - yi) + xi;
+    if (intersect) inside = !inside;
+  }
+  return inside;
+}
+
+/**
+ * Phase 132 — return the rectangular cells whose centers fall inside
+ * the hex at offset coords (col, row). Used by the fog tool's hex
+ * mode: each user-targeted hex flips every rect fog cell its
+ * polygon overlaps, so the fog buffer (which stays rectangular for
+ * back-compat) reflects the visual hex grid.
+ *
+ * Iterates the AABB of the hex's bounding circle (≤ 4 rect cells
+ * for a same-size hex / rect cellSize), then point-in-hex tests each.
+ * Always returns at least 1 cell — the rect cell containing the hex
+ * center is in the AABB and almost always passes the point-in-hex
+ * test (size = vertex radius matches cell size by convention so the
+ * hex straddles ~3-4 rect cells).
+ */
+export function rectCellsOverlappingHex(
+  col: number,
+  row: number,
+  gridCols: number,
+  gridRows: number,
+  size: number,
+): Array<{ x: number; y: number }> {
+  const center = hexCenter(col, row, size);
+  // Bounding rect — the hex spans cellSize-many pixels in each
+  // direction (radius `size` from the center). Using `size` as the
+  // half-extent on both axes works because pointy-top hex height
+  // = 2*size and width = sqrt(3)*size < 2*size, so the size-wide
+  // bbox covers the whole hex.
+  const minCol = Math.max(0, Math.floor((center.x - size) / size));
+  const minRow = Math.max(0, Math.floor((center.y - size) / size));
+  const maxCol = Math.min(gridCols - 1, Math.floor((center.x + size) / size));
+  const maxRow = Math.min(gridRows - 1, Math.floor((center.y + size) / size));
+  const out: Array<{ x: number; y: number }> = [];
+  for (let r = minRow; r <= maxRow; r++) {
+    for (let c = minCol; c <= maxCol; c++) {
+      // Rect cell center in world coords.
+      const rx = (c + 0.5) * size;
+      const ry = (r + 0.5) * size;
+      if (pointInHex(center.x, center.y, size, rx, ry)) {
+        out.push({ x: c, y: r });
+      }
+    }
+  }
+  // Defensive: if the hex's geometry produces NO overlapping rect
+  // cells (shouldn't happen with the conventional sizing, but a
+  // future change could de-tune size), at least return the rect cell
+  // containing the hex center so the user's click does something.
+  if (out.length === 0) {
+    const cx = Math.max(0, Math.min(gridCols - 1, Math.floor(center.x / size)));
+    const cy = Math.max(0, Math.min(gridRows - 1, Math.floor(center.y / size)));
+    out.push({ x: cx, y: cy });
+  }
+  return out;
+}
