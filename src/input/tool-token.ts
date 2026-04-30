@@ -38,6 +38,7 @@ export function createTokenTool(ctx: InputContext): Tool {
         initiativeMod: 0,
         conditionExpirations: {},
         deathSaves: { successes: 0, failures: 0 },
+        ownerId: null,
       };
     }
     store.applyPatch({ kind: 'token-add', token: newToken });

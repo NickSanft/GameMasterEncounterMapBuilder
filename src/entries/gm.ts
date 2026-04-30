@@ -365,6 +365,10 @@ const renderer = createRenderer({
     preferences.get().losMode === 'off'
       ? null
       : fogWorkerClient.getLatestLightPolygons(),
+  // Phase 126 — owner-color lookup for the per-token owner-indicator
+  // dot. Resolves a Spectator's playerId via the IdentityRegistry.
+  getOwnerColor: (ownerId) =>
+    identityRegistry.get(ownerId)?.color ?? null,
 });
 
 // Whenever the worker has fresh rects, request a re-paint.
@@ -3040,6 +3044,7 @@ function placeTokenAt(gx: number, gy: number) {
     initiativeMod: 0,
     conditionExpirations: {},
     deathSaves: { successes: 0, failures: 0 },
+    ownerId: null,
   };
   store.applyPatch({ kind: 'token-add', token });
   lastPlacedRef.current = token;

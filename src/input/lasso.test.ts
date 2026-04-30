@@ -56,6 +56,7 @@ function token(partial: Partial<Token> & { id: string }): Token {
     initiativeMod: partial.initiativeMod ?? 0,
     conditionExpirations: partial.conditionExpirations ?? {},
     deathSaves: partial.deathSaves ?? { successes: 0, failures: 0 },
+    ownerId: partial.ownerId ?? null,
   };
 }
 

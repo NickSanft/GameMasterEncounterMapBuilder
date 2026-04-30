@@ -28,6 +28,7 @@ describe('serializeState / deserializeState', () => {
       initiativeMod: 0,
       conditionExpirations: {},
       deathSaves: { successes: 0, failures: 0 },
+      ownerId: null,
     });
     const serialized = serializeState(state);
     const restored = deserializeState(serialized);
@@ -354,6 +355,91 @@ describe('serializeState / deserializeState', () => {
     } as unknown as SerializedSessionState;
     const restored = deserializeState(legacy);
     expect(restored.tokens[0]!.borderColor).toBeNull();
+  });
+
+  it('Phase 126 — defaults ownerId to null for pre-126 tokens (missing field)', () => {
+    const legacy = {
+      ...serializeState(createDefaultState()),
+      tokens: [
+        {
+          id: 't1',
+          x: 0,
+          y: 0,
+          label: 'A',
+          color: '#ff0000',
+          imageId: null,
+          size: 1,
+          // ownerId missing entirely
+        },
+      ],
+    } as unknown as SerializedSessionState;
+    const restored = deserializeState(legacy);
+    expect(restored.tokens[0]!.ownerId).toBeNull();
+  });
+
+  it('Phase 126 — preserves a non-empty ownerId on round-trip', () => {
+    const state = createDefaultState();
+    state.tokens.push({
+      id: 't1',
+      x: 0,
+      y: 0,
+      label: 'Owned',
+      color: '#fff',
+      imageId: null,
+      size: 1,
+      borderColor: null,
+      hp: null,
+      conditions: [],
+      rotation: 0,
+      losRadius: null,
+      light: null,
+      initiativeMod: 0,
+      conditionExpirations: {},
+      deathSaves: { successes: 0, failures: 0 },
+      ownerId: 'spec-42',
+    });
+    const restored = deserializeState(serializeState(state));
+    expect(restored.tokens[0]!.ownerId).toBe('spec-42');
+  });
+
+  it('Phase 126 — collapses empty-string ownerId to null (defensive)', () => {
+    const legacy = {
+      ...serializeState(createDefaultState()),
+      tokens: [
+        {
+          id: 't1',
+          x: 0,
+          y: 0,
+          label: 'A',
+          color: '#fff',
+          imageId: null,
+          size: 1,
+          ownerId: '',
+        },
+      ],
+    } as unknown as SerializedSessionState;
+    const restored = deserializeState(legacy);
+    expect(restored.tokens[0]!.ownerId).toBeNull();
+  });
+
+  it('Phase 126 — collapses non-string ownerId to null (defensive)', () => {
+    const legacy = {
+      ...serializeState(createDefaultState()),
+      tokens: [
+        {
+          id: 't1',
+          x: 0,
+          y: 0,
+          label: 'A',
+          color: '#fff',
+          imageId: null,
+          size: 1,
+          ownerId: 42 as unknown as string,
+        },
+      ],
+    } as unknown as SerializedSessionState;
+    const restored = deserializeState(legacy);
+    expect(restored.tokens[0]!.ownerId).toBeNull();
   });
 
   it('handles missing background fields with sensible defaults', () => {

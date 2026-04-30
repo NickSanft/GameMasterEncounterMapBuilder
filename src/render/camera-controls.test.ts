@@ -20,6 +20,7 @@ function token(overrides: Partial<Token>): Token {
     initiativeMod: overrides.initiativeMod ?? 0,
     conditionExpirations: overrides.conditionExpirations ?? {},
     deathSaves: overrides.deathSaves ?? { successes: 0, failures: 0 },
+    ownerId: overrides.ownerId ?? null,
   };
 }
 

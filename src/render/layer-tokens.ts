@@ -22,6 +22,14 @@ export interface TokenRenderOptions {
   mode: ViewMode;
   dragOverlay?: DragOverlay | null;
   activeInitiativeTokenId?: ID | null;
+  /**
+   * Phase 126 — given an `ownerId` (a Spectator's playerId), return
+   * the color tint to use for the owner-indicator dot painted on
+   * owned tokens, or `null` if no color is known. Optional — when
+   * absent, owned tokens still get a generic accent dot so the GM
+   * can see "this is owned" at a glance.
+   */
+  getOwnerColor?: (ownerId: string) => string | null;
 }
 
 const DEFAULT_OPTIONS: TokenRenderOptions = {
@@ -110,9 +118,52 @@ export function drawTokens(
     drawTokenStatus(ctx, display, cellSize, options.mode, labelScale, isDragged(t));
   }
 
+  // Phase 126 — owner-indicator dot. Painted on top of the body /
+  // status passes so it sits above HP bars + condition chips.
+  for (const t of state.tokens) {
+    if (!t.ownerId) continue;
+    if (options.mode === 'spectator' && isTokenFullyHidden(t, state)) continue;
+    const display = withOverlay(t, overlay, cellSize);
+    drawOwnerDot(ctx, display, cellSize, t.ownerId, options.getOwnerColor);
+  }
+
   // Stack-count badge — one per cell that contains ≥2 tokens. Drawn after
   // every other token pass so it always sits on top of the stack.
   drawStackBadges(ctx, state, cellSize, options.mode, overlay);
+}
+
+/**
+ * Phase 126 — small filled dot anchored at the token's bottom-right
+ * indicating the token is owned by a player. Tinted with the owner's
+ * identity color when `getOwnerColor` returns one; falls back to the
+ * accent yellow used by other "this is special" indicators.
+ */
+const OWNER_DOT_FALLBACK = '#ffd966';
+function drawOwnerDot(
+  ctx: CanvasRenderingContext2D,
+  t: Token,
+  cellSize: number,
+  ownerId: string,
+  getOwnerColor?: (id: string) => string | null,
+): void {
+  const cx = (t.x + t.size / 2) * cellSize;
+  const cy = (t.y + t.size / 2) * cellSize;
+  const r = (t.size * cellSize) / 2 - 4;
+  const dotR = Math.max(4, r * 0.18);
+  const offset = r * 0.72;
+  const fill = getOwnerColor?.(ownerId) ?? OWNER_DOT_FALLBACK;
+  ctx.save();
+  // White outline ring underneath the colored dot so it stays visible
+  // against any token color.
+  ctx.beginPath();
+  ctx.arc(cx + offset, cy + offset, dotR + 1.5, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(cx + offset, cy + offset, dotR, 0, Math.PI * 2);
+  ctx.fillStyle = fill;
+  ctx.fill();
+  ctx.restore();
 }
 
 const DRAG_GHOST_ALPHA = 0.6;

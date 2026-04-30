@@ -292,6 +292,19 @@ export function mountTokenEditor(opts: TokenEditorOptions): TokenEditorHandle {
         <p class="visibility-empty" data-field="visibility-empty" hidden>No Spectators connected. When a player joins, they'll appear here.</p>
       </fieldset>
 
+      <!-- Phase 126 — token ownership. Picks which connected
+           Spectator (if any) owns this token. Visible only when the
+           host wires getConnectedSpectators (GM-side only). Phase 127
+           will add the spectator-side drag wiring keyed off this
+           field; v126 is GM-authoring only. -->
+      <fieldset class="owner-fieldset" data-field="owner-fieldset" hidden>
+        <legend>Owned by</legend>
+        <p class="settings-hint">A token's owner can move it themselves (Phase 127). GM-controlled tokens are dragged by the GM only.</p>
+        <select data-field="owner-select" aria-label="Token owner">
+          <option value="">Unowned (GM-controlled)</option>
+        </select>
+      </fieldset>
+
       <hr />
       <div class="modal-footer">
         <button type="button" data-action="save-library" title="Save this token's appearance to the library for reuse">Save to Library</button>
@@ -332,6 +345,13 @@ export function mountTokenEditor(opts: TokenEditorOptions): TokenEditorHandle {
   )!;
   const visibilityEmpty = modal.querySelector<HTMLParagraphElement>(
     '[data-field="visibility-empty"]',
+  )!;
+  // Phase 126 — owner dropdown.
+  const ownerFieldset = modal.querySelector<HTMLFieldSetElement>(
+    '[data-field="owner-fieldset"]',
+  )!;
+  const ownerSelect = modal.querySelector<HTMLSelectElement>(
+    '[data-field="owner-select"]',
   )!;
   const counter = modal.querySelector<HTMLSpanElement>('[data-field="counter"]')!;
   const hasSightInput = modal.querySelector<HTMLInputElement>('[data-field="hasSight"]')!;
@@ -465,6 +485,7 @@ export function mountTokenEditor(opts: TokenEditorOptions): TokenEditorHandle {
     syncRotationUI(token.rotation);
     syncInitiativeModUI(token.initiativeMod);
     syncVisibilityUI(token.id);
+    syncOwnerUI(token.ownerId);
     syncCounter();
   }
 
@@ -515,6 +536,52 @@ export function mountTokenEditor(opts: TokenEditorOptions): TokenEditorHandle {
 
   function syncInitiativeModUI(mod: number) {
     initiativeModInput.value = String(mod);
+  }
+
+  /**
+   * Phase 126 — populate the owner select with one option per
+   * connected Spectator + the always-present "Unowned" option.
+   * Hidden when the host doesn't supply `getConnectedSpectators`
+   * (Spectator-side / minimal test mounts).
+   *
+   * If the current owner is a player who's no longer connected, we
+   * still show their id as a "(disconnected)" option so the GM can
+   * see + clear it instead of having the dropdown silently snap
+   * back to "Unowned" on next render.
+   */
+  function syncOwnerUI(currentOwnerId: ID | null): void {
+    const getSpecs = opts.getConnectedSpectators;
+    if (!getSpecs) {
+      ownerFieldset.hidden = true;
+      return;
+    }
+    ownerFieldset.hidden = false;
+    const specs = getSpecs();
+    // Rebuild options from scratch — connected list can change between
+    // openings of the editor.
+    ownerSelect.replaceChildren();
+    const noneOpt = document.createElement('option');
+    noneOpt.value = '';
+    noneOpt.textContent = 'Unowned (GM-controlled)';
+    ownerSelect.appendChild(noneOpt);
+    for (const spec of specs) {
+      const opt = document.createElement('option');
+      opt.value = spec.id;
+      opt.textContent = spec.name || '(unnamed)';
+      ownerSelect.appendChild(opt);
+    }
+    // If the owner isn't in the connected list, append a placeholder
+    // so the dropdown can still display + clear it.
+    if (
+      currentOwnerId &&
+      !specs.some((s) => s.id === currentOwnerId)
+    ) {
+      const opt = document.createElement('option');
+      opt.value = currentOwnerId;
+      opt.textContent = '(disconnected)';
+      ownerSelect.appendChild(opt);
+    }
+    ownerSelect.value = currentOwnerId ?? '';
   }
 
   function currentFeetPerSquare(): number {
@@ -1204,6 +1271,16 @@ export function mountTokenEditor(opts: TokenEditorOptions): TokenEditorHandle {
       commitInitiativeMod();
       e.preventDefault();
     }
+  });
+
+  // Phase 126 — owner change. Empty value collapses to null
+  // (the "Unowned" option). Idempotent on no-op selections.
+  ownerSelect.addEventListener('change', () => {
+    const tok = currentToken();
+    if (!tok) return;
+    const next = ownerSelect.value || null;
+    if (next === tok.ownerId) return;
+    update({ ownerId: next });
   });
 
   rotationInput.addEventListener('change', () => {

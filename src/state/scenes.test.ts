@@ -106,6 +106,7 @@ describe('duplicateScene', () => {
       initiativeMod: 0,
       conditionExpirations: {},
       deathSaves: { successes: 0, failures: 0 },
+      ownerId: null,
     });
     await saveScene(original.id, state);
 
@@ -189,6 +190,7 @@ describe('ensureActiveScene', () => {
       initiativeMod: 0,
       conditionExpirations: {},
       deathSaves: { successes: 0, failures: 0 },
+      ownerId: null,
     });
     await runTx(SESSIONS_STORE, 'readwrite', (s) =>
       s.put({

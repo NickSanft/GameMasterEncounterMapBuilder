@@ -28,6 +28,7 @@ function tk(over: Partial<Token> = {}): Token {
     initiativeMod: over.initiativeMod ?? 0,
     conditionExpirations: over.conditionExpirations ?? {},
     deathSaves: over.deathSaves ?? { successes: 0, failures: 0 },
+    ownerId: over.ownerId ?? null,
   };
 }
 

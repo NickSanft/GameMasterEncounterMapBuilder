@@ -148,6 +148,17 @@ export interface Token {
    * until a token actually drops.
    */
   deathSaves: { successes: number; failures: number };
+  /**
+   * Phase 126 — owning player's `PlayerIdentity.id` (a Spectator
+   * playerId), or `null` when the token is GM-controlled (the
+   * default). In v126 the field is GM-authored only — the GM picks
+   * an owner via the "Owned by" dropdown in the token editor.
+   * Spectator drag wiring lands in Phase 127, keyed off this field.
+   *
+   * Optional in serialized blobs from pre-126; `deserializeState`
+   * defaults missing values to `null` so back-compat holds.
+   */
+  ownerId: ID | null;
 }
 
 export interface Background {

@@ -131,6 +131,47 @@ gaps so the v1.0 cut is genuinely "stable + remote-play-capable."
 
 ---
 
+## [1.1.0] — 2026-04-29 — Token ownership (GM authoring side)
+
+First post-1.0 minor. Begins the player-owned-tokens feature track. v1.1.0 ships the GM-authoring half: a token can be tagged with an owner (a connected Spectator's playerId) via the token editor. The actual spectator drag wiring keyed off this field lands in v1.2.0 (Phase 127).
+
+### Added
+- **`Token.ownerId: ID | null`** field — `null` (default) means GM-controlled, a non-empty string is the owning Spectator's playerId. `deserializeState` defaults missing pre-126 values to `null` and collapses empty / non-string values to `null` defensively.
+- **Token editor "Owned by" fieldset** — a dropdown listing the connected Spectators (sourced from the existing IdentityRegistry) plus the always-present "Unowned (GM-controlled)" option. Hidden when the host doesn't wire `getConnectedSpectators` (Spectator-side / minimal test mounts). A previously-set owner who has since disconnected appears as a "(disconnected)" placeholder so the GM can see + clear it instead of having the dropdown silently snap back to "Unowned".
+- **Owner-indicator dot** — a small filled dot in the bottom-right of any owned token, tinted with the owner's identity color (resolved via the new `getOwnerColor(ownerId)` renderer callback wired through to `IdentityRegistry.get`). Falls back to the accent yellow when the owner color is unknown. Visible to both GM and Spectator views so everyone can see "this is so-and-so's token" at a glance.
+
+### Why this matters
+The most-requested tabletop UX upgrade is "let players move their own characters." v1.1.0 sets the foundation: a token can be claimed by a specific Spectator. The drag wiring + permission checks land in v1.2.0; this phase ships the durable state field + the GM authoring affordance + the visual indicator so the data shape is settled and visible before the behavior change.
+
+### Architecture
+- **`src/state/types.ts`** — `Token` interface adds `ownerId: ID | null` (required field; existing constructors all updated to pass `null`).
+- **`src/sync/messages.ts`** — `deserializeState` adds `ownerId` defaulting / sanitization. Empty strings collapse to `null` so a stray `""` doesn't ghost-claim a token; non-string values (defensive against tampered peers) also collapse to `null`.
+- **`src/state/token-catalog.ts` + `src/state/template-catalog.ts`** — library / template-placed tokens always start with `ownerId: null`; ownership is GM-authored after placement.
+- **`src/input/tool-token.ts` + `src/entries/gm.ts`** — fresh-placed tokens start unowned.
+- **`src/render/layer-tokens.ts`** — added `getOwnerColor?` to `TokenRenderOptions` + a separate `drawOwnerDot` pass after the body / status passes so the dot sits above HP bars + condition chips. White outline ring underneath the colored dot keeps it visible against any token color.
+- **`src/render/renderer.ts`** — added `getOwnerColor?(ownerId): string | null` to `CreateRendererOptions`, plumbed through to the layer.
+- **`src/entries/gm.ts`** — wires `getOwnerColor` to `identityRegistry.get(ownerId)?.color ?? null`.
+- **`src/ui/token-editor.ts`** — adds the "Owned by" fieldset + select + a `syncOwnerUI(currentOwnerId)` populator + a change handler that dispatches `{ownerId: select.value || null}` via the existing `update()` helper.
+- **`src/ui/styles.css`** — small `.owner-fieldset` block reusing the visibility-fieldset spacing pattern.
+
+### UX details
+- **GM-only authoring in v1.1.** Spectators can see their own owned tokens (and the indicator dot) but can't drag them yet — that's v1.2.0.
+- **Disconnect doesn't clear ownership.** A Spectator who disconnects still has their owned tokens; they re-connect and immediately resume control once Phase 127 ships. The dropdown shows "(disconnected)" for the persisted owner so the GM can manually re-assign or clear.
+- **No bulk owner edit yet.** The Phase 123 bulk-edit modal doesn't include "set owner" — would need a similar dropdown, easy follow-up.
+
+### Tests
+- **+4 unit tests** in `src/sync/messages.test.ts`: defaults missing `ownerId` to `null`; preserves a non-empty `ownerId` on round-trip; collapses empty-string and non-string `ownerId` to `null` (defensive). Total unit suite now 1387 (+4).
+- **+3 Playwright specs** in `e2e/token-ownership.spec.ts` (new): "Owned by" select renders with the default Unowned option; a connected Spectator appears as a selectable owner; selecting an owner persists across editor close + re-open.
+- **All 1387 unit tests + 334 Playwright specs pass** locally.
+
+### Bundle
+- 101.69 / 110 KB initial-load brotli (+0.55 KB for the field-default normalization + the editor section + the owner-dot render pass + the renderer plumbing). CSS unchanged. Lazy chunks unchanged.
+
+### Pre-push checklist
+Caught zero issues — full unit suite + full e2e + visual-regression specs + size-limit all green before push.
+
+---
+
 ## [1.0.0] — 2026-04-27 — First stable, remote-play-capable release 🎉
 
 The 1.0.0 cut. This release marks the end of the pre-1.0 phase plan and the start of post-1.0 SemVer (breaking changes only on major bumps; minors add features; patches fix bugs).

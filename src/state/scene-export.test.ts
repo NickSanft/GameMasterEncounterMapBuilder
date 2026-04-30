@@ -33,6 +33,7 @@ function stateWithToken(label: string) {
     initiativeMod: 0,
     conditionExpirations: {},
     deathSaves: { successes: 0, failures: 0 },
+    ownerId: null,
   });
   return s;
 }

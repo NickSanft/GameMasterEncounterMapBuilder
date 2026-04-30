@@ -91,5 +91,8 @@ export function tokenFromCatalogEntry(
     // is alive at full HP; saves only matter if the token gets
     // dropped during combat.
     deathSaves: { successes: 0, failures: 0 },
+    // Phase 126 — ownership is GM-authored after placement; library
+    // tokens always start GM-controlled.
+    ownerId: null,
   };
 }

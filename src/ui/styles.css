@@ -6120,6 +6120,35 @@ body.reduced-motion .tour-popover {
   font-size: 0.85rem;
 }
 
+/* ───── Phase 126 — Token ownership ─────────────────────────────────
+   Token editor: a select listing connected Spectators (plus the
+   default "Unowned" option) so the GM can hand a token over to a
+   player. The select drives `Token.ownerId`; the Phase 127 spectator
+   drag wiring keys off that field. Hidden when getConnectedSpectators
+   isn't wired (Spectator view). */
+
+.token-editor .owner-fieldset {
+  margin-top: 0.5rem;
+}
+
+.token-editor .owner-fieldset select {
+  appearance: none;
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.35rem 0.5rem;
+  margin-top: 0.3rem;
+  font-family: inherit;
+  font-size: 0.88rem;
+  width: 100%;
+}
+
+.token-editor .owner-fieldset select:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+}
+
 /* ───── Phase 108 — Recent backgrounds modal ────────────────────────
    List-view of recently-applied background images with a small
    thumbnail per row, the friendly name (or "(unnamed map)"), and a

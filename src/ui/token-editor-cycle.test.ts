@@ -24,6 +24,7 @@ function tok(id: string, x = 0, y = 0): Token {
     initiativeMod: 0,
     conditionExpirations: {},
     deathSaves: { successes: 0, failures: 0 },
+    ownerId: null,
   };
 }
 

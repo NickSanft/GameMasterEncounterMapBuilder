@@ -461,6 +461,16 @@ export function deserializeState(s: SerializedSessionState): SessionState {
       // since both states (3 successes = stable, 3 failures = dead)
       // are terminal in the SRD rules.
       deathSaves: normalizeDeathSaves(t.deathSaves),
+      // Phase 126 — owning player's id (a Spectator playerId), or
+      // null when GM-controlled. Pre-126 sessions don't have the
+      // field; default to null. We accept any non-empty string —
+      // ownership is GM-authored, so a malformed peer can't create
+      // ownership records the GM didn't approve. Empty strings
+      // collapse to null so a stray "" doesn't ghost-claim a token.
+      ownerId:
+        typeof t.ownerId === 'string' && t.ownerId.length > 0
+          ? t.ownerId
+          : null,
     })),
     fog: Uint8Array.from(s.fog),
     annotations: (s.annotations ?? []).map((a) => ({

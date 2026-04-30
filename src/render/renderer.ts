@@ -77,6 +77,14 @@ interface CreateRendererOptions {
   getLassoOverlay?(): LassoOverlay | null;
   getPings?(): readonly Ping[];
   /**
+   * Phase 126 — owner-color lookup for the per-token owner-indicator
+   * dot. Resolves a Spectator's playerId to their identity color.
+   * Returns `null` when unknown (e.g. the player has disconnected
+   * since the token was claimed) — the layer falls back to a generic
+   * accent color so the dot is still visible.
+   */
+  getOwnerColor?(ownerId: string): string | null;
+  /**
    * Phase 77 — active damage / heal floating-number effects, queued
    * by the damage-heal dialog (locally) and the `damage-fx` sync
    * message (remotely). Renders above tokens, fades + rises over
@@ -296,6 +304,7 @@ export function createRenderer(opts: CreateRendererOptions): Renderer {
       mode,
       dragOverlay,
       activeInitiativeTokenId: activeTokenId,
+      getOwnerColor: opts.getOwnerColor,
     });
     drawAoeTemplates(ctx, state, {
       mode,
