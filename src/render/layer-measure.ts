@@ -1,5 +1,7 @@
 import { gridDistance, type DiagonalRule, type DistanceUnit } from '../state/distance.js';
 import { formatRulerLabel } from '../state/ruler.js';
+import { hexDistance, worldToHexCell } from './hex-geometry.js';
+import type { GridShape } from '../state/types.js';
 
 export interface MeasurementOverlay {
   startX: number;
@@ -14,6 +16,12 @@ export interface MeasurementRenderOptions {
   feetPerSquare: number;
   /** Active ruler-preset target in feet, or null for freeform. */
   targetFeet: number | null;
+  /**
+   * Phase 129 — when `'hex'` the cells distance comes from
+   * `hexDistance(col1, row1, col2, row2)` instead of the square-grid
+   * `gridDistance(dx, dy)` path. Defaults to `'square'` for back-compat.
+   */
+  gridShape?: GridShape;
 }
 
 const DEFAULT_OPTS: MeasurementRenderOptions = {
@@ -21,6 +29,7 @@ const DEFAULT_OPTS: MeasurementRenderOptions = {
   distanceUnit: 'squares',
   feetPerSquare: 5,
   targetFeet: null,
+  gridShape: 'square',
 };
 
 export function drawMeasurement(
@@ -33,7 +42,17 @@ export function drawMeasurement(
   const dy = overlay.endY - overlay.startY;
   const gridDx = dx / cellSize;
   const gridDy = dy / cellSize;
-  const cells = gridDistance(gridDx, gridDy, options.diagonalRule);
+  // Phase 129 — when hex grid is active, snap each endpoint to its
+  // containing hex cell + use the cube-distance helper. The square-
+  // grid path keeps using `gridDistance(dx, dy, rule)` per Phase 115.
+  let cells: number;
+  if (options.gridShape === 'hex') {
+    const a = worldToHexCell(overlay.startX, overlay.startY, cellSize);
+    const b = worldToHexCell(overlay.endX, overlay.endY, cellSize);
+    cells = hexDistance(a.col, a.row, b.col, b.row);
+  } else {
+    cells = gridDistance(gridDx, gridDy, options.diagonalRule);
+  }
   const euclidean = Math.hypot(gridDx, gridDy);
 
   ctx.save();

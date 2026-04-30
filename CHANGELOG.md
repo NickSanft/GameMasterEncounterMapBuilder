@@ -131,6 +131,46 @@ gaps so the v1.0 cut is genuinely "stable + remote-play-capable."
 
 ---
 
+## [1.4.0] — 2026-04-29 — Hex distance + ruler + movement indicator
+
+Phase 129 — first phase of the **true hex semantics** track. v0.124 shipped the cosmetic hex overlay; the documented limitation was that distance measurements still ran the square-grid math. v1.4 closes that limitation: when the grid shape is hex, the ruler tool and the token-drag movement indicator both report **cube distance** between the start and end hex cells.
+
+### Added
+- **`hexDistance(col1, row1, col2, row2)`** in `src/render/hex-geometry.ts` — pure helper. Converts both endpoints to axial coords, then to cube `(q, r, -q-r)`, then `(|dq| + |dr| + |ds|) / 2`. Always integer for integer inputs.
+- **`worldToHexCell(x, y, size)`** — inverse of `hexCenter`. Pixel-to-fractional-axial → cube-rounding → integer (col, row). Includes an internal `axialRound` that picks the coord with the largest rounding error to recompute, preserving the cube invariant `x + y + z = 0` for correct nearest-hex behavior near cell boundaries.
+- **`offsetToAxial(col, row)`** — small helper exported for callers that already know the cell coords (e.g. the future Phase 130 token-snap path).
+- **Ruler hex-aware path.** `drawMeasurement` (Phase 27) now branches on `gridShape`. With hex active, both endpoints snap to their containing hex cell + the cells label comes from `hexDistance`; with square active the path is unchanged (Phase 115 diagonal-rule dispatch).
+- **Movement indicator hex-aware path.** Same branch in `drawMovementOverlay` (Phase 81) — hex grids show "X hexes" measured by cube distance, square grids unchanged.
+
+### Why this matters
+A GM running a hex-rules game in v1.0–v1.3 saw the right *visual* (pointy-top hex polygons over the map) but the wrong *number* — the ruler still measured "5 squares diag" using Chebyshev / 5e-alt / Euclidean. v1.4 closes the gap: when the grid is hex, every measurement reflects the actual hex distance the rules care about. Token snap, wall geometry, and fog cells still use the square underlying coordinate system (those land in Phases 130-132); the v1.4 limitation on the v0.124 limitation is now "the measurements are right, the tactical positioning isn't yet."
+
+### Architecture
+- **`src/render/hex-geometry.ts`** — adds `hexDistance`, `worldToHexCell`, `offsetToAxial`, plus an internal `axialRound` (cube-rounding). The `worldToHexCell` `+ 0` trick normalizes JS signed-zero so callers comparing `{col: 0, row: 0}` with `toEqual` don't have to think about `Object.is(-0, 0) === false`.
+- **`src/render/layer-measure.ts`** — `MeasurementRenderOptions` adds optional `gridShape?: GridShape`. When `'hex'`, both endpoints go through `worldToHexCell` and the cells number comes from `hexDistance`. The square-grid path is byte-for-byte unchanged.
+- **`src/render/renderer.ts`** —
+  - Imports `hexDistance` + `worldToHexCell`.
+  - `drawMeasurement` call passes `gridShape: state.grid.gridShape ?? 'square'`.
+  - `drawMovementOverlay` branches on `state.grid.gridShape` between the hex / square distance paths.
+
+### UX details
+- **Square grid is byte-identical to v1.3.** The hex branch only activates when `gridShape === 'hex'`. The default + every existing scene keeps `'square'` (deserialize defaults missing values to `'square'`), so no existing user sees a behavior change.
+- **The "X.X sq diag" suffix label still draws on hex.** The Euclidean diagonal is geometric, not grid-shape-aware, so the secondary "sq diag" label renders the same regardless of grid shape. A future polish could swap "sq" for "hex" in hex mode; deferred.
+- **Endpoint snap is hex-aware in measurement, not in input.** v1.4 only changes the *displayed number*. Phase 130 will add the input-side snap so token drops + drag-commit land on hex centers; v1.4 still snaps to square cells for the underlying coordinate system.
+
+### Tests
+- **+13 unit tests** in `src/render/hex-geometry.test.ts`: `offsetToAxial` (origin, even rows, odd rows, even >0 rows); `hexDistance` (zero to self, all 6 neighbors of an even-row cell, symmetric, integer-output, 4-horizontal-step distance); `worldToHexCell` (center of (0,0), (3,4), (1,1) odd-row, slight-off-center inside (2,0)).
+- **2 Playwright smoke specs** in `e2e/hex-ruler.spec.ts` (new): Ruler tool runs without crash on a hex grid; token drag on hex grid renders movement indicator without crash. The actual hex-distance numbers are exhaustively covered in the unit tests; e2e is the wire-up smoke.
+- **All 1400 unit tests + 339 Playwright specs pass** locally (the Phase 95 / 116 well-known scenes-spec parallel flake reappeared once during the full run; passed in isolation, CI absorbs with retries=2).
+
+### Bundle
+- 103.3 / 110 KB initial-load brotli (+0.18 KB for the hex helpers + the renderer branches). CSS unchanged. Lazy chunks unchanged.
+
+### Pre-push checklist
+Caught the `worldToHexCell` -0 vs +0 unit-test edge — fixed in source via the `+ 0` normalization trick rather than tolerating it in the test, since downstream callers will trip on the same JS quirk if they compare with `toEqual`. Otherwise clean.
+
+---
+
 ## [1.3.0] — 2026-04-29 — Spectator owned-token quick-edit popover
 
 Phase 128 — closes the player-owned-tokens trilogy. v1.1 shipped the field + GM authoring; v1.2 added the actual drag wiring; v1.3 adds the rest of the in-play workflow: a Spectator can adjust HP and toggle conditions on tokens they own without going through the GM.

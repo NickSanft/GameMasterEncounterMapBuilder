@@ -34,6 +34,7 @@ import { drawLighting } from './layer-lighting.js';
 import { drawGridLabels, drawSceneTint } from './layer-grid-labels.js';
 import { tintFor as tintForTimeOfDay } from '../state/time-of-day.js';
 import { gridDistance, formatDistance } from '../state/distance.js';
+import { hexDistance, worldToHexCell } from './hex-geometry.js';
 import type { DrawStroke } from '../state/types.js';
 import type { Preferences } from '../state/preferences.js';
 import type { DragOverlay, LassoOverlay, WallsOverlay } from '../input/context.js';
@@ -421,6 +422,8 @@ export function createRenderer(opts: CreateRendererOptions): Renderer {
         distanceUnit: prefs?.distanceUnit ?? 'squares',
         feetPerSquare: prefs?.feetPerSquare ?? 5,
         targetFeet: getRulerTargetFeet ? getRulerTargetFeet() : null,
+        // Phase 129 — hex grid uses hex distance, not the diagonal rule.
+        gridShape: state.grid.gridShape ?? 'square',
       });
     }
     const pings = getPings ? getPings() : null;
@@ -573,11 +576,20 @@ function drawMovementOverlay(
   const endX = originX + drag.deltaX;
   const endY = originY + drag.deltaY;
 
-  // Compute distance in cells using the preferred diagonal rule.
-  const dxCells = drag.deltaX / cellSize;
-  const dyCells = drag.deltaY / cellSize;
-  const rule = prefs?.diagonalRule ?? 'chebyshev';
-  const cells = gridDistance(dxCells, dyCells, rule);
+  // Compute distance in cells. Phase 129 — branch on grid shape:
+  // hex grids use cube-distance between the start + end hex cells;
+  // square grids keep using the preferred diagonal rule.
+  let cells: number;
+  if (state.grid.gridShape === 'hex') {
+    const a = worldToHexCell(originX, originY, cellSize);
+    const b = worldToHexCell(endX, endY, cellSize);
+    cells = hexDistance(a.col, a.row, b.col, b.row);
+  } else {
+    const dxCells = drag.deltaX / cellSize;
+    const dyCells = drag.deltaY / cellSize;
+    const rule = prefs?.diagonalRule ?? 'chebyshev';
+    cells = gridDistance(dxCells, dyCells, rule);
+  }
   // Drags smaller than half a cell don't round to any movement yet — skip
   // the label so dragging in place doesn't flicker a "0 sq" pill.
   if (cells === 0) return;

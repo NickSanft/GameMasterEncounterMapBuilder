@@ -9,6 +9,9 @@ import {
   hexVerticalStride,
   hexCenter,
   hexVertices,
+  hexDistance,
+  offsetToAxial,
+  worldToHexCell,
 } from './hex-geometry.js';
 
 describe('hex dimensions', () => {
@@ -73,5 +76,80 @@ describe('hexVertices', () => {
       const dy = vertex.y - cy;
       expect(Math.hypot(dx, dy)).toBeCloseTo(size, 4);
     }
+  });
+});
+
+describe('offsetToAxial', () => {
+  it('preserves origin', () => {
+    expect(offsetToAxial(0, 0)).toEqual({ q: 0, r: 0 });
+  });
+
+  it('row 0 (even) — q matches col directly', () => {
+    expect(offsetToAxial(3, 0)).toEqual({ q: 3, r: 0 });
+  });
+
+  it('row 1 (odd) — q shifts by -0', () => {
+    // For odd-r layout, row 1 (odd, row & 1 = 1): q = col - (1 - 1)/2 = col
+    expect(offsetToAxial(3, 1)).toEqual({ q: 3, r: 1 });
+  });
+
+  it('row 2 (even, > 0) — q shifts by -1', () => {
+    expect(offsetToAxial(3, 2)).toEqual({ q: 2, r: 2 });
+  });
+});
+
+describe('hexDistance', () => {
+  it('zero distance to self', () => {
+    expect(hexDistance(5, 5, 5, 5)).toBe(0);
+  });
+
+  it('distance 1 to any of the 6 horizontal neighbors (even row)', () => {
+    // From (3, 2): the 6 neighbors of an even-row pointy-top hex are
+    // (2, 2), (4, 2), (2, 1), (3, 1), (2, 3), (3, 3).
+    expect(hexDistance(3, 2, 2, 2)).toBe(1);
+    expect(hexDistance(3, 2, 4, 2)).toBe(1);
+    expect(hexDistance(3, 2, 2, 1)).toBe(1);
+    expect(hexDistance(3, 2, 3, 1)).toBe(1);
+    expect(hexDistance(3, 2, 2, 3)).toBe(1);
+    expect(hexDistance(3, 2, 3, 3)).toBe(1);
+  });
+
+  it('symmetric — d(a,b) = d(b,a)', () => {
+    expect(hexDistance(0, 0, 5, 7)).toBe(hexDistance(5, 7, 0, 0));
+  });
+
+  it('returns integer for integer inputs', () => {
+    const d = hexDistance(0, 0, 4, 5);
+    expect(Number.isInteger(d)).toBe(true);
+    expect(d).toBeGreaterThan(0);
+  });
+
+  it('moving 4 horizontal hexes = distance 4', () => {
+    expect(hexDistance(0, 0, 4, 0)).toBe(4);
+  });
+});
+
+describe('worldToHexCell', () => {
+  it('center of hex(0,0) maps to (0,0)', () => {
+    const c = hexCenter(0, 0, 50);
+    expect(worldToHexCell(c.x, c.y, 50)).toEqual({ col: 0, row: 0 });
+  });
+
+  it('center of hex(3, 4) maps to (3, 4)', () => {
+    const c = hexCenter(3, 4, 50);
+    expect(worldToHexCell(c.x, c.y, 50)).toEqual({ col: 3, row: 4 });
+  });
+
+  it('center of hex(1, 1) (odd row) maps to (1, 1)', () => {
+    const c = hexCenter(1, 1, 50);
+    expect(worldToHexCell(c.x, c.y, 50)).toEqual({ col: 1, row: 1 });
+  });
+
+  it('point inside hex(2, 0) (offset slightly off-center) still maps to (2, 0)', () => {
+    const c = hexCenter(2, 0, 50);
+    expect(worldToHexCell(c.x + 5, c.y - 5, 50)).toEqual({
+      col: 2,
+      row: 0,
+    });
   });
 });
