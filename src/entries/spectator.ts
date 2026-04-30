@@ -44,7 +44,11 @@ import { mountMiniMap } from '../ui/mini-map.js';
 import { createPingManager } from '../state/ping-manager.js';
 import { createDamageFxManager } from '../state/damage-fx-manager.js';
 import { createFogFadeTracker } from '../render/fog-fade-tracker.js';
-import { createMeasurementOverlayRef } from '../input/context.js';
+import {
+  createDragOverlayRef,
+  createMeasurementOverlayRef,
+} from '../input/context.js';
+import { attachSpectatorDrag } from '../input/tool-spectator-drag.js';
 import { createMeasureTool, createRulerToolOptionsRef } from '../input/tool-measure.js';
 import { mountRulerSettings } from '../ui/ruler-settings.js';
 import { RULER_PRESETS } from '../state/ruler.js';
@@ -131,6 +135,10 @@ const weatherOverlay = mountWeatherOverlay({
   getReducedMotion: () => preferences.get().reducedMotion,
 });
 const measurementOverlayRef = createMeasurementOverlayRef();
+// Phase 127 — drag overlay shared with the renderer so the spectator
+// sees their owned-token drag locally before the GM's authoritative
+// `token-update` round-trips back.
+const dragOverlayRef = createDragOverlayRef();
 
 const initialCamera = (preferences.get().persistCamera && loadCamera('spectator')) || { ...DEFAULT_CAMERA };
 
@@ -163,6 +171,8 @@ const renderer = createRenderer({
   getMeasurement: () => measurementOverlayRef.current,
   getRulerTargetFeet: () => rulerToolOptionsRef.current.targetFeet,
   getFogRects: () => fogWorkerClient.getLatest(),
+  // Phase 127 — Spectator-side drag overlay for owned-token drag.
+  getDragOverlay: () => dragOverlayRef.current,
 });
 
 // Phase 81 (revisit) — animated-token DOM overlay. Mounted AFTER
@@ -598,6 +608,24 @@ store.subscribe((patch) => {
 // per-tab, not per-browser.
 const playerId = getOrCreatePlayerId('spectator');
 const channel = createSyncChannel(playerId);
+
+// Phase 127 — owned-token drag wiring. The handler hit-tests every
+// pointerdown against the token list; it acts only when the click
+// landed on a token whose `ownerId` matches our playerId. Defers
+// to space-held pan-zoom, the active ruler, and active suggest
+// mode — those tools claim the gesture themselves.
+attachSpectatorDrag({
+  canvas,
+  renderer,
+  store,
+  getPlayerId: () => playerId,
+  shouldDefer: () =>
+    !!panZoomRef.handle?.isSpaceHeld() || rulerActive || suggestActive,
+  dragOverlay: dragOverlayRef,
+  onCommit: (tokenId, x, y) => {
+    channel?.send({ type: 'token-claim-move', tokenId, x, y });
+  },
+});
 
 // Phase 62 — Remote Play modal (Spectator side). Populate the
 // late-bound ref the session menu uses so the button works.

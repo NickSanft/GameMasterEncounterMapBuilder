@@ -385,6 +385,33 @@ export type SyncMessage =
       text: string;
       color: string;
       timestamp: number;
+    }
+  /**
+   * Phase 127 — Spectator-side claim-and-move on a token they own.
+   *
+   * Pre-127 every token-update came from the GM (single-writer). v1.2
+   * carves out a narrow exception: a Spectator can broadcast a
+   * positional change for a token whose `ownerId` matches their own
+   * playerId. The GM tab is still authoritative — when it receives
+   * this message, it:
+   *   1. Validates `tokenId` exists.
+   *   2. Validates `token.ownerId === envelope.senderId` (defense
+   *      against a tampered Spectator claiming a token they don't own).
+   *   3. Optionally clamps the new position via the existing Phase 114
+   *      `clampMoveAgainstWalls` (so blocksMovement is enforced
+   *      uniformly — Spectator drags can't tunnel through walls
+   *      either).
+   *   4. Applies a normal `token-update` patch via `store.applyPatch`.
+   *
+   * The resulting patch broadcasts to ALL peers (including back to
+   * the originating Spectator) via the existing patch-rebroadcast
+   * loop, so every tab converges on the GM-authoritative position.
+   */
+  | {
+      type: 'token-claim-move';
+      tokenId: string;
+      x: number;
+      y: number;
     };
 
 export function serializeState(s: SessionState): SerializedSessionState {

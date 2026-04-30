@@ -2521,6 +2521,48 @@ if (channel) {
       announcer.announce(
         `${msg.senderName || 'Player'} suggested an annotation: ${msg.text}`,
       );
+    } else if (msg.type === 'token-claim-move') {
+      // Phase 127 — Spectator dragging a token they own. We're the
+      // authoritative source: validate ownership against the envelope's
+      // senderId (defense against tampered peers claiming someone
+      // else's token), clamp the move against blocksMovement walls
+      // (Phase 114) so spectator drags can't tunnel either, then
+      // apply a normal `token-update` patch. The patch rebroadcasts
+      // to every peer (including the originating spectator) via the
+      // existing patch loop, so all tabs converge on the GM-
+      // authoritative position.
+      const state = store.getState();
+      const token = state.tokens.find((t) => t.id === msg.tokenId);
+      if (!token) return;
+      if (token.ownerId !== env.senderId) {
+        // Tampered or stale claim. Drop silently — the originating
+        // spectator's local overlay clears on pointerup regardless,
+        // so they don't see ghost movement; on the next render the
+        // unchanged state.tokens position takes over.
+        return;
+      }
+      // Clamp against blocksMovement walls (Phase 114). Token coords
+      // are in cells; clampMoveAgainstWalls works in cell space too.
+      const startCellX = Math.round(token.x);
+      const startCellY = Math.round(token.y);
+      const endCellX = Math.round(msg.x);
+      const endCellY = Math.round(msg.y);
+      const clamped = clampMoveAgainstWalls(
+        startCellX,
+        startCellY,
+        endCellX,
+        endCellY,
+        state.walls,
+        state.grid.cellSize,
+      );
+      const finalX = clamped.cellX;
+      const finalY = clamped.cellY;
+      if (finalX === token.x && finalY === token.y) return;
+      store.applyPatch({
+        kind: 'token-update',
+        id: msg.tokenId,
+        changes: { x: finalX, y: finalY },
+      });
     } else if (msg.type === 'latency-probe') {
       // Phase 83 — peer is asking for an RTT measurement; echo back
       // immediately. We pass the probe id verbatim so the original

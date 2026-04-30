@@ -131,6 +131,46 @@ gaps so the v1.0 cut is genuinely "stable + remote-play-capable."
 
 ---
 
+## [1.2.0] — 2026-04-29 — Spectator drag for owned tokens
+
+Phase 127 — second of three phases on the player-owned-tokens track. v1.1.0 shipped the GM-authoring side (Token.ownerId field + "Owned by" dropdown + visual indicator dot). v1.2.0 adds the actual behavior: a Spectator can drag any token whose `ownerId` matches their playerId, and the move syncs back to the GM authoritative store.
+
+### Added
+- **Spectator owned-token drag.** Click + drag a token you own; the spectator sees the drag locally via the renderer overlay; on release a `token-claim-move` SyncMessage broadcasts to the GM. Coexists with the existing pan-zoom (space-held), ruler, and Phase 120 suggest-mode handlers — the drag tool checks `shouldDefer()` and stays silent when those tools are claiming the gesture.
+- **`token-claim-move` SyncMessage** carrying `{tokenId, x, y}`. The envelope's `senderId` (from the existing Phase 66 wrapper) carries the spectator's playerId so the GM can validate ownership.
+- **GM-side ownership validation + clamp.** When the GM tab receives `token-claim-move`, it: (1) looks up the token, (2) verifies `token.ownerId === envelope.senderId` (drops the message silently if not — defense against tampered or stale claims), (3) runs `clampMoveAgainstWalls` (Phase 114) so spectator drags can't tunnel through `blocksMovement` walls either, (4) applies a normal `token-update` patch via `store.applyPatch`. The patch then rebroadcasts to every peer (including the originating spectator) via the existing patch-rebroadcast loop, so all tabs converge on the GM-authoritative position.
+
+### Why this matters
+Pre-127 the only way to move a player's character on the map was for the GM to drag it. Mid-encounter that means every "I move 30 ft north" turns into "GM, please move me 30 ft north." v1.2 closes the loop: the player drags their own token, the GM sees the move arrive over the wire, the GM-authoritative store still owns the truth (so wall clamping, undo history, snapshot history all work uniformly), and other tabs (additional spectators, second GM tab) see the result via the normal patch fan-out.
+
+### Architecture
+- **`src/sync/messages.ts`** — adds the `token-claim-move` variant. Pure broadcast; the GM side validates ownership before applying.
+- **`src/input/tool-spectator-drag.ts`** (new, ~145 lines) — pointer-handler attached to the spectator canvas. Hit-tests every pointerdown against `state.tokens`; acts only when the hit token's `ownerId` matches the local playerId. Maintains a `DragOverlayRef` shared with the renderer for the local ghost-drag preview. On pointerup converts the world-pixel delta to cell coords + fires `onCommit(tokenId, x, y)`. `shouldDefer()` callback lets the host suppress the handler when other tools own the gesture.
+- **`src/entries/spectator.ts`** —
+  - imports + creates a `dragOverlayRef` (same shape the GM uses).
+  - passes `getDragOverlay: () => dragOverlayRef.current` into `createRenderer`.
+  - mounts `attachSpectatorDrag` after the channel/playerId are set up. `shouldDefer` checks space-held, ruler-active, suggest-active.
+  - `onCommit` broadcasts `{type: 'token-claim-move', tokenId, x, y}`.
+- **`src/entries/gm.ts`** — adds the `token-claim-move` branch in `channel.onMessage`. Uses `env.senderId` for the ownership check, runs `clampMoveAgainstWalls`, applies the `token-update` patch.
+
+### UX details
+- **GM tab is still authoritative.** Spectator's local drag-overlay shows the move in real-time; the GM-authoritative position lands when the patch round-trips back. If the move was clamped (wall in the way), the spectator's overlay snaps to the clamped position on patch arrival.
+- **Tampered-peer rejection is silent.** A spectator broadcasting a `token-claim-move` for a token they don't own is dropped on the GM side without any user-facing error. Their local overlay clears on pointerup regardless, so they don't see ghost movement.
+- **No multi-token drag in v1.2.** A spectator can drag exactly one owned token at a time. Multi-select on the spectator side is out of scope; lassoing + dragging a group is a GM workflow.
+- **No drag locking yet.** If the GM and spectator drag the same token simultaneously, last-write-wins per Phase 84. A future polish could broadcast `token-drag-claim` markers so both sides see "X is moving this"; out of scope for v1.2.
+
+### Tests
+- **+2 Playwright specs** in `e2e/spectator-drag.spec.ts` (new): spectator can drag an owned token + GM sees the new position via the patch loop; spectator drag on an UNOWNED token is silently ignored (position unchanged).
+- **All 1387 unit tests + 336 Playwright specs pass** locally.
+
+### Bundle
+- 102.14 / 110 KB initial-load brotli (+0.45 KB for the spectator drag tool + the channel handler + the wiring). CSS unchanged. Lazy chunks unchanged.
+
+### Pre-push checklist
+Caught zero issues — full unit suite + full e2e + visual-regression specs + size-limit all green before push.
+
+---
+
 ## [1.1.0] — 2026-04-29 — Token ownership (GM authoring side)
 
 First post-1.0 minor. Begins the player-owned-tokens feature track. v1.1.0 ships the GM-authoring half: a token can be tagged with an owner (a connected Spectator's playerId) via the token editor. The actual spectator drag wiring keyed off this field lands in v1.2.0 (Phase 127).
