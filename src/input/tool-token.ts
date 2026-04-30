@@ -3,6 +3,7 @@ import type { Tool } from './tool-manager.js';
 import { pointerToWorld } from './context.js';
 import { nid } from '../util/id.js';
 import { nextTokenColor } from '../state/token-colors.js';
+import { worldToCell } from '../state/grid-coords.js';
 
 export function createTokenTool(ctx: InputContext): Tool {
   const { canvas, renderer, store } = ctx;
@@ -11,8 +12,9 @@ export function createTokenTool(ctx: InputContext): Tool {
     if (e.button !== 0 || ctx.isSpaceHeld()) return;
     const world = pointerToWorld(canvas, renderer, e);
     const grid = store.getState().grid;
-    const gx = Math.floor(world.x / grid.cellSize);
-    const gy = Math.floor(world.y / grid.cellSize);
+    // Phase 130 — hex-aware drop. Square grids floor by cellSize;
+    // hex grids snap to the nearest hex via cube-rounding.
+    const { col: gx, row: gy } = worldToCell(world.x, world.y, grid);
     if (gx < 0 || gy < 0 || gx >= grid.cols || gy >= grid.rows) return;
 
     const stampTemplate = e.altKey ? ctx.lastPlaced.current : null;

@@ -25,6 +25,7 @@ import { pointerToWorld } from './context.js';
 import type { DragOverlayRef } from './context.js';
 import { hitTestToken } from './hit-test.js';
 import type { Store } from '../state/store.js';
+import { commitDragToCell } from '../state/grid-coords.js';
 
 export interface SpectatorDragOptions {
   canvas: HTMLCanvasElement;
@@ -108,17 +109,21 @@ export function attachSpectatorDrag(
     renderer.requestRender();
     if (!overlay) return;
     if (overlay.deltaX === 0 && overlay.deltaY === 0) return;
-    // Convert the delta from world pixels back to grid cells (matching
-    // the Token coordinate system) + add to the token's pre-drag
-    // position. We re-look up the token for fresh state in case the
-    // GM's last patch shifted it mid-drag.
+    // Convert the delta from world pixels back to grid cells. Phase
+    // 130 — `commitDragToCell` is grid-shape-aware; it picks the
+    // right cell whether the grid is square or hex. We re-look up
+    // the token for fresh state in case the GM's last patch shifted
+    // it mid-drag.
     const state = store.getState();
     const token = state.tokens.find((t) => t.id === tokenId);
     if (!token) return;
-    const cellSize = state.grid.cellSize;
-    const newX = token.x + overlay.deltaX / cellSize;
-    const newY = token.y + overlay.deltaY / cellSize;
-    onCommit(tokenId, newX, newY);
+    const target = commitDragToCell(
+      token,
+      state.grid,
+      overlay.deltaX,
+      overlay.deltaY,
+    );
+    onCommit(tokenId, target.col, target.row);
   }
 
   function onPointerCancel(e: PointerEvent) {

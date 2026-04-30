@@ -21,6 +21,7 @@ import {
 } from '../state/walls.js';
 import type { ID } from '../state/types.js';
 import { clampMoveAgainstWalls } from '../state/movement.js';
+import { commitDragToCell } from '../state/grid-coords.js';
 
 interface LassoInProgress {
   startWorldX: number;
@@ -366,34 +367,55 @@ export function createSelectTool(ctx: InputContext): Tool {
       if (overlay && (overlay.deltaX !== 0 || overlay.deltaY !== 0)) {
         const state = store.getState();
         const cellSize = state.grid.cellSize;
-        const gridDX = Math.round(overlay.deltaX / cellSize);
-        const gridDY = Math.round(overlay.deltaY / cellSize);
+        const isHex = state.grid.gridShape === 'hex';
         store.batch(() => {
           for (const id of overlay.ids) {
             const t = state.tokens.find((x) => x.id === id);
             if (t) {
-              if (gridDX !== 0 || gridDY !== 0) {
-                // Phase 114 — clamp the move against any walls whose
-                // `wallBlocksMovementEffective` is true (segment +
-                // block walls; open doors don't block). The clamp is
-                // PER-TOKEN: if the group drag would push some
-                // tokens through a wall but not others, the blocked
-                // ones land at the latest reachable cell while the
-                // unblocked ones reach the requested destination.
-                const clamped = clampMoveAgainstWalls(
-                  t.x,
-                  t.y,
-                  t.x + gridDX,
-                  t.y + gridDY,
-                  state.walls,
-                  cellSize,
-                );
-                if (clamped.cellX !== t.x || clamped.cellY !== t.y) {
+              // Phase 130 — hex-aware target cell. Hex commits use
+              // cube-rounded `commitDragToCell` (token center +
+              // delta → nearest hex); square commits keep the
+              // pre-130 behavior of rounding the delta in cell
+              // units. Phase 131 will hex-aware the wall clamp.
+              const target = isHex
+                ? commitDragToCell(t, state.grid, overlay.deltaX, overlay.deltaY)
+                : (() => {
+                    const gridDX = Math.round(overlay.deltaX / cellSize);
+                    const gridDY = Math.round(overlay.deltaY / cellSize);
+                    return { col: t.x + gridDX, row: t.y + gridDY };
+                  })();
+              if (target.col !== t.x || target.row !== t.y) {
+                if (isHex) {
+                  // Phase 131 (TODO) will hex-aware the wall clamp;
+                  // for v1.5 hex drags don't run clampMoveAgainstWalls.
                   store.applyPatch({
                     kind: 'token-update',
                     id,
-                    changes: { x: clamped.cellX, y: clamped.cellY },
+                    changes: { x: target.col, y: target.row },
                   });
+                } else {
+                  // Phase 114 — clamp the move against any walls whose
+                  // `wallBlocksMovementEffective` is true (segment +
+                  // block walls; open doors don't block). The clamp is
+                  // PER-TOKEN: if the group drag would push some
+                  // tokens through a wall but not others, the blocked
+                  // ones land at the latest reachable cell while the
+                  // unblocked ones reach the requested destination.
+                  const clamped = clampMoveAgainstWalls(
+                    t.x,
+                    t.y,
+                    target.col,
+                    target.row,
+                    state.walls,
+                    cellSize,
+                  );
+                  if (clamped.cellX !== t.x || clamped.cellY !== t.y) {
+                    store.applyPatch({
+                      kind: 'token-update',
+                      id,
+                      changes: { x: clamped.cellX, y: clamped.cellY },
+                    });
+                  }
                 }
               }
               continue;
@@ -438,13 +460,17 @@ export function createSelectTool(ctx: InputContext): Tool {
                 // Phase 112 — block walls translate by GRID-SNAPPED
                 // deltas (their geometry is integer cell coords). Snap
                 // to the nearest cell so a small drag still lands.
-                if (gridDX !== 0 || gridDY !== 0) {
+                // Block walls remain rectangular for v1.5 — Phase 131
+                // (hex-aware walls) introduces a hex-region variant.
+                const wallGridDX = Math.round(overlay.deltaX / cellSize);
+                const wallGridDY = Math.round(overlay.deltaY / cellSize);
+                if (wallGridDX !== 0 || wallGridDY !== 0) {
                   store.applyPatch({
                     kind: 'wall-update',
                     id,
                     changes: {
-                      cellX: Math.max(0, w.cellX + gridDX),
-                      cellY: Math.max(0, w.cellY + gridDY),
+                      cellX: Math.max(0, w.cellX + wallGridDX),
+                      cellY: Math.max(0, w.cellY + wallGridDY),
                     },
                   });
                 }

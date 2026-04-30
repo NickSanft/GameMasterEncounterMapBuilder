@@ -1,4 +1,10 @@
-import type { ID, SessionState, Token, ViewMode } from '../state/types.js';
+import type {
+  GridConfig,
+  ID,
+  SessionState,
+  Token,
+  ViewMode,
+} from '../state/types.js';
 import type { ImageProvider } from './layer-background.js';
 import type { LabelSize } from '../state/preferences.js';
 import { shapeForBorderColor, type MarkerShape } from '../state/team-colors.js';
@@ -7,6 +13,7 @@ import type { DragOverlay } from '../input/context.js';
 import { hpBarColor, hpFraction } from '../state/token-hp.js';
 import { getConditionPreset } from '../state/conditions.js';
 import { groupTokensByStack } from '../state/token-stack.js';
+import { tokenCenterWorld } from '../state/grid-coords.js';
 
 const NO_IMAGE: ImageProvider = () => null;
 
@@ -84,7 +91,7 @@ export function drawTokens(
     drawTokenBody(
       ctx,
       t,
-      cellSize,
+      state.grid,
       false,
       getImage,
       options.showColorblindMarkers,
@@ -96,7 +103,7 @@ export function drawTokens(
     drawTokenBody(
       ctx,
       t,
-      cellSize,
+      state.grid,
       true,
       getImage,
       options.showColorblindMarkers,
@@ -105,17 +112,17 @@ export function drawTokens(
     );
   }
   for (const t of unselected) {
-    drawTokenLabel(ctx, t, cellSize, labelScale, false, isDragged(t));
+    drawTokenLabel(ctx, t, state.grid, labelScale, false, isDragged(t));
   }
   for (const t of selected) {
-    drawTokenLabel(ctx, t, cellSize, labelScale, true, isDragged(t));
+    drawTokenLabel(ctx, t, state.grid, labelScale, true, isDragged(t));
   }
   // HP bars and condition chips live on top of labels / active-turn rings so
   // they remain legible regardless of layering beneath.
   for (const t of state.tokens) {
     if (options.mode === 'spectator' && isTokenFullyHidden(t, state)) continue;
     const display = withOverlay(t, overlay, cellSize);
-    drawTokenStatus(ctx, display, cellSize, options.mode, labelScale, isDragged(t));
+    drawTokenStatus(ctx, display, state.grid, options.mode, labelScale, isDragged(t));
   }
 
   // Phase 126 — owner-indicator dot. Painted on top of the body /
@@ -124,7 +131,7 @@ export function drawTokens(
     if (!t.ownerId) continue;
     if (options.mode === 'spectator' && isTokenFullyHidden(t, state)) continue;
     const display = withOverlay(t, overlay, cellSize);
-    drawOwnerDot(ctx, display, cellSize, t.ownerId, options.getOwnerColor);
+    drawOwnerDot(ctx, display, state.grid, t.ownerId, options.getOwnerColor);
   }
 
   // Stack-count badge — one per cell that contains ≥2 tokens. Drawn after
@@ -142,12 +149,14 @@ const OWNER_DOT_FALLBACK = '#ffd966';
 function drawOwnerDot(
   ctx: CanvasRenderingContext2D,
   t: Token,
-  cellSize: number,
+  grid: GridConfig,
   ownerId: string,
   getOwnerColor?: (id: string) => string | null,
 ): void {
-  const cx = (t.x + t.size / 2) * cellSize;
-  const cy = (t.y + t.size / 2) * cellSize;
+  const center = tokenCenterWorld(t, grid);
+  const cx = center.x;
+  const cy = center.y;
+  const cellSize = grid.cellSize;
   const r = (t.size * cellSize) / 2 - 4;
   const dotR = Math.max(4, r * 0.18);
   const offset = r * 0.72;
@@ -171,15 +180,17 @@ const DRAG_GHOST_ALPHA = 0.6;
 function drawTokenBody(
   ctx: CanvasRenderingContext2D,
   t: Token,
-  cellSize: number,
+  grid: GridConfig,
   highlighted: boolean,
   getImage: ImageProvider,
   showMarkers: boolean,
   isDragged: boolean,
   activeTurn: boolean,
 ): void {
-  const cx = (t.x + t.size / 2) * cellSize;
-  const cy = (t.y + t.size / 2) * cellSize;
+  const cellSize = grid.cellSize;
+  const center = tokenCenterWorld(t, grid);
+  const cx = center.x;
+  const cy = center.y;
   const r = (t.size * cellSize) / 2 - 4;
 
   ctx.save();
@@ -258,13 +269,15 @@ function drawTokenBody(
 function drawTokenLabel(
   ctx: CanvasRenderingContext2D,
   t: Token,
-  cellSize: number,
+  grid: GridConfig,
   labelScale: number,
   selected: boolean,
   isDragged: boolean,
 ): void {
-  const cx = (t.x + t.size / 2) * cellSize;
-  const cy = (t.y + t.size / 2) * cellSize;
+  const cellSize = grid.cellSize;
+  const center = tokenCenterWorld(t, grid);
+  const cx = center.x;
+  const cy = center.y;
   const r = (t.size * cellSize) / 2 - 4;
 
   ctx.save();
@@ -355,7 +368,7 @@ function drawMarker(
 function drawTokenStatus(
   ctx: CanvasRenderingContext2D,
   t: Token,
-  cellSize: number,
+  grid: GridConfig,
   mode: ViewMode,
   labelScale: number,
   isDragged: boolean,
@@ -363,8 +376,10 @@ function drawTokenStatus(
   ctx.save();
   if (isDragged) ctx.globalAlpha = DRAG_GHOST_ALPHA;
 
-  const cx = (t.x + t.size / 2) * cellSize;
-  const cy = (t.y + t.size / 2) * cellSize;
+  const cellSize = grid.cellSize;
+  const center = tokenCenterWorld(t, grid);
+  const cx = center.x;
+  const cy = center.y;
   const r = (t.size * cellSize) / 2 - 4;
 
   // Conditions chip row — drawn above the token, left-to-right.
@@ -525,8 +540,9 @@ function drawStackBadges(
   for (const stack of groups.values()) {
     if (stack.tokens.length < 2) continue;
     const top = stack.tokens[stack.tokens.length - 1]!;
-    const cx = (top.x + top.size / 2) * cellSize;
-    const cy = (top.y + top.size / 2) * cellSize;
+    const center = tokenCenterWorld(top, state.grid);
+    const cx = center.x;
+    const cy = center.y;
     const r = (top.size * cellSize) / 2 - 4;
     const badgeR = Math.max(9, cellSize * 0.13);
     // Top-right corner of the top token's circle.

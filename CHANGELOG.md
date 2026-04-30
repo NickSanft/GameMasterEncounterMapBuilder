@@ -131,6 +131,51 @@ gaps so the v1.0 cut is genuinely "stable + remote-play-capable."
 
 ---
 
+## [1.5.0] — 2026-04-29 — Hex token snap (drop + drag + render)
+
+Phase 130 — second of four phases on the **true hex semantics** track. v0.124 shipped the cosmetic overlay; v1.4 made measurements hex-correct; v1.5 makes **token placement + the rendered position** hex-correct too. Drop a token in hex mode → it lands at a hex cell + renders at that hex's center.
+
+### Added
+- **`src/state/grid-coords.ts`** (new, ~95 lines) — single source of truth for cell ↔ world coord conversion. Three exports:
+  - `tokenCenterWorld(token, grid)` — world-space center of a token's render position. Square uses footprint center; hex uses `hexCenter(round(t.x), round(t.y), cellSize)`.
+  - `worldToCell(x, y, grid)` — pointer/world → (col, row). Square uses `floor(x / cellSize)`; hex uses `worldToHexCell` with cube-rounding.
+  - `commitDragToCell(token, grid, dx, dy)` — given a token's current cell + a world-pixel drag delta, return the (col, row) the token should commit to.
+- **Token DROP hex-aware** — `tool-token.ts` calls `worldToCell` on the click point. Drops in hex mode snap to the nearest hex (cube-rounded); square mode unchanged.
+- **GM token DRAG-COMMIT hex-aware** — `tool-select.ts` now branches on `state.grid.gridShape`. Hex commits use `commitDragToCell` (token center + delta → nearest hex). Phase 114 wall-clamping still runs on square; **hex wall-clamp lands in Phase 131** (a documented v1.5 limitation).
+- **Spectator owned-token DRAG hex-aware** — `tool-spectator-drag.ts` uses the same `commitDragToCell` so player-owned hex tokens commit to the right hex on the GM-authoritative side.
+- **Token RENDER hex-aware** — every token-layer function (`drawTokenBody`, `drawTokenLabel`, `drawTokenStatus`, `drawOwnerDot`, `drawStackBadges`) now reads its center via `tokenCenterWorld(t, grid)` instead of inline `(t.x + t.size/2) * cellSize`. Hex grids render the token at the offset-coord hex's center; square unchanged.
+- **`hitTestToken` hex-aware** — tokens are clickable at their rendered center on both grids. Pre-130 the hit-test used square footprint center, which would miss the rendered hex token by tens of pixels when the rendered center sat far from the original drop point.
+
+### Why this matters
+With v1.4 the GM saw "5 hex" measurements but tokens still snapped to the square grid underneath, so a click at the visual center of a hex would frequently drop the token at a different cell from where the GM expected. v1.5 makes click → drop → render coherent: click on a hex, the token lands at that hex, the token renders centered in that hex. The wire format / IDB schema is unchanged — `Token.x` and `Token.y` stay (col, row) integer offset coords; only the world-pixel projection diverges between square and hex.
+
+### Architecture
+- **`src/state/grid-coords.ts`** + tests — pure helpers. No DOM. The ONLY place hex vs. square diverges, so flipping `grid.gridShape` automatically flips every consumer.
+- **`src/render/layer-tokens.ts`** — `drawTokenBody` / `Label` / `Status` / `drawOwnerDot` signatures changed to take `grid: GridConfig` instead of just `cellSize`. Each computes `const center = tokenCenterWorld(t, grid)` at the top + uses `center.x / center.y` everywhere `cx` / `cy` was inlined.
+- **`src/input/hit-test.ts`** — same `tokenCenterWorld` swap.
+- **`src/input/tool-token.ts`** — replaces inline `Math.floor(world.x / cellSize)` with `worldToCell(world.x, world.y, grid)`.
+- **`src/input/tool-select.ts`** — splits the drag-commit path on `state.grid.gridShape`. Hex skips the Phase 114 wall-clamp (Phase 131 will hex-aware it); square unchanged. Block-wall translation keeps using rectangular cell deltas (block walls stay square in v1.5; Phase 131 introduces a hex-region variant).
+- **`src/input/tool-spectator-drag.ts`** — replaces the inline `delta / cellSize` math with `commitDragToCell(token, grid, dx, dy)`.
+
+### UX details
+- **Square is byte-identical to v1.4.** The hex code paths only activate when `gridShape === 'hex'`.
+- **Multi-cell hex tokens render at the (rounded) hex center.** A `size: 2` token in hex mode draws as a circle of `size * cellSize / 2` radius centered at `hexCenter(round(x), round(y))` — the radius can extend past the hex boundary, which is the v1.5 cosmetic compromise. True multi-hex tessellation (a `2x` token covering 7 hexes in a flower pattern, etc.) is a deferred enhancement.
+- **Wall clamping skipped on hex.** A spectator or GM dragging a token in hex mode currently CAN tunnel through `blocksMovement` walls. Phase 131 adds hex-aware wall geometry; until then, hex+walls is best-effort.
+- **The drop test passes; the drag e2e is skipped.** `commitDragToCell` is exhaustively unit-tested for both grid shapes; the e2e drag would need camera-aware screen-coord math (the rendered hex center isn't where the original drop click landed). Deferred to a future phase that wires camera-aware test helpers.
+
+### Tests
+- **+13 unit tests** in `src/state/grid-coords.test.ts` (new): `tokenCenterWorld` (square footprint + hex center round-trip + non-integer hex round); `worldToCell` (square floor + hex center round-trip including odd row); `commitDragToCell` (square no-op + one-cell delta; hex no-op + horizontal-stride delta).
+- **+1 Playwright spec** in `e2e/hex-token-snap.spec.ts` (new): drop on hex grid populates the canvas-outline at a real hex cell. (The drag e2e is documented-as-skipped; covered by unit tests.)
+- **All 1413 unit tests + 341 Playwright specs pass** locally.
+
+### Bundle
+- 103.63 / 110 KB initial-load brotli (+0.33 KB for the grid-coords helpers + the hit-test / render / input branches). CSS unchanged. Lazy chunks unchanged.
+
+### Pre-push checklist
+Caught a `hitTestToken` bug along the way — pre-fix the click → drag round-trip missed the rendered hex token because the hit-test was using square-grid footprint center. Fixed by routing through `tokenCenterWorld` so the hit-test geometry matches the render geometry. Also caught a `gridDX` reference in tool-select that I removed when refactoring the drag commit; restored as a local for the block-wall translation path. Otherwise clean.
+
+---
+
 ## [1.4.0] — 2026-04-29 — Hex distance + ruler + movement indicator
 
 Phase 129 — first phase of the **true hex semantics** track. v0.124 shipped the cosmetic hex overlay; the documented limitation was that distance measurements still ran the square-grid math. v1.4 closes that limitation: when the grid shape is hex, the ruler tool and the token-drag movement indicator both report **cube distance** between the start and end hex cells.

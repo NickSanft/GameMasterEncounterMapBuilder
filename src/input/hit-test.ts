@@ -1,4 +1,5 @@
 import type { GridConfig, Token } from '../state/types.js';
+import { tokenCenterWorld } from '../state/grid-coords.js';
 
 export function hitTestToken(
   tokens: readonly Token[],
@@ -8,8 +9,13 @@ export function hitTestToken(
 ): Token | null {
   for (let i = tokens.length - 1; i >= 0; i--) {
     const t = tokens[i]!;
-    const cx = (t.x + t.size / 2) * grid.cellSize;
-    const cy = (t.y + t.size / 2) * grid.cellSize;
+    // Phase 130 — hex grids place the rendered center at
+    // `hexCenter(t.x, t.y)`, not at the square-grid footprint center.
+    // `tokenCenterWorld` dispatches on `grid.gridShape` to pick the
+    // right center.
+    const center = tokenCenterWorld(t, grid);
+    const cx = center.x;
+    const cy = center.y;
     const r = (t.size * grid.cellSize) / 2;
     const dx = wx - cx;
     const dy = wy - cy;
