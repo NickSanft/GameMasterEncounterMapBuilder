@@ -131,6 +131,42 @@ gaps so the v1.0 cut is genuinely "stable + remote-play-capable."
 
 ---
 
+## [1.19.0] — 2026-05-04 — Active-turn ring pulse
+
+Phase 144 — second phase of the **visual polish trio**. The active initiative token's outer ring now pulses (sin-based opacity, period 1.6s, alpha 0.55 → 1.0) while it's the active turn. Respects `prefers-reduced-motion` (Phase 50): the ring renders at full opacity without animation when the user has motion sensitivity preferences set. Same wiring path Phase 78's fog-fade-tracker uses.
+
+### Added
+- **Pulse animation** on the existing active-turn ring (`drawTokenBody` in `src/render/layer-tokens.ts`). Formula: `0.55 + 0.45 * (0.5 + 0.5 * sin(now * 2π / 1600))`. Period of 1.6 seconds is fast enough to feel alive, slow enough not to be distracting.
+- **Self-rescheduling render loop** in `src/render/renderer.ts`. While `state.initiative.activeId !== null` AND `getReducedMotion?.()` is false, the render function re-queues itself via `requestRender()` at the end of every frame. The existing RAF de-dupe (`if (rafHandle !== 0) return;`) clamps to one queued frame; the loop ends as soon as the active token is cleared (or reduced-motion flips on). When no active token exists, renders go back to on-demand (the original behavior pre-144).
+
+### Why this matters
+The active-turn ring (Phase 69) was a static yellow stroke. Easy to miss in a busy combat scene with multiple selected tokens, hover effects, ping flashes, etc. A subtle pulse draws the eye without being noisy. The "whose turn is it?" question takes a fraction of a second longer than it should pre-144; the pulse closes that gap.
+
+### Architecture
+- **`TokenRenderOptions` gains two optional fields:** `reducedMotion?: boolean` and `now?: number`. Both are wired from the renderer's per-frame state. Default behavior (when omitted) is "no pulse, full opacity ring" — matches the legacy renderer, so callers that don't pass them get the pre-144 visual.
+- **`drawTokenBody` gets a `pulseTime: number | null` parameter** (default `null`). Computed in `drawTokens` once per frame from `(options.reducedMotion, options.now)`: `null` if reduced motion or no clock; the timestamp otherwise. All three body call-sites (unselected / selected-non-dragged / dragged buckets from Phase 143) thread the same value.
+- **No state model changes.** Reduced-motion is already in `Preferences` (Phase 50). The active token id is already in `SessionState.initiative.activeId` (Phase 30+). Phase 144 just connects them.
+
+### UX details
+- **Reduced-motion auto-respect.** If the user has `prefers-reduced-motion: reduce` set in their OS or has manually toggled the in-app reduced-motion preference (Phase 50 / 91), the ring renders at full opacity without animation. The self-rescheduling loop also stops, so battery / CPU isn't burned on static frames.
+- **Sin-pulse only — no scale / size animation.** Bumping the ring's radius would cause subpixel jitter that conflicts with the canvas's pixel-snapped rendering. Opacity-only is smoother.
+- **Performance.** A 60fps loop while in combat is the existing budget — the renderer is already busy paint-batching tokens / fog / grid every frame during combat. Outside combat (no active turn), v144 doesn't change idle behavior.
+
+### Tests
+No new unit tests — the pulse is a one-liner sin formula on `performance.now()`. No new e2e — the animation is timing-sensitive and other animations (fog-fade, weather) make per-frame screenshot diffs unreliable. The fix is best validated by:
+1. Visual regression baselines (no drift; the pulse is per-frame and the regression specs don't have an active-turn token in any committed baseline scene).
+2. The existing initiative + active-token e2e specs (passing — no regressions in the active-turn ring's static rendering).
+
+All 1508 unit tests + 364 Playwright specs pass locally.
+
+### Bundle
+- 109.59 / 120 KB initial-load brotli (-0.04 KB delta — the new code path is tiny + the cleaner pulseTime computation lets the existing dead-code path drop). CSS unchanged. Lazy chunks unchanged.
+
+### Pre-push checklist
+Caught zero issues — full unit suite + full e2e + visual-regression specs + size-limit all green before push.
+
+---
+
 ## [1.18.0] — 2026-05-04 — Selected-token z-order fix
 
 Phase 143 — first phase of the **visual polish trio**. Fixes a z-order quirk where a dragged token's HP bar / condition chips / owner indicator could end up *underneath* an unselected token at the same destination cell. The pre-143 paint order walked `{ unselected → selected }` for bodies + labels, but **raw `state.tokens` order** for status (HP, conditions) and owner dots — meaning whichever token had the higher index in the array won the status z-fight, regardless of which one the GM was actively dragging.

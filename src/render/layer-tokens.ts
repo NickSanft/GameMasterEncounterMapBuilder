@@ -38,6 +38,19 @@ export interface TokenRenderOptions {
    * can see "this is owned" at a glance.
    */
   getOwnerColor?: (ownerId: string) => string | null;
+  /**
+   * Phase 144 — when true, the active-turn ring renders at full
+   * opacity (no pulse animation). Wired from `preferences.reducedMotion`
+   * by the entries.
+   */
+  reducedMotion?: boolean;
+  /**
+   * Phase 144 — `performance.now()` at the start of the current
+   * paint, used to drive the active-turn ring's sin-based pulse.
+   * Optional; when omitted the ring renders at full opacity (same as
+   * `reducedMotion: true`).
+   */
+  now?: number;
 }
 
 const DEFAULT_OPTIONS: TokenRenderOptions = {
@@ -99,6 +112,13 @@ export function drawTokens(
   }
 
   const activeId = options.activeInitiativeTokenId ?? null;
+  // Phase 144 — pulse clock for the active-turn ring. `null` =
+  // reduced-motion or no-clock caller (ring renders at full
+  // opacity).
+  const pulseTime: number | null =
+    options.reducedMotion || typeof options.now !== 'number'
+      ? null
+      : options.now;
 
   // Phase 139 — auras render BELOW token bodies so the token icon
   // sits cleanly on top of its own emanation. GM-only auras are
@@ -116,18 +136,21 @@ export function drawTokens(
     drawTokenBody(
       ctx, t, state.grid, false, getImage,
       options.showColorblindMarkers, false, t.id === activeId,
+      pulseTime,
     );
   }
   for (const t of selectedNonDragged) {
     drawTokenBody(
       ctx, t, state.grid, true, getImage,
       options.showColorblindMarkers, false, t.id === activeId,
+      pulseTime,
     );
   }
   for (const t of dragged) {
     drawTokenBody(
       ctx, t, state.grid, true, getImage,
       options.showColorblindMarkers, true, t.id === activeId,
+      pulseTime,
     );
   }
 
@@ -294,6 +317,12 @@ function drawTokenBody(
   showMarkers: boolean,
   isDragged: boolean,
   activeTurn: boolean,
+  /**
+   * Phase 144 — `performance.now()` for the pulse animation, or
+   * `null` for reduced-motion / no-clock callers (the ring renders
+   * at full opacity in that case).
+   */
+  pulseTime: number | null = null,
 ): void {
   const cellSize = grid.cellSize;
   const center = tokenCenterWorld(t, grid);
@@ -342,7 +371,15 @@ function drawTokenBody(
 
   if (activeTurn) {
     const ar = r + (t.borderColor ? 7 : 4);
+    // Phase 144 — sin-based pulse, period 1.6 s, alpha 0.55 → 1.0.
+    // Skipped (alpha = 1.0) when `pulseTime` is null (reduced-motion
+    // or no-clock callers).
+    const pulseAlpha =
+      pulseTime === null
+        ? 1
+        : 0.55 + 0.45 * (0.5 + 0.5 * Math.sin((pulseTime / 1600) * 2 * Math.PI));
     ctx.save();
+    ctx.globalAlpha = pulseAlpha;
     ctx.lineWidth = 4;
     ctx.strokeStyle = '#ffb300';
     ctx.shadowColor = 'rgba(255, 179, 0, 0.85)';

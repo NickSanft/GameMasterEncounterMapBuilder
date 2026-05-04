@@ -311,6 +311,14 @@ export function createRenderer(opts: CreateRendererOptions): Renderer {
       dragOverlay,
       activeInitiativeTokenId: activeTokenId,
       getOwnerColor: opts.getOwnerColor,
+      // Phase 144 — when true, skip the active-turn ring's pulse
+      // animation. Same `prefers-reduced-motion` accessor the fog-
+      // fade overlay uses.
+      reducedMotion: getReducedMotion?.() ?? false,
+      // Phase 144 — `performance.now()` for the active-turn pulse's
+      // sin-driven alpha. Captured at the per-frame top so all
+      // animations on this frame share a clock.
+      now: frameStart,
     });
     drawAoeTemplates(ctx, state, {
       mode,
@@ -503,6 +511,16 @@ export function createRenderer(opts: CreateRendererOptions): Renderer {
       for (const l of frameListeners) l(sample);
     } else {
       lastFrameAt = frameStart;
+    }
+
+    // Phase 144 — self-reschedule while an active initiative entry
+    // exists AND reduced-motion is off, so the active-turn ring's
+    // sin-pulse animation runs continuously. The RAF de-dupe in
+    // `requestRender` clamps to one queued frame; the loop ends as
+    // soon as the active token is cleared (or reduced-motion flips
+    // on). No-active-token frames go back to on-demand rendering.
+    if (state.initiative.activeId !== null && !(getReducedMotion?.() ?? false)) {
+      requestRender();
     }
   }
 
