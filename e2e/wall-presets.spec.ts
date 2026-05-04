@@ -51,10 +51,11 @@ test.describe('Phase 117 — wall presets', () => {
     const { modal } = await openWallEditor(page);
 
     const chips = modal.locator('.wall-editor-preset-chip');
-    // 5 built-ins: stone-exterior, interior-divider, window,
-    // secret-passage, wooden-door-closed.
-    await expect(chips).toHaveCount(5);
+    // 6 built-ins: stone-exterior, interior-divider, window,
+    // secret-passage, wooden-door-closed, remove-door (Phase 136).
+    await expect(chips).toHaveCount(6);
     await expect(modal.locator('.wall-editor-preset-apply', { hasText: 'Stone exterior' })).toBeVisible();
+    await expect(modal.locator('.wall-editor-preset-apply', { hasText: 'Remove door' })).toBeVisible();
     await expect(modal.locator('.wall-editor-presets-save')).toBeVisible();
   });
 

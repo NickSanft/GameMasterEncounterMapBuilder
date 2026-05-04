@@ -131,6 +131,44 @@ gaps so the v1.0 cut is genuinely "stable + remote-play-capable."
 
 ---
 
+## [1.11.0] — 2026-05-03 — Door-removal wall preset
+
+Phase 136 — small wall-presets follow-up. Adds the inverse of the v117 "Wooden door (closed)" preset: a one-click way to demote a door wall back to a regular blocking segment.
+
+### Added
+- **"Remove door" built-in wall preset.** When applied, it strips the wall's `door` field via the `door: null` signal that the Phase 117 editor's onChange wrapper already handled. The wall stays in place but reverts to a plain blocking segment. Sight + movement default to ON (same as a wall freshly drawn after a door is gone — the user is converting "I have a door here" back to "I have a wall here").
+- **`b:remove-door` id + 6th built-in chip** in the wall editor's preset strip. Identical visual treatment to the other built-ins; no × delete button (built-ins are protected from removal as before).
+
+### Why this matters
+The Phase 117 wall-presets module shipped 5 built-ins covering common "what kind of wall is this" choices, including a "Wooden door (closed)" that PROMOTES a wall to a door. The reverse path — DEMOTING a door back — was a documented future-polish item: the editor's onChange wrapper already accepted `door: null` (Phase 113 / 117 wiring), but no preset set the field. Pre-136 a GM converting a closed door back to a regular wall had to right-click → Edit wall → un-tick "Is door" — possible but two extra clicks. Phase 136 makes it a single chip click, matching the friction of the other preset-driven workflows.
+
+### Architecture
+- **`src/state/wall-presets.ts`** — adds `b:remove-door` to `BUILTIN_PRESETS`. The preset carries `door: null` (the "remove the door promotion" sentinel), `blocksSight: true`, `blocksMovement: true`. No new fields on the `WallPreset` interface; `door: { open: boolean } | null` already supports the null branch.
+- **`src/ui/wall-editor.ts`** — no changes. The existing `presetToChange` already forwards `door` only when it's `!== undefined`, so `door: null` flows through unchanged. The host's onChange wrapper translates the null into a remove + re-add patch (the door state lives in the wall's `door` field; clearing it requires recreating the wall without that field).
+- **No new patch types.** Existing `wall-update` + the editor's remove + re-add round-trip cover the demote path end-to-end.
+
+### UX details
+- **Apply behavior on a non-door wall.** The preset is idempotent — applying it to a wall that's already plain just sets `blocksSight: true, blocksMovement: true` (no-op for default walls). No error / no warning toast; the GM can apply liberally without worrying about disturbing non-door walls.
+- **Block walls silently ignore door fields.** The Phase 117 editor already handles this: block walls don't support doors. Applying "Remove door" to a block selection is a no-op for the door field; sight + movement still apply.
+- **Multi-select aware.** Like every other preset, "Remove door" applies to ALL selected walls in one undo step. Selecting a mix of door + non-door walls + clicking the chip strips door state from the doored ones + sets sight + movement on the others.
+
+### Future polish (out of scope)
+- **Compositional presets.** The current `WallPreset` shape requires `blocksSight` + `blocksMovement` (preset always sets them). A future v1.12+ refactor could make those optional, so a preset like "Remove door" could leave the underlying sight / movement state untouched (handy when removing a door from a previously-windowed wall, where the GM might want to keep `blocksSight: false`). Out of scope for v136 — the current behavior is "remove door + revert to a blocking wall" which matches the most common authoring flow.
+
+### Tests
+- **+2 unit tests** in `src/state/wall-presets.test.ts`: the remove-door built-in carries `door: null` + sight + movement on; the remove-door built-in is the only built-in with `door: null` (vs `door: { open: boolean }` setters).
+- **+2 Playwright specs** in `e2e/wall-remove-door-preset.spec.ts` (new): the Remove door chip is present in the editor's preset strip; applying "Wooden door" then "Remove door" leaves the wall's "Is door" checkbox unchecked (door promotion successfully cleared).
+- **Updated** `e2e/wall-presets.spec.ts` chip-count assertion from 5 → 6 to reflect the new built-in.
+- **All 1450 unit tests + 350 Playwright specs pass** locally (the same `scenes.spec.ts:56` parallel flake reappeared once on the parallel run; passes in isolation, CI runs serially with retries=2, absorbed).
+
+### Bundle
+- 104.64 / 110 KB initial-load brotli (delta nominal — Phase 136 is essentially one new entry in a const array). CSS unchanged. Lazy chunks unchanged.
+
+### Pre-push checklist
+Caught zero issues — full unit suite + full e2e + visual-regression specs + size-limit all green before push.
+
+---
+
 ## [1.10.0] — 2026-05-03 — Hex-aware auto-reveal · **closes the v1.7 trilogy** 🎉
 
 Phase 135 — third and final phase of the **hex polish trilogy** that closes the three deferrals called out in v1.7.0. Manual fog (v1.8 brush, v1.9 rectangle) was already hex-aware; v1.10 makes the LoS-driven auto-reveal pipeline hex-aware too.

@@ -101,6 +101,20 @@ export const BUILTIN_PRESETS: readonly WallPreset[] = [
     blocksMovement: true,
     door: { open: false },
   },
+  {
+    id: 'b:remove-door',
+    name: 'Remove door',
+    isBuiltin: true,
+    // Reverts the wall to a plain blocking segment — sight-blocking
+    // + movement-blocking. The `door: null` field flows through
+    // `presetToChange` and the editor's onChange wrapper translates
+    // it into a remove + re-add patch (the door state lives in the
+    // wall's `door` field; clearing it requires recreating the wall
+    // without the field).
+    blocksSight: true,
+    blocksMovement: true,
+    door: null,
+  },
 ];
 
 interface Envelope {

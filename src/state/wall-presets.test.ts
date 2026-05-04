@@ -51,6 +51,24 @@ describe('wall-presets: built-ins always present', () => {
     expect(win!.blocksSight).toBe(false);
     expect(win!.blocksMovement).toBe(true);
   });
+
+  it('the remove-door built-in (Phase 136) clears the door field with door: null', () => {
+    const remove = BUILTIN_PRESETS.find((p) => p.id === 'b:remove-door');
+    expect(remove).toBeTruthy();
+    expect(remove!.door).toBe(null);
+    // Reverts to a plain blocking wall — sight + movement on.
+    expect(remove!.blocksSight).toBe(true);
+    expect(remove!.blocksMovement).toBe(true);
+  });
+
+  it('the remove-door built-in is the only one with door: null (vs door: {open})', () => {
+    const closeable = BUILTIN_PRESETS.filter((p) => p.door !== undefined);
+    const setters = closeable.filter((p) => p.door !== null);
+    const removers = closeable.filter((p) => p.door === null);
+    expect(setters.length).toBeGreaterThan(0); // wooden-door-closed exists
+    expect(removers.length).toBe(1); // only remove-door clears
+    expect(removers[0]!.id).toBe('b:remove-door');
+  });
 });
 
 describe('wall-presets: save + remove', () => {
