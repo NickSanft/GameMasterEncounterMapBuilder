@@ -1,4 +1,15 @@
 export const APP_NAME = 'GM Encounter Maps';
+
+/**
+ * Phase 152 — current shipping version. Compared against
+ * `localStorage[WHATS_NEW_LAST_SEEN_KEY]` on boot to decide whether
+ * to show the "what's new" badge + modal. Bumped manually at every
+ * release commit (no auto-injection from package.json — keeps the
+ * value visible in source so version drift is reviewable).
+ */
+export const APP_VERSION = '1.27.0';
+export const WHATS_NEW_LAST_SEEN_KEY = 'gm-encounter-maps-last-seen-version';
+
 export const STORAGE_KEY = 'gm-encounter-maps-state';
 export const PREFERENCES_KEY = 'gm-encounter-maps-prefs';
 export const NOTES_TEXT_KEY = 'gm-encounter-maps-notes';

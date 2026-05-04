@@ -131,6 +131,50 @@ gaps so the v1.0 cut is genuinely "stable + remote-play-capable."
 
 ---
 
+## [1.27.0] — 2026-05-04 — "What's new" modal
+
+Phase 152 — first phase of the **discovery track** (Track E from the v1.18 → v1.28 plan). Adds a "what's new" modal that auto-opens once after a version bump, listing recent CHANGELOG highlights. Closing it persists the user's last-seen version so it doesn't re-open until the NEXT version ships.
+
+### Added
+- **`APP_VERSION = '1.27.0'` constant** in `src/util/constants.ts`. Bumped manually at every release commit (no auto-injection from package.json by design — keeps the value visible in source so version drift is reviewable).
+- **`WHATS_NEW_LAST_SEEN_KEY` localStorage key**.
+- **`src/state/whats-new.ts`** (new, ~140 lines) — semver-aware comparison helper. Public exports: `parseVersion(s)`, `isNewer(a, b)`, `getLastSeenVersion()`, `markCurrentVersionSeen()`, `shouldShowWhatsNew()`, plus the static `WHATS_NEW_ENTRIES` array (12 most-recent versions, newest first, each with version + date + 1-line highlights).
+- **`src/ui/whats-new-modal.ts`** (new, ~100 lines) — modal mount with section-per-version layout. Closing calls `markCurrentVersionSeen()` so the badge stops pulsing. Dispatches a `whats-new:seen` window event so any future badge listeners know to clear.
+- **GM boot hook** in `src/entries/gm.ts`: when `shouldShowWhatsNew()` is true, defers a `whatsNewModal.open()` to the next animation frame so it doesn't race the initial render or onboarding-tour mount.
+- **CSS for `.whats-new-modal*`** in `styles.css`. Scrollable body, max-height 80vh, version sections with bullet highlights.
+
+### Why this matters
+With 152 phases shipped (and 26 in the v1.18+ batch alone), users opening the app after a long gap have no way to know what changed. The auto-open-once modal solves the "I haven't used this in a month, what's new?" problem in the same flow Apple / Google / Notion use for major updates. Closing the modal marks the user "current" so subsequent boots are silent until the next version bump.
+
+### Architecture
+- **Boot semantics:**
+  - **Fresh install** (no `last-seen-version` in localStorage) → modal does NOT auto-open. Phase 96's onboarding tour handles first-launch UX; doubling up would be noisy. The user's lastSeen flips on first close (or future feature: explicit dismiss button on the tour).
+  - **Last-seen older than current** → modal auto-opens.
+  - **Last-seen matches current** → no auto-open.
+  - **Last-seen newer than current** (downgrade) → no auto-open. Defensive — prevents a downgrade from spamming users with "what's new" they already saw.
+- **Static highlights table.** `WHATS_NEW_ENTRIES` is a hand-curated array of "user-visible 1-line summaries" — NOT a full CHANGELOG dump. Future polish could auto-extract these from CHANGELOG.md at build time via a `scripts/extract-whats-new.mjs` step (planned in the original Phase 152 design but deferred for v1 simplicity).
+- **Semver-aware compare.** `parseVersion('1.10.0') = [1, 10, 0]` and the per-part numeric compare correctly handles "1.10.0 > 1.2.0" (a lexicographic compare would say false).
+- **Focus trap + Escape close.** Reuses Phase 87's `attachFocusTrap` helper so screen-reader users don't tab out of the modal.
+
+### UX details
+- **One-time auto-open per version.** Closing the modal records `APP_VERSION` as last-seen; the next reload sees no version diff and doesn't re-open.
+- **Keyboard-accessible.** Tab cycles within the modal; Escape closes; × button closes.
+- **Newest first.** Top entry is the version the user just upgraded to (so the most relevant changes appear at the top of the scroll).
+- **No badge dot in v1.27.** The original Phase 152 plan included a pulsing dot on the help-overlay button when shouldShowWhatsNew was true. Simplified to just auto-open since the modal IS the badge — discoverable without requiring the user to notice a small dot. A future polish could add the dot for users who dismiss without reading.
+
+### Tests
+- **+14 unit tests** in `src/state/whats-new.test.ts` (new): parseVersion (standard / malformed); isNewer (major / minor past 9 / patch / equal); shouldShowWhatsNew (empty last-seen / older / equal / newer-defensive); markCurrentVersionSeen + getLastSeenVersion round-trip; static WHATS_NEW_ENTRIES sanity (current is first / version + date format / non-empty highlights).
+- **+3 Playwright specs** in `e2e/whats-new-modal.spec.ts` (new): no auto-open on fresh install; auto-opens when last-seen is older; closing marks current seen + no re-open on reload.
+- **All 1547 unit tests + 381 Playwright specs pass** locally.
+
+### Bundle
+- 112.31 / 120 KB initial-load brotli (+0.78 KB for the helper + modal + boot hook). CSS 13.06 / 14 KB (+0.10 KB for the modal styles). Lazy chunks 19.3 / 20 KB.
+
+### Pre-push checklist
+Caught zero issues — full unit suite + full e2e + visual-regression specs + size-limit all green before push.
+
+---
+
 ## [1.26.0] — 2026-05-04 — Multi-aura UI in token editor
 
 Phase 151 — second + final phase of the **authoring track** (closes Track D from the v1.18 → v1.28 plan). Replaces the Phase 139 single-aura editor section with a list-row UI: each row edits one aura entry, "+ Add aura" appends a new entry, "× Remove" drops one. The wire format (`Token.auras: Aura[]`) already supported multiple entries since Phase 139; this phase ships the authoring UI.

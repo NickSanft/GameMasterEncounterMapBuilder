@@ -461,6 +461,49 @@ body.view {
   background: var(--hover-overlay);
 }
 
+/* Phase 152 — "What's new" modal. Lists recent CHANGELOG entries
+ * with version + date headers + bullet highlights.
+ */
+.whats-new-modal {
+  max-width: 640px;
+  width: 90vw;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.whats-new-body {
+  overflow-y: auto;
+  padding: 0.75rem 1rem;
+}
+
+.whats-new-intro {
+  margin: 0 0 0.75rem 0;
+  font-style: italic;
+  color: var(--fg-muted);
+}
+
+.whats-new-version {
+  margin-bottom: 1rem;
+}
+
+.whats-new-version h3 {
+  margin: 0 0 0.25rem 0;
+  font-size: 0.95rem;
+  color: var(--fg);
+}
+
+.whats-new-version ul {
+  margin: 0 0 0.5rem 1.25rem;
+  padding: 0;
+}
+
+.whats-new-version li {
+  margin: 0.15rem 0;
+  font-size: 0.88rem;
+  line-height: 1.4;
+}
+
 /* Phase 151 — multi-aura list rows in the token editor. Each row
  * is one aura entry: swatch + label input + radius input + color
  * picker + GM-only toggle + remove button.

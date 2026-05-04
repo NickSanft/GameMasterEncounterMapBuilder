@@ -92,6 +92,8 @@ import { mountTilePaintSettings } from '../ui/tile-paint-settings.js';
 import { mountSceneLoadingOverlay } from '../ui/scene-loading-overlay.js';
 import { mountRecentTokensStrip } from '../ui/recent-tokens-strip.js';
 import { recordTokenUse } from '../state/recent-tokens.js';
+import { mountWhatsNewModal } from '../ui/whats-new-modal.js';
+import { shouldShowWhatsNew } from '../state/whats-new.js';
 import { mountSettingsModal } from '../ui/settings-modal.js';
 import { mountZoomControls } from '../ui/zoom-controls.js';
 import { createSyncChannel } from '../sync/channel.js';
@@ -1544,6 +1546,18 @@ mountInitiativeBar(store, 'gm', {
   },
 });
 mountHelpOverlay('gm');
+
+// Phase 152 — "What's new" badge + modal. Mounted once per GM
+// boot. If the user's last-seen version (in localStorage) is older
+// than APP_VERSION, the modal auto-opens on first paint cycle so
+// the user sees the new-feature highlights without having to dig
+// into a menu.
+const whatsNewModal = mountWhatsNewModal();
+if (shouldShowWhatsNew()) {
+  // Defer to the next animation frame so it doesn't race the
+  // initial render + onboarding-tour mount above.
+  requestAnimationFrame(() => whatsNewModal.open());
+}
 
 // ---- Scenes ------------------------------------------------------------
 // The active-scene pointer drives which scene the regular saveState /
