@@ -86,6 +86,10 @@ export function buildSettingsModal(
   const highContrastInput = modal.querySelector<HTMLInputElement>('[data-field="highContrast"]')!;
   const colorblindInput = modal.querySelector<HTMLInputElement>('[data-field="colorblindMarkers"]')!;
   const voiceTranscriptionInput = modal.querySelector<HTMLInputElement>('[data-field="voiceTranscription"]')!;
+  // Phase 137 — present only on the GM modal (renderAppearancePane
+  // gates the checkbox on viewMode === 'gm'); null on the Spectator
+  // modal. Use optional chaining at every access site.
+  const autoNumberInput = modal.querySelector<HTMLInputElement>('[data-field="autoNumberDuplicateTokens"]');
   const playerNameInput = modal.querySelector<HTMLInputElement>('[data-field="playerName"]')!;
   const playerColorInput = modal.querySelector<HTMLInputElement>('[data-field="playerColor"]')!;
   const labelSizeRadios = Array.from(
@@ -173,6 +177,7 @@ export function buildSettingsModal(
     highContrastInput.checked = prefs.highContrast;
     colorblindInput.checked = prefs.colorblindMarkers;
     voiceTranscriptionInput.checked = prefs.voiceTranscription;
+    if (autoNumberInput) autoNumberInput.checked = prefs.autoNumberDuplicateTokens;
     // Phase 67 — identity now lives in its own per-role store; the
     // Settings modal reads it from `identityPrefs.get()` instead of
     // peeling out scoped fields from `preferences`.
@@ -309,6 +314,14 @@ export function buildSettingsModal(
   voiceTranscriptionInput.addEventListener('change', () => {
     preferences.update({ voiceTranscription: voiceTranscriptionInput.checked });
   });
+
+  if (autoNumberInput) {
+    autoNumberInput.addEventListener('change', () => {
+      preferences.update({
+        autoNumberDuplicateTokens: autoNumberInput.checked,
+      });
+    });
+  }
 
   // Phase 67 — writes go through the per-role identity store. The
   // GM and Spectator views each construct their own
@@ -569,7 +582,15 @@ function renderAppearancePane(viewMode: ViewMode): string {
             <input type="range" min="5" max="100" step="1" data-field="gmFogOpacity" />
             <span class="slider-value" data-field="gmFogOpacityValue">35%</span>
           </div>
-        </label>`
+        </label>
+        <fieldset class="settings-subgroup">
+          <legend>Tokens</legend>
+          <label class="check">
+            <input type="checkbox" data-field="autoNumberDuplicateTokens" />
+            <span>Auto-suffix duplicate token labels</span>
+          </label>
+          <p class="settings-hint">Phase 137. When you Alt+stamp, paste, duplicate, or drop multiple library tokens with the same name, the new ones get numeric suffixes (Goblin, Goblin 2, Goblin 3) so they're individually distinguishable in the initiative tracker + canvas outline. Doesn't touch labels you've manually edited.</p>
+        </fieldset>`
     : '';
 
   return `

@@ -113,6 +113,7 @@ import { putImage, getImageURL, getImage } from '../images/store.js';
 import { hitTestToken } from '../input/hit-test.js';
 import { screenToWorld } from '../render/coords.js';
 import { duplicateTokens } from '../state/token-clipboard.js';
+import { nextLabelSuffix } from '../state/token-numbering.js';
 import { rotateBy, snapRotation } from '../state/token-rotation.js';
 import { tokensInStackAt } from '../state/token-stack.js';
 import type { Annotation, Token } from '../state/types.js';
@@ -551,7 +552,12 @@ const inputContext = {
 
 const toolManager = createToolManager(canvas);
 toolManager.register(createSelectTool(inputContext));
-toolManager.register(createTokenTool(inputContext));
+toolManager.register(
+  createTokenTool(inputContext, {
+    // Phase 137 — gate auto-numbering on the user-preference flag.
+    autoNumber: () => preferences.get().autoNumberDuplicateTokens,
+  }),
+);
 toolManager.register(createFogTool(inputContext, 'reveal', fogPreviewRef, fogOptionsRef, fogHoverRef));
 toolManager.register(createFogTool(inputContext, 'hide', fogPreviewRef, fogOptionsRef, fogHoverRef));
 toolManager.register(createBackgroundTool(inputContext));
@@ -892,6 +898,13 @@ function placeLibraryToken(entry: TokenCatalogEntry) {
   const center = viewportCenterGrid();
   const { gx, gy } = center ? clampGridCell(center.gx, center.gy) : { gx: 0, gy: 0 };
   const token = tokenFromCatalogEntry(entry, gx, gy);
+  // Phase 137 — auto-suffix the library entry's label against the
+  // current canvas. Library entries are templates by definition
+  // (e.g. "Goblin"), so dropping multiples is exactly the use case.
+  if (preferences.get().autoNumberDuplicateTokens) {
+    const existing = store.getState().tokens.map((t) => t.label);
+    token.label = nextLabelSuffix(existing, token.label);
+  }
   store.applyPatch({ kind: 'token-add', token });
   lastPlacedRef.current = token;
   selection.ids = new Set([token.id]);
@@ -2905,6 +2918,20 @@ function copySelection(): boolean {
 function pasteClipboard(): boolean {
   if (tokenClipboard.length === 0) return false;
   const copies = duplicateTokens(tokenClipboard);
+  // Phase 137 — auto-suffix labels among the copies. Each new copy
+  // looks at the canvas state PLUS the labels of preceding copies in
+  // this batch (so pasting 3 "Goblin"s onto a board with an existing
+  // "Goblin" produces "Goblin 2", "Goblin 3", "Goblin 4" — not 3
+  // copies of "Goblin 2"). Existing token labels are read once before
+  // the batch begins; the in-flight copies' labels are appended as we
+  // go.
+  if (preferences.get().autoNumberDuplicateTokens) {
+    const labels = store.getState().tokens.map((t) => t.label);
+    for (const copy of copies) {
+      copy.label = nextLabelSuffix(labels, copy.label);
+      labels.push(copy.label);
+    }
+  }
   store.batch(() => {
     for (const token of copies) {
       store.applyPatch({ kind: 'token-add', token });
@@ -2933,6 +2960,17 @@ function duplicateSelection(): boolean {
   const sel = selectedTokens();
   if (sel.length === 0) return false;
   const copies = duplicateTokens(sel);
+  // Phase 137 — auto-suffix labels among the duplicates. Same
+  // accumulator pattern as pasteClipboard so duplicating 3 "Goblin"s
+  // (each in selection) onto a board with one existing "Goblin"
+  // yields "Goblin 2/3/4", not 3 copies of "Goblin 2".
+  if (preferences.get().autoNumberDuplicateTokens) {
+    const labels = store.getState().tokens.map((t) => t.label);
+    for (const copy of copies) {
+      copy.label = nextLabelSuffix(labels, copy.label);
+      labels.push(copy.label);
+    }
+  }
   store.batch(() => {
     for (const token of copies) {
       store.applyPatch({ kind: 'token-add', token });
@@ -3139,6 +3177,14 @@ function pasteClipboardAt(gx: number, gy: number): boolean {
   const minX = Math.min(...tokenClipboard.map((t) => t.x));
   const minY = Math.min(...tokenClipboard.map((t) => t.y));
   const copies = duplicateTokens(tokenClipboard, gx - minX, gy - minY);
+  // Phase 137 — same auto-number pattern as pasteClipboard.
+  if (preferences.get().autoNumberDuplicateTokens) {
+    const labels = store.getState().tokens.map((t) => t.label);
+    for (const copy of copies) {
+      copy.label = nextLabelSuffix(labels, copy.label);
+      labels.push(copy.label);
+    }
+  }
   store.batch(() => {
     for (const token of copies) {
       store.applyPatch({ kind: 'token-add', token });

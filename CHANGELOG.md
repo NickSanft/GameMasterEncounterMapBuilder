@@ -131,6 +131,54 @@ gaps so the v1.0 cut is genuinely "stable + remote-play-capable."
 
 ---
 
+## [1.12.0] — 2026-05-03 — Multi-token auto-numbering
+
+Phase 137 — first phase of the **token visual layer track**. When you Alt+stamp, paste, duplicate, or drop multiple library tokens with the same name, the new ones get numeric suffixes ("Goblin", "Goblin 2", "Goblin 3") so they're individually distinguishable in the initiative tracker, the canvas-outline (Phase 87), and on-canvas labels.
+
+### Added
+- **`nextLabelSuffix(existingLabels, candidateLabel)`** in new `src/state/token-numbering.ts` — pure helper. Strips a trailing " <integer>" suffix from labels to derive a base, compares case-insensitively, and returns the candidate with `${base} ${max + 1}` when the base collides with any existing token. Returns the candidate unchanged when no collision exists. Treats a bare base as effective suffix 1 (the implicit first instance).
+- **Auto-numbering wired into 4 token-creation paths**:
+  - **Alt+stamp** (`src/input/tool-token.ts` `onPointerDown`) — the existing alt-clone path now suffix-disambiguates the cloned label.
+  - **Paste** (`pasteClipboard` + `pasteClipboardAt` in `src/entries/gm.ts`) — each paste copy in the batch sees a labels accumulator that includes preceding copies, so pasting 3 "Goblin"s onto a board with one existing "Goblin" yields "Goblin 2/3/4" (not 3 copies of "Goblin 2").
+  - **Duplicate** (`duplicateSelection` in gm.ts) — same accumulator pattern; Ctrl+D on a multi-selection of "Goblin"s produces sequentially numbered copies.
+  - **Library drop** (`placeLibraryToken` in gm.ts) — dropping the same template entry repeatedly auto-numbers each copy. Library entries are templates by definition, so this is the highest-impact integration.
+- **`autoNumberDuplicateTokens: boolean` preference** (default `true`) — Settings → Appearance → Tokens. GM-only checkbox. A GM who prefers stable stamping behavior (label inheritance without auto-suffix) can disable it.
+- **`TokenToolOptions.autoNumber?: () => boolean`** — accessor passed by the host (typically reading `prefs.get().autoNumberDuplicateTokens`). Optional; tests / minimal callers omit it for the legacy stamp behavior.
+
+### Why this matters
+Pre-137, dropping 5 goblins via Alt+stamp produced 5 tokens all labeled "Goblin" — visually indistinguishable in the initiative bar, the canvas outline, screen-reader announcements ("Goblin took 8 damage" — which goblin?), and the conflict-merge UI. Renaming each one was friction the GM mostly skipped. Phase 137 makes auto-numbering the default; the GM gets discriminable tokens for free without any extra clicks.
+
+### Architecture
+- **`src/state/token-numbering.ts`** (new, ~70 lines including docs) — pure helper. No DOM, no state, no I/O. Exported single function plus an internal `splitLabel` helper.
+- **`src/state/preferences.ts`** — adds `autoNumberDuplicateTokens: boolean` to the `Preferences` interface + `DEFAULT_PREFERENCES`. Back-compat: `loadFromStorage` spreads defaults under existing storage, so pre-137 saves load with the default ON.
+- **`src/input/tool-token.ts`** — `createTokenTool(ctx, options?)` signature changed (back-compat — second arg is optional). Hex / square code paths unchanged; auto-number runs only on the alt-stamp branch (fresh drops use the always-unique `Token N` counter).
+- **`src/entries/gm.ts`** —
+  - Wires `prefs.get().autoNumberDuplicateTokens` into `createTokenTool`.
+  - `pasteClipboard`, `pasteClipboardAt`, `duplicateSelection` — all four bulk-creation paths get the same labels-accumulator gate.
+  - `placeLibraryToken` — single-token library drop also gated.
+- **`src/ui/settings-modal-content.ts`** — adds a GM-only "Tokens" subgroup in the Appearance pane with the checkbox + a settings hint explaining the behavior.
+
+### UX details
+- **Manual edits are preserved.** The auto-suffix runs only at drop / paste / duplicate time. A user who manually renames a token to "Goblin 2" then "Boss Goblin" via the editor isn't auto-renamed; their edit sticks. Future drops of "Goblin" will see "Goblin" + "Boss Goblin" as different bases.
+- **Case-insensitive matching, case-preserving output.** "GOBLIN" + "goblin" + "Goblin" all share the same base; the new label preserves the candidate's case ("Goblin 2" if the candidate was "Goblin").
+- **Multi-word bases work.** "Cave Goblin" + "Cave Goblin 4" → next is "Cave Goblin 5".
+- **No gap-filling.** If "Goblin", "Goblin 5" exist, the next is "Goblin 6" (not "Goblin 2"). Predictable; a gap-filling helper would surprise users who deliberately deleted "Goblin 2-4".
+- **Counter never drifts down.** If the GM deletes "Goblin 5" then drops a new "Goblin", they get "Goblin 5" reused. (Helper looks at current canvas state; the deleted token's label is gone.) This matches "next free integer above the existing max" semantics, not "next never-used integer."
+- **Spectator-side ownership unchanged.** The label rename happens before the token-add patch lands; Spectator clients receive the already-suffixed label.
+
+### Tests
+- **+12 unit tests** in `src/state/token-numbering.test.ts` (new): empty existing list returns candidate unchanged; suffixes "2" on first collision; max+1 on multiple collisions; no gap-filling; ignores the candidate's own suffix and uses max+1; case-insensitive base matching; preserves candidate case in output; multi-word bases; non-integer trailing words stay part of the base; non-suffix-stripped prefix matches don't collide; bare-base counts as effective suffix 1.
+- **+2 Playwright specs** in `e2e/token-auto-number.spec.ts` (new): with the pref ON (default), Alt+stamp produces 3 distinct labels (proves the wiring); with the pref OFF, Alt+stamp produces 3 colliding labels (proves the gate works). Synthesizes `pointerdown` with `altKey: true` directly because `Locator.click({modifiers: ['Alt']})` doesn't propagate the modifier to PointerEvent in headless chromium.
+- **All 1462 unit tests + 351 Playwright specs pass** locally.
+
+### Bundle
+- 104.91 / 110 KB initial-load brotli (+0.27 KB for `token-numbering.ts` + the wiring at four call-sites + the settings-modal checkbox + accessor). CSS unchanged. Lazy chunks unchanged.
+
+### Pre-push checklist
+Caught zero issues — full unit suite + full e2e + visual-regression specs + size-limit all green before push.
+
+---
+
 ## [1.11.0] — 2026-05-03 — Door-removal wall preset
 
 Phase 136 — small wall-presets follow-up. Adds the inverse of the v117 "Wooden door (closed)" preset: a one-click way to demote a door wall back to a regular blocking segment.

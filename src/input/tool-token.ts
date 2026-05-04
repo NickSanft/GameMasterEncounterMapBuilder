@@ -4,8 +4,22 @@ import { pointerToWorld } from './context.js';
 import { nid } from '../util/id.js';
 import { nextTokenColor } from '../state/token-colors.js';
 import { worldToCell } from '../state/grid-coords.js';
+import { nextLabelSuffix } from '../state/token-numbering.js';
 
-export function createTokenTool(ctx: InputContext): Tool {
+/**
+ * Phase 137 — optional helpers from the host. `autoNumber()` gates
+ * the alt-stamp auto-suffix behavior on `preferences.autoNumberDuplicateTokens`.
+ * Omitted in tests / minimal callers → defaults to OFF (legacy
+ * stamp behavior, identical to pre-137).
+ */
+export interface TokenToolOptions {
+  autoNumber?: () => boolean;
+}
+
+export function createTokenTool(
+  ctx: InputContext,
+  options: TokenToolOptions = {},
+): Tool {
   const { canvas, renderer, store } = ctx;
 
   function onPointerDown(e: PointerEvent) {
@@ -21,6 +35,13 @@ export function createTokenTool(ctx: InputContext): Tool {
     let newToken;
     if (stampTemplate) {
       newToken = { ...stampTemplate, id: nid(), x: gx, y: gy };
+      // Phase 137 — auto-number alt-stamped duplicates. Fresh
+      // drops use the existing `Token N` counter (always unique);
+      // alt-stamps copy the source label and would collide.
+      if (options.autoNumber?.()) {
+        const existing = store.getState().tokens.map((t) => t.label);
+        newToken.label = nextLabelSuffix(existing, stampTemplate.label);
+      }
     } else {
       const count = store.getState().tokens.length;
       newToken = {

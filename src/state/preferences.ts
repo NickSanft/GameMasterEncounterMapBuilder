@@ -141,6 +141,19 @@ export interface Preferences {
    * group wants the visible pressure on purpose.
    */
   turnTimerSeconds: number;
+  /**
+   * Phase 137 — when true, Alt+stamp / paste / duplicate token
+   * operations auto-suffix duplicates with the next free integer
+   * ("Goblin", "Goblin 2", "Goblin 3"). Fresh drops are unaffected
+   * (the existing `Token N` counter already produces unique labels).
+   * Manual edits in the token editor are also unaffected — the
+   * suffix is applied only at drop / paste / duplicate time.
+   *
+   * Default `true` — reduces the GM friction of "I just dropped 5
+   * goblins, let me rename them all." A GM who prefers stable
+   * stamping behavior can disable it in Settings.
+   */
+  autoNumberDuplicateTokens: boolean;
   // Phase 67 — `playerNameGm`, `playerNameSpectator`,
   // `playerColorGm`, `playerColorSpectator` moved out of Preferences
   // into the dedicated `IdentityPrefsStore` (`state/identity-prefs.ts`).
@@ -174,6 +187,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   voiceTranscription: true,
   onboardingComplete: false,
   turnTimerSeconds: 0,
+  autoNumberDuplicateTokens: true,
 };
 
 export interface PreferencesStore {
