@@ -131,6 +131,51 @@ gaps so the v1.0 cut is genuinely "stable + remote-play-capable."
 
 ---
 
+## [1.22.0] — 2026-05-04 — Initiative-bar pip parity
+
+Phase 147 — second phase of the **spectator UX track**. Adds a colored pip to the initiative bar showing the active token's `color` + `borderColor`. Mounts on both GM and Spectator (the bar element itself is already mounted on both per Phase 69 / 93; this phase upgrades its visual prominence).
+
+### Investigation
+The plan from the v1.18 → v1.28 batch included "Spectator initiative bar parity — verify what the Spectator currently sees of the initiative tracker." Investigation in this phase confirmed:
+
+- **Spectator already sees the initiative bar** (mounted via `mountInitiativeBar(store, 'spectator')` in `src/entries/spectator.ts:345`).
+- **What it shows**: round counter + active token name + initiative value (e.g. "Round 3" / "Goblin (15)").
+- **What it doesn't show**: prev / next turn controls (GM-only), turn timer (GM-only). Both deliberately omitted per Phase 93's design rationale ("Spectator doesn't see the clock — avoids visible time-pressure on players").
+
+So strict "parity" is already there. Phase 147 instead promotes the visual prominence: a colored pip bound to the active token's identity makes "whose turn is it?" instantly recognizable on both views, without requiring the player to scan the canvas for the pulsing ring (Phase 144).
+
+### Added
+- **`.initiative-bar-pip` element** in `src/ui/initiative-bar.ts`. A 1.1rem circle with the active token's `color` as background, `borderColor` (or transparent) as a 2-px border, and a subtle 1-px black drop-shadow ring for separation against any panel background.
+- **`aria-hidden="true"`** so screen readers don't double-announce the visual cue (the active token's name is already announced via the existing label element).
+- **Synced from `linkedToken`** (the token referenced by the active initiative entry). When the entry isn't token-linked (a free-form initiative entry), the pip falls back to neutral gray.
+- **CSS for the pip** in `styles.css`. Inline-block; flex-shrink: 0 to prevent width-collapse on narrow viewports.
+
+### Why this matters
+With the pulse animation from Phase 144 the GM can pick out the active token at a glance, but a Spectator scanning a complex scene can still struggle ("which goblin is up?"). The pip in the bar lets the Spectator match the bar's name to the canvas's pulsing ring (and to the token's badge color) without hunting. Same reasoning as the Phase 87 canvas-outline ARIA names + the Phase 138 condition icons: redundant visual cues make state legible faster.
+
+### Architecture
+- **`src/ui/initiative-bar.ts`** — new `pipEl` span between `roundEl` and `labelEl`. Sync function reads `linkedToken.color` + `linkedToken.borderColor` and writes them as inline styles. No prop changes to `mountInitiativeBar`'s signature; both GM + Spectator entries pick up the new element automatically.
+- **`src/ui/styles.css`** — `.initiative-bar-pip` block. Same theme variable usage as the rest of the bar.
+- **No state changes.** The pip reads existing token fields (color, borderColor) from `state.tokens`; no new persistence.
+
+### UX details
+- **Always shown when an active entry exists.** Even on GM, where Phase 144's pulse already exists. The pip is a small extra cue that costs nothing visually.
+- **Free-form entries get a neutral-gray pip.** Initiative entries that aren't linked to a token (the GM types in "Trap" + initiative 12) still get a pip placeholder — keeping the bar's layout consistent regardless of entry type.
+- **Border-color matters.** Phase 26 team-color borders (red enemy, blue ally, etc.) flow through the pip's border, so a player looking at the bar sees "the active goblin is the one with the red border."
+
+### Tests
+- **+2 Playwright specs** in `e2e/initiative-bar-pip.spec.ts` (new): GM mounts the pip element + `aria-hidden="true"`; Spectator mounts the same element. Pixel-color checks are out of scope; the existing initiative + Phase 69 e2e specs cover the bar's name + round-counter.
+- **No new unit tests** — the sync logic is one if-else block reading existing token fields. Best validated by the e2e + visual feedback during play.
+- **All 1516 unit tests + 369 Playwright specs pass** locally.
+
+### Bundle
+- 110.08 / 120 KB initial-load brotli (+0.02 KB for the pipEl + sync block — barely measurable). CSS 12.76 / 14 KB (+0.02 KB for the `.initiative-bar-pip` rule). Lazy chunks unchanged.
+
+### Pre-push checklist
+Caught zero issues — full unit suite + full e2e + visual-regression specs + size-limit all green before push.
+
+---
+
 ## [1.21.0] — 2026-05-04 — Player ping attribution
 
 Phase 146 — first phase of the **spectator UX track**. Pings (Phase 38) now show a floating sender pill above the ring with the player's name, colored to match the player's identity. Pre-146 pings were anonymous flashes — receivers couldn't tell who pointed at the door. Post-146 they're socially navigable: "Alice pointed there."

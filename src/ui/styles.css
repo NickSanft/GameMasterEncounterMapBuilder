@@ -2138,6 +2138,24 @@ body.reduced-motion *::after {
   font-weight: 700;
 }
 
+/* Phase 147 — colored pip for the active token's color + border.
+ * Helps players visually match the active-name in the bar to the
+ * actual token on the canvas. Visible on both GM and Spectator.
+ */
+.initiative-bar-pip {
+  display: inline-block;
+  width: 1.1rem;
+  height: 1.1rem;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.3);
+  flex-shrink: 0;
+}
+
+.initiative-bar-pip[hidden] {
+  display: none;
+}
+
 .initiative-bar-label {
   appearance: none;
   background: none;

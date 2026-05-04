@@ -43,6 +43,15 @@ export function mountInitiativeBar(
   const roundEl = document.createElement('span');
   roundEl.className = 'initiative-bar-round';
 
+  // Phase 147 — colored pip showing the active token's color +
+  // border. Visible on both GM and Spectator. Helps players (and
+  // the GM scanning the canvas) match the active-name in the bar
+  // to the actual token on the map without having to hunt for the
+  // pulsing ring (Phase 144).
+  const pipEl = document.createElement('span');
+  pipEl.className = 'initiative-bar-pip';
+  pipEl.setAttribute('aria-hidden', 'true');
+
   const labelEl = document.createElement('button');
   labelEl.type = 'button';
   labelEl.className = 'initiative-bar-label';
@@ -97,6 +106,7 @@ export function mountInitiativeBar(
   timerEl.hidden = true;
 
   bar.appendChild(roundEl);
+  bar.appendChild(pipEl);
   bar.appendChild(labelEl);
   bar.appendChild(controls);
   if (viewMode === 'gm') bar.appendChild(timerEl);
@@ -192,6 +202,20 @@ export function mountInitiativeBar(
     const name = linkedToken?.label || active.label || '—';
     labelEl.textContent = `${name}  (${active.value})`;
     labelEl.title = viewMode === 'gm' ? 'Click to open the initiative tracker' : name;
+
+    // Phase 147 — sync the colored pip from the active token's
+    // color + border. When the entry isn't linked to a token (a
+    // free-form initiative entry without a token id), the pip
+    // shows a neutral gray.
+    if (linkedToken) {
+      pipEl.style.background = linkedToken.color;
+      pipEl.style.borderColor = linkedToken.borderColor || 'transparent';
+      pipEl.hidden = false;
+    } else {
+      pipEl.style.background = '#888';
+      pipEl.style.borderColor = 'transparent';
+      pipEl.hidden = false;
+    }
 
     // Phase 93 — sync the active turn key (resets startedAt on
     // change), then refresh the timer slot.
