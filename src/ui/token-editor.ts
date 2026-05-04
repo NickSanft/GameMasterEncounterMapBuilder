@@ -208,35 +208,18 @@ export function mountTokenEditor(opts: TokenEditorOptions): TokenEditorHandle {
       </fieldset>
 
       <fieldset class="aura-block">
-        <legend>Aura</legend>
-        <label class="check">
-          <input type="checkbox" data-field="hasAura" />
-          <span>Show a colored emanation ring (e.g. Bless, Spirit Guardians)</span>
-        </label>
-        <div class="aura-details" data-field="aura-details" hidden>
-          <div class="grid-row">
-            <label>Label
-              <input type="text" data-field="auraLabel" maxlength="24" placeholder="(optional)" />
-            </label>
-            <label>Radius (ft)
-              <input type="number" data-field="auraRadiusFeet" step="5" min="5" max="240" />
-            </label>
-            <label>Color
-              <input type="color" data-field="auraColor" />
-            </label>
-          </div>
-          <label class="check">
-            <input type="checkbox" data-field="auraGmOnly" />
-            <span>GM-only (hide ring from Spectator)</span>
-          </label>
-          <p class="settings-hint">
-            Phase 139 — the ring follows the token as it moves and stacks
-            visually with other tokens' auras. Stores a single aura per
-            token in this cut; the wire format (Token.auras array) already
-            supports multiple, so a future phase can ship a multi-aura
-            authoring UI without breaking the format.
-          </p>
-        </div>
+        <legend>Auras</legend>
+        <div class="aura-list" data-field="aura-list"></div>
+        <button type="button" class="aura-add" data-action="add-aura">
+          + Add aura
+        </button>
+        <p class="settings-hint">
+          Phase 139 / 151 — colored emanation rings centered on this
+          token. Multiple auras stack visually (e.g. Bless 10 ft +
+          Spirit Guardians 15 ft on the same caster). Each ring
+          follows the token as it moves. GM-only auras are hidden
+          from the Spectator canvas.
+        </p>
       </fieldset>
 
       <fieldset class="initiative-mod-block">
@@ -413,12 +396,14 @@ export function mountTokenEditor(opts: TokenEditorOptions): TokenEditorHandle {
     modal.querySelectorAll<HTMLButtonElement>('[data-light-preset]'),
   );
   // Phase 139 — aura section.
-  const hasAuraInput = modal.querySelector<HTMLInputElement>('[data-field="hasAura"]')!;
-  const auraDetails = modal.querySelector<HTMLDivElement>('[data-field="aura-details"]')!;
-  const auraLabelInput = modal.querySelector<HTMLInputElement>('[data-field="auraLabel"]')!;
-  const auraRadiusFeetInput = modal.querySelector<HTMLInputElement>('[data-field="auraRadiusFeet"]')!;
-  const auraColorInput = modal.querySelector<HTMLInputElement>('[data-field="auraColor"]')!;
-  const auraGmOnlyInput = modal.querySelector<HTMLInputElement>('[data-field="auraGmOnly"]')!;
+  // Phase 151 — list-row aura UI (replaces the Phase 139 single-
+  // aura section).
+  const auraListEl = modal.querySelector<HTMLDivElement>(
+    '[data-field="aura-list"]',
+  )!;
+  const auraAddBtn = modal.querySelector<HTMLButtonElement>(
+    '[data-action="add-aura"]',
+  )!;
   const trackHpInput = modal.querySelector<HTMLInputElement>('[data-field="trackHp"]')!;
   const hpFields = modal.querySelector<HTMLDivElement>('[data-field="hp-fields"]')!;
   const hpCurrentInput = modal.querySelector<HTMLInputElement>('[data-field="hpCurrent"]')!;
@@ -692,25 +677,128 @@ export function mountTokenEditor(opts: TokenEditorOptions): TokenEditorHandle {
     }
   }
 
-  // Phase 139 — sync the aura UI from `Token.auras`. The v139 cut
-  // edits the FIRST aura entry only (multi-aura authoring is future
-  // polish; the wire format already supports the array).
+  // Phase 151 — render N rows for the token's auras. Each row
+  // edits an entry in-place; "+ Add aura" appends a new entry.
+  // Each row's "× Remove" button drops the entry by id.
   function syncAuraUI(auras: readonly Aura[]) {
-    const aura = auras[0] ?? null;
-    const enabled = aura !== null;
-    hasAuraInput.checked = enabled;
-    auraDetails.hidden = !enabled;
-    if (enabled && aura) {
-      auraLabelInput.value = aura.label ?? '';
-      auraRadiusFeetInput.value = String(radiusPxToFeet(aura.radius));
-      auraColorInput.value = aura.color || '#7e57c2';
-      auraGmOnlyInput.checked = aura.visibility === 'gm';
-    } else {
-      auraLabelInput.value = '';
-      auraRadiusFeetInput.value = '10';
-      auraColorInput.value = '#7e57c2';
-      auraGmOnlyInput.checked = false;
+    auraListEl.replaceChildren();
+    if (auras.length === 0) {
+      const empty = document.createElement('p');
+      empty.className = 'aura-empty';
+      empty.textContent = 'No auras. Click "+ Add aura" to start.';
+      auraListEl.appendChild(empty);
+      return;
     }
+    for (const aura of auras) {
+      const row = document.createElement('div');
+      row.className = 'aura-row';
+      row.dataset.auraId = aura.id;
+
+      const swatch = document.createElement('span');
+      swatch.className = 'aura-row-swatch';
+      swatch.style.background = aura.color;
+      row.appendChild(swatch);
+
+      const labelInput = document.createElement('input');
+      labelInput.type = 'text';
+      labelInput.maxLength = 24;
+      labelInput.placeholder = 'Label';
+      labelInput.value = aura.label ?? '';
+      labelInput.className = 'aura-row-label';
+      labelInput.addEventListener('change', () => {
+        commitAuraEdit(aura.id, {
+          label: labelInput.value.trim() || undefined,
+        });
+      });
+      row.appendChild(labelInput);
+
+      const radiusInput = document.createElement('input');
+      radiusInput.type = 'number';
+      radiusInput.step = '5';
+      radiusInput.min = '5';
+      radiusInput.max = '240';
+      radiusInput.value = String(radiusPxToFeet(aura.radius));
+      radiusInput.className = 'aura-row-radius';
+      radiusInput.title = 'Radius (ft)';
+      radiusInput.addEventListener('change', () => {
+        const ft = parseInt(radiusInput.value, 10);
+        if (!Number.isFinite(ft) || ft <= 0) {
+          radiusInput.value = String(radiusPxToFeet(aura.radius));
+          return;
+        }
+        commitAuraEdit(aura.id, { radius: radiusFeetToPx(ft) });
+      });
+      row.appendChild(radiusInput);
+
+      const colorInput = document.createElement('input');
+      colorInput.type = 'color';
+      colorInput.value = aura.color;
+      colorInput.className = 'aura-row-color';
+      colorInput.title = 'Aura color';
+      colorInput.addEventListener('change', () => {
+        commitAuraEdit(aura.id, { color: colorInput.value });
+      });
+      row.appendChild(colorInput);
+
+      const gmOnlyLabel = document.createElement('label');
+      gmOnlyLabel.className = 'aura-row-gm-only';
+      gmOnlyLabel.title = 'GM-only — hide from Spectator';
+      const gmOnlyInput = document.createElement('input');
+      gmOnlyInput.type = 'checkbox';
+      gmOnlyInput.checked = aura.visibility === 'gm';
+      gmOnlyInput.addEventListener('change', () => {
+        commitAuraEdit(aura.id, {
+          visibility: gmOnlyInput.checked ? 'gm' : 'shared',
+        });
+      });
+      gmOnlyLabel.appendChild(gmOnlyInput);
+      const gmOnlyText = document.createElement('span');
+      gmOnlyText.textContent = 'GM';
+      gmOnlyLabel.appendChild(gmOnlyText);
+      row.appendChild(gmOnlyLabel);
+
+      const removeBtn = document.createElement('button');
+      removeBtn.type = 'button';
+      removeBtn.className = 'aura-row-remove';
+      removeBtn.textContent = '×';
+      removeBtn.title = 'Remove this aura';
+      removeBtn.setAttribute('aria-label', 'Remove aura');
+      removeBtn.addEventListener('click', () => {
+        const tok = currentToken();
+        if (!tok) return;
+        update({ auras: tok.auras.filter((a) => a.id !== aura.id) });
+        // sync runs via the host's onAfterChange → re-fetch token + re-sync.
+        const after = currentToken();
+        if (after) syncAuraUI(after.auras);
+      });
+      row.appendChild(removeBtn);
+
+      auraListEl.appendChild(row);
+    }
+  }
+
+  /**
+   * Phase 151 — apply a partial change to a single aura by id.
+   * `label: undefined` clears the field (matches the Aura type's
+   * optional-label semantics); other partials replace.
+   */
+  function commitAuraEdit(auraId: ID, changes: Partial<Aura>) {
+    const tok = currentToken();
+    if (!tok) return;
+    const next: Aura[] = tok.auras.map((a) => {
+      if (a.id !== auraId) return a;
+      const merged: Aura = { ...a, ...changes };
+      // Special-case: an explicit `label: undefined` from the
+      // editor means "clear the field" — strip the property.
+      if (Object.prototype.hasOwnProperty.call(changes, 'label')) {
+        if (changes.label === undefined) {
+          delete (merged as { label?: string }).label;
+        }
+      }
+      return merged;
+    });
+    update({ auras: next });
+    syncAuraUI(next);
   }
 
   function syncRotationUI(rotation: number) {
@@ -1214,66 +1302,20 @@ export function mountTokenEditor(opts: TokenEditorOptions): TokenEditorHandle {
     syncLightUI(light);
   });
 
-  // Phase 139 — aura listeners. Edits the FIRST aura entry only;
-  // multi-aura authoring is a future polish.
-  function commitAuraField() {
-    const tok = currentToken();
-    if (!tok || tok.auras.length === 0) return;
-    const radiusFeet = parseInt(auraRadiusFeetInput.value, 10);
-    if (!Number.isFinite(radiusFeet) || radiusFeet <= 0) {
-      syncAuraUI(tok.auras);
-      return;
-    }
-    const next: Aura = {
-      ...tok.auras[0]!,
-      label: auraLabelInput.value.trim() || undefined,
-      radius: radiusFeetToPx(radiusFeet),
-      color: auraColorInput.value,
-      visibility: auraGmOnlyInput.checked ? 'gm' : 'shared',
-    };
-    const auras: Aura[] = [next, ...tok.auras.slice(1)];
-    update({ auras });
-    syncAuraUI(auras);
-  }
-
-  hasAuraInput.addEventListener('change', () => {
+  // Phase 151 — "+ Add aura" appends a default-styled entry. Each
+  // existing row's commit / remove is wired inside `syncAuraUI`.
+  auraAddBtn.addEventListener('click', () => {
     const tok = currentToken();
     if (!tok) return;
-    if (hasAuraInput.checked) {
-      const aura: Aura = {
-        id: nanoNid(),
-        label: undefined,
-        radius: radiusFeetToPx(10),
-        color: '#7e57c2',
-        visibility: 'shared',
-      };
-      const auras = [aura, ...tok.auras];
-      update({ auras });
-      syncAuraUI(auras);
-    } else {
-      // Drop only the first aura (the one this UI manages); preserve
-      // any extras a future multi-aura UI might have added.
-      const auras = tok.auras.slice(1);
-      update({ auras });
-      syncAuraUI(auras);
-    }
-  });
-
-  auraLabelInput.addEventListener('change', commitAuraField);
-  auraRadiusFeetInput.addEventListener('change', commitAuraField);
-  auraColorInput.addEventListener('change', commitAuraField);
-  auraGmOnlyInput.addEventListener('change', commitAuraField);
-  auraLabelInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') {
-      commitAuraField();
-      e.preventDefault();
-    }
-  });
-  auraRadiusFeetInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') {
-      commitAuraField();
-      e.preventDefault();
-    }
+    const aura: Aura = {
+      id: nanoNid(),
+      radius: radiusFeetToPx(10),
+      color: '#7e57c2',
+      visibility: 'shared',
+    };
+    const auras = [...tok.auras, aura];
+    update({ auras });
+    syncAuraUI(auras);
   });
 
   function commitHpField(which: 'current' | 'max') {

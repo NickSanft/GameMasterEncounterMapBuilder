@@ -131,6 +131,60 @@ gaps so the v1.0 cut is genuinely "stable + remote-play-capable."
 
 ---
 
+## [1.26.0] — 2026-05-04 — Multi-aura UI in token editor
+
+Phase 151 — second + final phase of the **authoring track** (closes Track D from the v1.18 → v1.28 plan). Replaces the Phase 139 single-aura editor section with a list-row UI: each row edits one aura entry, "+ Add aura" appends a new entry, "× Remove" drops one. The wire format (`Token.auras: Aura[]`) already supported multiple entries since Phase 139; this phase ships the authoring UI.
+
+### Changed
+- **Aura section in `src/ui/token-editor.ts`** — full rewrite from the Phase 139 single-aura controls. New structure:
+  - `<div class="aura-list">` populated dynamically with one `<div class="aura-row">` per aura entry.
+  - Each row: color swatch + label input + radius input (ft) + color picker + "GM" checkbox + "× Remove" button.
+  - `<button class="aura-add">+ Add aura</button>` appends a new entry with default styling (10 ft radius, purple #7e57c2, shared visibility, no label).
+  - Per-row inputs commit-on-change via the new `commitAuraEdit(auraId, partial)` helper.
+
+### Added
+- **`commitAuraEdit(auraId, changes)`** — partial-update helper that finds the matching aura by id and applies the changes immutably. Special-cases `label: undefined` to delete the property (matches the Aura type's optional-label semantics).
+- **CSS for `.aura-list`, `.aura-empty`, `.aura-row*`, `.aura-add`** in `styles.css`. Flex-row layout per entry; remove button highlights red on hover.
+
+### Removed
+- The old `hasAura` checkbox, `auraDetails` collapsible, `auraLabel` / `auraRadiusFeet` / `auraColor` / `auraGmOnly` field names + their commit handler. The new UI subsumes their functionality.
+
+### Why this matters
+A 7th-level Cleric concentrating on Spirit Guardians AND benefiting from a party Bless can finally be modeled cleanly in the editor. Pre-151 the GM had to either (a) edit only the first aura and lose visual representation of the second, or (b) hand-edit JSON.
+
+### Architecture
+- **No state-model changes.** `Token.auras: Aura[]` from Phase 139 already supports multi-entry; the deserializer's defensive parser already validates each entry independently.
+- **No new patches.** The existing `token-update` patch carries the full new auras array.
+- **Render unchanged.** Phase 139's `drawTokenAuras` already iterates the array; multi-aura render works without changes.
+- **`syncAuraUI(auras)` rebuilds the DOM.** Called on editor open + after every commit. The list is small enough (typical 0–5 entries) that re-rendering on every change is cheaper than diffing.
+
+### UX details
+- **Empty state.** When the token has no auras, the list shows a "No auras. Click + Add aura to start." italic hint.
+- **No drag-to-reorder.** The list renders in store order (insertion order). Future polish could add drag-to-reorder; out of scope for v151.
+- **No aura presets.** Bless 10ft / Spirit Guardians 15ft would be nice as one-click chips, similar to Phase 117 wall-presets. Out of scope for v151.
+- **Per-aura wall-clipping toggle.** Phase 139 noted this as future polish; still deferred — auras render the full circle regardless of walls.
+- **GM-only checkbox per row.** Allows mixing visible + GM-only auras on the same token (e.g. an enemy with a visible "Hold Person 30ft" aura and a hidden "Detect Magic" aura the GM tracks).
+
+### Tests
+- **+4 Playwright specs** in `e2e/token-aura.spec.ts` (replacing the Phase 139 specs that exercised the old single-aura UI):
+  - Empty state shows "No auras." hint;
+  - Add aura appends a row + values round-trip across editor close+reopen;
+  - Add aura twice creates two stacked rows;
+  - Row × Remove drops the entry.
+- **No new unit tests** — the `commitAuraEdit` helper is straightforward partial-update glue; the underlying Aura schema + deserializer are covered by Phase 139 tests.
+- **All 1533 unit tests + 378 Playwright specs pass** locally.
+
+### Bundle
+- 111.53 / 120 KB initial-load brotli (+0.25 KB for the list-row rendering + commit helper). CSS 12.96 / 14 KB (+0.11 KB for the aura-row styles). Lazy chunks 19.27 / 20 KB (slight increase from the new UI code; still comfortable).
+
+### Pre-push checklist
+Caught zero issues — full unit suite + full e2e + visual-regression specs + size-limit all green before push.
+
+### Authoring track complete
+Phase 150 (tile→wall coupling) + 151 (multi-aura UI) close Track D. Next: Track E (discovery) — Phase 152's "What's new" badge.
+
+---
+
 ## [1.25.0] — 2026-05-04 — Tile-paint → block-wall coupling
 
 Phase 150 — first phase of the **authoring track** (Track D from the v1.18 → v1.28 plan). Optional preference: when ON, painting a tile of kind `'wall'` with the Phase 142 tile-paint tool atomically creates a 1×1 Phase 112 block wall on the same cell. Erasing the tile removes the matching wall.
