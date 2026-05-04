@@ -34,6 +34,15 @@ export interface ImageLoader {
    * `<img>` elements per visible animated token.
    */
   getUrl(id: ID): string | null;
+  /**
+   * Phase 145 — current load state for `id`. Returns `'unknown'` when
+   * the id has never been requested (so callers can distinguish "not
+   * loading yet" from "loading"); the act of querying does NOT
+   * trigger a load (only `get()` does that). Used by the
+   * scene-loading-overlay to show / hide the spinner without forcing
+   * a fetch on a never-touched image id.
+   */
+  getStatus(id: ID): 'unknown' | 'loading' | 'loaded' | 'error';
   invalidate(id: ID): void;
 }
 
@@ -77,6 +86,10 @@ export function createImageLoader(onReady: () => void): ImageLoader {
     },
     getUrl(id: ID): string | null {
       return cache.get(id)?.url ?? null;
+    },
+    getStatus(id: ID): 'unknown' | 'loading' | 'loaded' | 'error' {
+      const entry = cache.get(id);
+      return entry ? entry.status : 'unknown';
     },
     invalidate(id: ID) {
       cache.delete(id);

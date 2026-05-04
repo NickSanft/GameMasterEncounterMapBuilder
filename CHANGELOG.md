@@ -131,6 +131,48 @@ gaps so the v1.0 cut is genuinely "stable + remote-play-capable."
 
 ---
 
+## [1.20.0] — 2026-05-04 — Scene-switch loading overlay
+
+Phase 145 — third + final phase of the **visual polish trio**. During the ~50-200ms gap between a scene switch (or a fresh background-image upload, or an incoming sync patch on the spectator side) and the IDB-fetched image landing, the canvas painted the theme's fallback color slab. Pre-145 that looked like a "did the app crash?" flash. Phase 145 covers that gap with a thin dimmed overlay + small CSS spinner.
+
+### Added
+- **`shouldShowOverlay(currentBgImageId, loaderStatus)`** in new `src/ui/scene-loading-overlay.ts` — pure visibility computer. Visible iff (a) a background image is set AND (b) the loader's status for that id is `'loading'` or `'unknown'` (the act of querying status doesn't trigger a fetch — only `loader.get()` does, but the renderer calls `get()` every frame, so `'unknown'` flips to `'loading'` within one frame).
+- **`mountSceneLoadingOverlay(container, imageLoader)`** — DOM mount. Returns a `{ update(currentBgImageId), destroy() }` handle. The DOM element is `position: absolute, inset: 0` over the canvas with `pointer-events: none` so it never intercepts user input. Uses `role="status"` + `aria-label="Loading scene background…"` for screen readers.
+- **`ImageLoader.getStatus(id)`** — new method on the loader. Returns `'unknown' | 'loading' | 'loaded' | 'error'`. Critical: querying status does NOT trigger a load (only `get()` does), so the overlay's polling doesn't kick off speculative fetches for ids the renderer hasn't asked about.
+- **CSS for `.scene-loading-overlay` + `.scene-loading-spinner`** in `styles.css`. Spinner is a 36 px CSS-only ring with a 0.9s linear infinite rotation. Respects `prefers-reduced-motion: reduce` (animation stops, overlay still hides the fallback slab).
+- **Mounted on both GM + Spectator entries.** Both store-subscribe + `imageLoader`'s `onReady` callback drive `update()`: the subscribe shows the overlay when a fresh background id appears in state; the onReady hides it when the actual image lands.
+
+### Why this matters
+On a slow IDB hit (or a fresh upload of a large background image that hasn't been cached), the user sees a brief gray slab before the map paints — long enough to feel broken even when nothing is. The overlay covers that gap with a clear "loading" affordance and disappears as soon as the image is ready. It also doubles as feedback during a scene SWITCH (Phase 75 / 121): the user knows their click registered even if the new scene's IDB fetch takes 100ms.
+
+### Architecture
+- **`src/images/loader.ts`** — adds `getStatus(id)` to the `ImageLoader` interface + implementation. `'unknown'` for never-requested ids; otherwise the cached entry's `status` field. No behavioral change to existing methods.
+- **`src/ui/scene-loading-overlay.ts`** (new, ~80 lines) — pure helper + DOM mount. Public exports: `shouldShowOverlay` (test-friendly visibility computer) + `mountSceneLoadingOverlay` (the DOM-attaching factory).
+- **`src/ui/styles.css`** — new `.scene-loading-overlay` + `.scene-loading-spinner` blocks. ~+0.13 KB CSS brotli.
+- **`src/entries/gm.ts`** — wires the loader's `onReady` callback to call `sceneLoadingOverlayUpdate` (a captured ref initialized after the overlay mounts). The store-subscribe block also calls update on every state change.
+- **`src/entries/spectator.ts`** — same wiring as `gm.ts`.
+
+### UX details
+- **Pointer-events: none.** The overlay never blocks click / drag / hover on the canvas underneath. The GM can still drag a token / draw / etc. while the background loads (the overlay is purely cosmetic).
+- **Reduced-motion respect.** The spinner stops rotating but the overlay still shows; the fallback slab is hidden either way. Same `@media (prefers-reduced-motion: reduce)` query the rest of the app uses.
+- **Errored images.** When the loader hits an error (e.g. an invalid blob in IDB), the overlay HIDES (`shouldShowOverlay` returns false for `'error'`). Better to fall through to the canvas's fallback fill than show a perpetual spinner.
+
+### Tests
+- **+5 unit tests** in `src/ui/scene-loading-overlay.test.ts` (new): no-image cases (all 4 statuses) → false; loaded → false; error → false; loading → true; unknown → true.
+- **+3 Playwright specs** in `e2e/scene-loading-overlay.spec.ts` (new): GM mounts overlay with correct ARIA role; overlay hidden on a fresh GM boot with no background; Spectator mounts its own overlay too.
+- **All 1513 unit tests + 367 Playwright specs pass** locally.
+
+### Bundle
+- 109.93 / 120 KB initial-load brotli (+0.34 KB for the helper + ImageLoader extension + GM+Spectator wiring). CSS 12.74 / 14 KB (+0.12 KB for the overlay rules). Lazy chunks unchanged.
+
+### Pre-push checklist
+Caught zero issues — full unit suite + full e2e + visual-regression specs + size-limit all green before push.
+
+### Visual polish trio complete
+Phases 143 (z-order) + 144 (active-turn pulse) + 145 (scene-load overlay) close the visual polish track from the v1.18 → v1.28 plan. Three small polish wins, each shipping its own visual fix without coupling to the others. Next: Track B (spectator UX).
+
+---
+
 ## [1.19.0] — 2026-05-04 — Active-turn ring pulse
 
 Phase 144 — second phase of the **visual polish trio**. The active initiative token's outer ring now pulses (sin-based opacity, period 1.6s, alpha 0.55 → 1.0) while it's the active turn. Respects `prefers-reduced-motion` (Phase 50): the ring renders at full opacity without animation when the user has motion sensitivity preferences set. Same wiring path Phase 78's fog-fade-tracker uses.

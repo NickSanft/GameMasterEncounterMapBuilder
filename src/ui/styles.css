@@ -461,6 +461,58 @@ body.view {
   background: var(--hover-overlay);
 }
 
+/* Phase 145 — scene-switch loading overlay. Absolutely-positioned
+ * over the canvas while a background image is loading. Spinner is
+ * pure CSS (no asset bundle). Respects `prefers-reduced-motion` —
+ * the spinner stops rotating but the overlay still hides the
+ * fallback-color flash.
+ */
+.scene-loading-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  background: rgba(20, 20, 30, 0.55);
+  pointer-events: none;
+  z-index: 5;
+  color: #fff;
+  font-family: inherit;
+  font-size: 0.85rem;
+}
+
+.scene-loading-overlay[hidden] {
+  display: none;
+}
+
+.scene-loading-spinner {
+  width: 36px;
+  height: 36px;
+  border: 3px solid rgba(255, 255, 255, 0.25);
+  border-top-color: #ffd966;
+  border-radius: 50%;
+  animation: scene-loading-spin 0.9s linear infinite;
+}
+
+.scene-loading-label {
+  letter-spacing: 0.04em;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+@keyframes scene-loading-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scene-loading-spinner {
+    animation: none;
+  }
+}
+
 /* Fog settings panel — to the right of the toolbar when fog tool is active */
 .fog-settings,
 .aoe-settings,

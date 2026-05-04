@@ -28,6 +28,7 @@ import { mountSettingsModal } from '../ui/settings-modal.js';
 import { mountZoomControls } from '../ui/zoom-controls.js';
 import { mountShortcutOverlay } from '../ui/shortcut-overlay.js';
 import { mountInitiativeBar } from '../ui/initiative-bar.js';
+import { mountSceneLoadingOverlay } from '../ui/scene-loading-overlay.js';
 import { mountDiagnosticsOverlay } from '../ui/diagnostics-overlay.js';
 import { mountHelpOverlay } from '../ui/help-overlay.js';
 import { mountDicePanel } from '../ui/dice-panel.js';
@@ -122,7 +123,14 @@ void loadPersistedState().then((persisted) => {
   if (persisted && !remoteStateReceived) store.loadState(persisted);
 });
 
-const imageLoader = createImageLoader(() => renderer.requestRender());
+// Phase 145 — scene-switch loading overlay. Same wiring as gm.ts —
+// the loader's onReady callback hides it; store.subscribe shows it
+// when a new background id appears.
+let sceneLoadingOverlayUpdate: ((id: string | null) => void) | null = null;
+const imageLoader = createImageLoader(() => {
+  renderer.requestRender();
+  sceneLoadingOverlayUpdate?.(store.getState().background.imageId);
+});
 const pingManager = createPingManager(() => renderer.requestRender());
 const damageFxManager = createDamageFxManager(() => renderer.requestRender());
 // Phase 78 — fog-reveal fade-in tracker. Diffs the fog buffer on
@@ -335,6 +343,13 @@ const settingsModal = mountSettingsModal({
 
 const shortcutOverlay = mountShortcutOverlay('spectator');
 mountInitiativeBar(store, 'spectator');
+// Phase 145 — scene-switch loading overlay.
+const sceneLoadingOverlay = mountSceneLoadingOverlay(
+  document.body,
+  imageLoader,
+);
+sceneLoadingOverlayUpdate = sceneLoadingOverlay.update;
+sceneLoadingOverlay.update(store.getState().background.imageId);
 mountHelpOverlay('spectator');
 const dicePanel = mountDicePanel({
   viewMode: 'spectator',
@@ -578,6 +593,10 @@ store.subscribe((patch) => {
   updateCanvasLabelDebounced();
   refreshLos();
   refreshFogRects();
+  // Phase 145 — re-evaluate the scene-loading overlay so a fresh
+  // background id from a sync patch shows the spinner until the
+  // image lands.
+  sceneLoadingOverlayUpdate?.(store.getState().background.imageId);
   // Phase 128 — keep the owned-token popover's HP / condition state
   // in sync after the GM-authoritative token-update round-trips back.
   ownedTokenPopover.refresh();

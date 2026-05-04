@@ -89,6 +89,7 @@ import { mountCanvasOutline } from '../ui/canvas-outline.js';
 import { mountFogSettings } from '../ui/fog-settings.js';
 import { mountWallsSettings } from '../ui/walls-settings.js';
 import { mountTilePaintSettings } from '../ui/tile-paint-settings.js';
+import { mountSceneLoadingOverlay } from '../ui/scene-loading-overlay.js';
 import { mountSettingsModal } from '../ui/settings-modal.js';
 import { mountZoomControls } from '../ui/zoom-controls.js';
 import { createSyncChannel } from '../sync/channel.js';
@@ -303,7 +304,17 @@ const fogHoverRef = createFogHoverRef();
 
 const panZoomRef: { handle: PanZoomHandle | null } = { handle: null };
 
-const imageLoader = createImageLoader(() => renderer.requestRender());
+// Phase 145 — scene-switch loading overlay. The handle is wired
+// after `imageLoader` is built (the loader needs to exist first)
+// + after `store` is in scope (so we can subscribe).
+let sceneLoadingOverlayUpdate: ((id: string | null) => void) | null = null;
+const imageLoader = createImageLoader(() => {
+  renderer.requestRender();
+  // The image-loader's onReady callback fires when an image
+  // finishes loading. Re-evaluate the overlay's visibility so it
+  // hides as soon as the background lands.
+  sceneLoadingOverlayUpdate?.(store.getState().background.imageId);
+});
 const pingManager = createPingManager(() => renderer.requestRender());
 const damageFxManager = createDamageFxManager(() => renderer.requestRender());
 // Phase 78 — fog-reveal fade-in tracker. Updated on every state
@@ -646,6 +657,16 @@ toolManager.onChange((id) => {
 });
 
 mountFogSettings(document.body, fogOptionsRef, toolManager);
+// Phase 145 — scene-switch loading overlay. Mounted on body so it
+// can absolutely-position over the canvas. Initial update comes
+// from the very next store.subscribe tick + the imageLoader's
+// onReady callback hooked above.
+const sceneLoadingOverlay = mountSceneLoadingOverlay(
+  document.body,
+  imageLoader,
+);
+sceneLoadingOverlayUpdate = sceneLoadingOverlay.update;
+sceneLoadingOverlay.update(store.getState().background.imageId);
 mountTilePaintSettings(document.body, tilePaintOptionsRef, toolManager, store);
 // Phase 112 — Walls tool mode toggle (Lines / Block) shown only
 // while the Walls tool is active.
@@ -2476,6 +2497,12 @@ if (consumeDirtyFlag()) {
 store.subscribe(() => {
   markDirty();
   localLastModified = Date.now();
+  // Phase 145 — re-evaluate the scene-loading overlay on every state
+  // change (covers scene switch, fresh background upload, session
+  // import, etc.). The image-loader's onReady callback hides it
+  // when the image actually finishes; this subscribe shows it as
+  // soon as a new background id appears.
+  sceneLoadingOverlay.update(store.getState().background.imageId);
 });
 
 function sendCameraIfBroadcasting() {
