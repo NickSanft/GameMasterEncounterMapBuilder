@@ -21,7 +21,7 @@
 import type { ID, SessionState, Token, Wall } from './types.js';
 import type { LosViewer } from '../render/fog-worker-client.js';
 import type { LosPoint, LosSegment } from './los.js';
-import { rasterizeVisibility } from './los.js';
+import { rasterizeVisibilityForGrid } from './visibility-rasterize.js';
 import { wallToSegments, wallBlocksSightEffective } from './walls.js';
 
 /**
@@ -157,11 +157,23 @@ export function spectatorEffectiveFog(
   lightPolygons: readonly (readonly LosPoint[])[] | null = null,
 ): Uint8Array {
   if (!losOn || !polygons || polygons.length === 0) return state.fog;
-  const { cols, rows, cellSize } = state.grid;
-  const visMask = rasterizeVisibility(polygons, cols, rows, cellSize);
+  const { cols, rows, cellSize, gridShape } = state.grid;
+  const visMask = rasterizeVisibilityForGrid(
+    polygons,
+    cols,
+    rows,
+    cellSize,
+    gridShape,
+  );
   const lightMask =
     lightPolygons && lightPolygons.length > 0
-      ? rasterizeVisibility(lightPolygons, cols, rows, cellSize)
+      ? rasterizeVisibilityForGrid(
+          lightPolygons,
+          cols,
+          rows,
+          cellSize,
+          gridShape,
+        )
       : null;
   const out = new Uint8Array(state.fog.length);
   for (let i = 0; i < state.fog.length; i++) {

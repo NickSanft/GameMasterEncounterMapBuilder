@@ -19,7 +19,8 @@
  */
 
 import type { LosPoint } from './los.js';
-import { rasterizeVisibility } from './los.js';
+import { rasterizeVisibilityForGrid } from './visibility-rasterize.js';
+import type { GridShape } from './types.js';
 
 export interface FogCell {
   x: number;
@@ -31,6 +32,13 @@ export interface AutoRevealGrid {
   cols: number;
   rows: number;
   cellSize: number;
+  /**
+   * Phase 135 — `'hex'` switches the rasterizer to hex-aware mode
+   * (visible cells form hex-shaped halos matching the manual fog
+   * tools). Optional + back-compat — pre-124 callers that don't set
+   * `gridShape` get the legacy rect-cell rasterization.
+   */
+  gridShape?: GridShape;
 }
 
 /**
@@ -49,10 +57,16 @@ export function cellsToReveal(
   grid: AutoRevealGrid,
 ): FogCell[] {
   if (!polygons || polygons.length === 0) return [];
-  const { cols, rows, cellSize } = grid;
+  const { cols, rows, cellSize, gridShape } = grid;
   if (fog.length !== cols * rows) return [];
 
-  const mask = rasterizeVisibility(polygons, cols, rows, cellSize);
+  const mask = rasterizeVisibilityForGrid(
+    polygons,
+    cols,
+    rows,
+    cellSize,
+    gridShape,
+  );
   const out: FogCell[] = [];
   for (let i = 0; i < mask.length; i++) {
     if (mask[i] === 1 && fog[i] === 0) {

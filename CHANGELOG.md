@@ -131,6 +131,54 @@ gaps so the v1.0 cut is genuinely "stable + remote-play-capable."
 
 ---
 
+## [1.10.0] — 2026-05-03 — Hex-aware auto-reveal · **closes the v1.7 trilogy** 🎉
+
+Phase 135 — third and final phase of the **hex polish trilogy** that closes the three deferrals called out in v1.7.0. Manual fog (v1.8 brush, v1.9 rectangle) was already hex-aware; v1.10 makes the LoS-driven auto-reveal pipeline hex-aware too.
+
+### Added
+- **Hex-aware visibility rasterizer.** `cellsToReveal` (Phase 58) and `spectatorEffectiveFog` (Phase 55) both ran their visibility polygons through `rasterizeVisibility`, which marked rect cells whose CENTERS fell inside any polygon. In hex mode that produced visible stair-stepping along curved viewer perimeters because the rect-cell center test had no awareness of hex tessellation. v1.10 routes both call-sites through a new `rasterizeVisibilityForGrid` dispatcher: hex mode enumerates HEXES, tests each hex's center against the polygons, and on a hit marks every rect cell its polygon overlaps (via `rectCellsOverlappingHex` from Phase 132). Visible cells now form hex-shaped halos that match the manual fog tools.
+- **`rasterizeVisibilityForGrid(polygons, cols, rows, cellSize, gridShape)`** in new `src/state/visibility-rasterize.ts`. Square mode (or `undefined` for pre-Phase-124 saves) passes through to the legacy `rasterizeVisibility` unchanged. Hex mode runs the hex enumeration. Same return type (`Uint8Array(cols * rows)`) so the rest of the auto-reveal / spectator-fog pipeline is unmodified.
+- **`AutoRevealGrid.gridShape`** — optional new field on the `AutoRevealGrid` interface (a subset of `GridConfig` for testability). Back-compat: omitting it preserves Phase 58's rect-cell behavior. The single existing call-site in `gm.ts` passes `state.grid` directly, which already carries the field.
+
+### Why this matters
+The v1.7.0 entry called out auto-reveal as the largest documented hex deferral: *"Auto-reveal (Phase 56) is unchanged. It uses the visibility polygon rasterizer which paints rectangular fog cells whose centers fall inside the polygon. Token positions feed the polygon at hex world centers (Phase 130), so auto-reveal works correctly without changes — but it paints rect cells, not hex cells. The visual fog edge in hex mode still has rect-cell stair-stepping along curved viewer perimeters."* Phase 135 closes that deferral. With v1.10 the four hex-rules-game pillars (distance, snap, walls, manual fog) AND the LoS-driven systems (auto-reveal, spectator effective fog with viewer + light masks) all paint visibly hex-shaped patterns. End-to-end hex semantics for everything observable through the fog channel.
+
+### Architecture
+- **`src/state/visibility-rasterize.ts`** (new, ~70 lines) — main-thread-only dispatcher. Imports `pointInPolygon` + `rasterizeVisibility` from `los.js` AND `hexCenter` + `rectCellsOverlappingHex` from `hex-geometry.js`. The hex branch enumerates `(col, row) ∈ [0, cols) × [0, rows)`, tests `hexCenter(col, row, cellSize)` against polygons, marks every rect cell that overlaps the visible hex.
+  - **Why a wrapper module instead of an `if` inside `rasterizeVisibility`?** `los.ts` is intentionally import-free — it bundles into the fog-worker (which has no DOM lib + no hex-geometry deps). Adding a hex import to `los.ts` would have either pulled `hex-geometry.ts` into the worker bundle (with its `CanvasRenderingContext2D`-typed `pathHex` signature that doesn't exist in the WebWorker lib) or broken the worker typecheck. The wrapper module preserves both invariants.
+- **`src/state/auto-reveal.ts`** —
+  - `AutoRevealGrid` gains optional `gridShape?: GridShape`. Back-compat default: omitting it = legacy rect rasterization.
+  - `cellsToReveal` reads `grid.gridShape` and passes it to `rasterizeVisibilityForGrid`. Otherwise unchanged.
+- **`src/state/los-compose.ts`** — `spectatorEffectiveFog` reads `state.grid.gridShape` and passes it to both rasterizer calls (viewer mask + light mask). The rest of the AND-mask logic is unchanged; the lighting + viewer composition still works the same way, just with hex-shaped masks now.
+- **No fog-worker changes.** The worker continues to compute visibility polygons; it never rasterizes. Rasterization stays on the main thread where the hex helpers are available.
+- **No changes to `src/state/los.ts`** — the original `rasterizeVisibility` is retained unchanged + still exported for the worker / square-mode path / call-sites that don't yet route through the dispatcher.
+
+### UX details
+- **The fog buffer stays rectangular.** No wire-format change; spectator clients on older builds still receive a `Uint8Array(cols * rows)` and render it correctly. A truly hex-grain buffer is a v2.0 wire-format change as documented in v1.7.0.
+- **Performance.** Hex-mode rasterization is O(rows × cols × polygons) — the same big-O as square mode, with a small per-cell constant overhead from `hexCenter` + the per-overlap loop. For the default 30 × 20 grid + a single viewer that's 600 hex tests + 600 × ~3 rect-cell marks ≈ 2400 ops, sub-millisecond. The fog-worker path (which doesn't run in hex mode) is unaffected.
+- **Composition with manual reveal still one-way.** Auto-reveal can only flip cells from hidden → revealed; the GM remains the authority for hiding. Same one-way semantic Phase 58 introduced; just the visible halo shape changes.
+
+### Tests
+- **+7 unit tests** in `src/state/visibility-rasterize.test.ts` (new): square mode delegates to rect rasterizer (cell centers in polygon); square mode is the default when `gridShape` undefined; empty polygon list returns all-zeros mask in both modes; hex mode marks cells overlapping a hex whose center is in a polygon; hex mode marks ≥ square mode for a polygon wider than 1 hex; hex mask preserves rect-buffer wire format (`cols * rows` size); hex mode skips hexes whose center is outside every polygon.
+- **+1 Playwright spec** in `e2e/hex-auto-reveal.spec.ts` (new): hex grid + LoS + auto-reveal preferences → drop a viewer token → fog flips. Smoke test for the wiring; the unit tests cover the rasterizer behavior exhaustively.
+  - Uses Phase 86 Tab keyboard navigation to focus the dropped token + the Phase 86 `e` shortcut to open the editor. Avoids the v1.5 hex-snap quirk where the token's world center lands at the hex center, not the original click point — a follow-up click at the original coords might miss the token's hit area.
+- **All 1448 unit tests + 347 Playwright specs pass** locally.
+
+### Bundle
+- 104.7 / 110 KB initial-load brotli (+0.08 KB for the dispatcher wrapper + the call-site changes; the heavy hex helpers were already in the initial bundle from v1.4 → v1.9). Lazy chunks +0.1 KB. CSS unchanged.
+
+### Pre-push checklist
+Caught zero issues — full unit suite + full e2e + visual-regression specs + size-limit all green before push.
+
+### What this closes
+The v1.0.0 CHANGELOG documented:
+
+> Hex grid is cosmetic in v1.0. Tokens still snap to the underlying rectangular cellSize × cellSize grid; walls / fog / distance helpers all operate on the square grid.
+
+The v1.7.0 entry then enumerated four hex-aware tracks (distance, snap, walls, manual fog reveal) and listed three remaining deferrals: hex auto-reveal, hex fog rectangle mode, hex multi-hex brush. v1.8 closed the brush deferral. v1.9 closed the rectangle deferral. v1.10 closes the auto-reveal deferral. **The "hex grid is cosmetic" caveat is now fully retired** — every fog-related pipeline (manual freehand brush, manual rectangle, manual hide, LoS-driven auto-reveal, spectator effective-fog composition) paints visibly hex-shaped patterns when the grid is hex.
+
+---
+
 ## [1.9.0] — 2026-05-03 — Hex-aware fog rectangle mode
 
 Phase 134 — second phase of the **hex polish trilogy**. v1.8 made the freehand brush hex-aware; v1.9 makes the rectangle shape behave like an actual hex selection rather than a rect AABB rendered in the rect coord space.
