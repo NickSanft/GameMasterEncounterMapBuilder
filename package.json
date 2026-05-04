@@ -28,7 +28,7 @@
         "!dist/assets/remote-play-modal-content-*.js",
         "!dist/assets/dice-animation-*.js"
       ],
-      "limit": "110 KB"
+      "limit": "120 KB"
     },
     {
       "name": "JavaScript (lazy chunks, brotli)",

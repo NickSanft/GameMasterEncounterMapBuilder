@@ -1057,6 +1057,82 @@ mountSessionMenu(document.body, {
       announcer.announce('Failed to import session.', 'assertive');
     }
   },
+  // Phase 141 — Universal VTT import. Lazy-imports the parser
+  // module so the (~3 KB) parser doesn't ship in the initial bundle
+  // for users who never use the feature.
+  onUvttImport: async (file) => {
+    try {
+      const text = await file.text();
+      let raw: unknown;
+      try {
+        raw = JSON.parse(text);
+      } catch {
+        window.alert('That file is not valid JSON. Expected a .dd2vtt or .uvtt file.');
+        announcer.announce('UVTT import failed: not valid JSON.', 'assertive');
+        return;
+      }
+      const { parseUvtt, dataUrlToBlob, gridUpdateFromScene } = await import(
+        '../state/uvtt-import.js'
+      );
+      const scene = parseUvtt(raw);
+      const summary = [
+        `Background image: ${scene.background.imageDataUrl ? 'yes' : 'no'}`,
+        `Walls: ${scene.stats.wallSegments} segments`,
+        `Doors: ${scene.stats.portals}`,
+        `Lights: ${scene.stats.skippedLights} skipped (not imported in this version)`,
+        `Grid: ${scene.grid.cols} × ${scene.grid.rows} @ ${scene.grid.cellSize} px/cell`,
+      ];
+      if (scene.warnings.length > 0) {
+        summary.push('', 'Warnings:');
+        for (const w of scene.warnings) summary.push(`- ${w}`);
+      }
+      summary.push('', 'Import? Walls + grid + background will replace any current values.');
+      const ok = window.confirm(summary.join('\n'));
+      if (!ok) {
+        announcer.announce('UVTT import cancelled.');
+        return;
+      }
+      // Background — write blob to IDB if present, then patch.
+      if (scene.background.imageDataUrl) {
+        const { blob, mimeType } = dataUrlToBlob(scene.background.imageDataUrl);
+        const imageId = await putImage(blob, mimeType);
+        imageLoader.invalidate(imageId);
+        const w = scene.background.nativeImageWidth ?? scene.grid.cols * scene.grid.cellSize;
+        const h = scene.background.nativeImageHeight ?? scene.grid.rows * scene.grid.cellSize;
+        store.applyPatch({
+          kind: 'background-update',
+          changes: {
+            imageId,
+            offsetX: 0,
+            offsetY: 0,
+            scaleX: (scene.grid.cols * scene.grid.cellSize) / w,
+            scaleY: (scene.grid.rows * scene.grid.cellSize) / h,
+            rotation: 0,
+            flipX: false,
+            flipY: false,
+          },
+        });
+      }
+      // Grid update (cols / rows / cellSize).
+      const gridUpdate = gridUpdateFromScene(scene, store.getState().grid);
+      store.applyPatch({ kind: 'grid-update', changes: gridUpdate });
+      // Walls — batched to a single render pass.
+      store.batch(() => {
+        // Clear any existing walls so the import is a clean state.
+        store.applyPatch({ kind: 'walls-clear' });
+        for (const wall of scene.walls) {
+          store.applyPatch({ kind: 'wall-add', wall });
+        }
+      });
+      announcer.announce(
+        `UVTT import complete: ${scene.stats.wallSegments} walls + ${scene.stats.portals} doors.`,
+      );
+    } catch (err) {
+      console.error('[gm] UVTT import failed', err);
+      window.alert('UVTT import failed. See console for details.');
+      announcer.announce('UVTT import failed.', 'assertive');
+    }
+  },
   onSettings: () => settingsModal.open(),
   onToggleNotes: () => notesPanel.toggle(),
   // Phase 94 — combat log panel toggle.

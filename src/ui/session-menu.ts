@@ -5,6 +5,13 @@ export interface SessionMenuActions {
   onExport(): void | Promise<void>;
   onExportImage(): void | Promise<void>;
   onImport(file: File): void | Promise<void>;
+  /**
+   * Phase 141 — import a Universal VTT (.dd2vtt / .uvtt) file.
+   * Optional; the menu hides the button when the caller doesn't
+   * wire it. Takes the raw File so the host can handle parse +
+   * IDB + state-patch flow itself.
+   */
+  onUvttImport?: (file: File) => void | Promise<void>;
   onSettings(): void;
   onToggleNotes(): void;
   onShortcuts(): void;
@@ -95,6 +102,31 @@ export function mountSessionMenu(
     jsonInput.value = '';
     if (file) await actions.onImport(file);
   });
+
+  // Phase 141 — Universal VTT import button. Mounted only when the
+  // host wires the handler; same opt-in pattern as Remote play +
+  // Permissions.
+  const uvttBtn = actions.onUvttImport
+    ? createButton(
+        'Import VTT…',
+        'Import a Dungeondraft / Foundry .dd2vtt or .uvtt file (background + walls + doors)',
+      )
+    : null;
+  const uvttInput = actions.onUvttImport
+    ? createFileInput('.dd2vtt,.uvtt,application/json')
+    : null;
+  if (uvttBtn && uvttInput && actions.onUvttImport) {
+    const handler = actions.onUvttImport;
+    uvttBtn.addEventListener('click', () => {
+      uvttInput.click();
+      uvttBtn.blur();
+    });
+    uvttInput.addEventListener('change', async () => {
+      const file = uvttInput.files?.[0];
+      uvttInput.value = '';
+      if (file) await handler(file);
+    });
+  }
 
   const newBtn = createButton('New Session', 'Clear all tokens, fog, and background');
   newBtn.addEventListener('click', () => {
@@ -247,6 +279,7 @@ export function mountSessionMenu(
   menu.appendChild(exportBtn);
   menu.appendChild(exportImageBtn);
   menu.appendChild(importBtn);
+  if (uvttBtn) menu.appendChild(uvttBtn);
   menu.appendChild(notesBtn);
   if (combatLogBtn) menu.appendChild(combatLogBtn);
   if (snapshotsBtn) menu.appendChild(snapshotsBtn);
@@ -259,6 +292,7 @@ export function mountSessionMenu(
   menu.appendChild(newBtn);
   menu.appendChild(bgFileInput);
   menu.appendChild(jsonInput);
+  if (uvttInput) menu.appendChild(uvttInput);
   container.appendChild(menu);
 }
 

@@ -131,6 +131,59 @@ gaps so the v1.0 cut is genuinely "stable + remote-play-capable."
 
 ---
 
+## [1.16.0] — 2026-05-04 — Universal VTT (.dd2vtt / .uvtt) import
+
+Phase 141 — second phase of the **map authoring track**. Imports the JSON envelope produced by Dungeondraft / Foundry / similar tools — a single file containing the background image, the grid sizing, and the wall + door geometry. Pre-141 a GM had to upload the image, then trace every wall by hand; v1.16 collapses that to a single file pick + one confirm dialog.
+
+### Added
+- **"Import VTT…" entry** in the GM session menu. File picker accepts `.dd2vtt`, `.uvtt`, or `.json`. On select, parses the envelope and shows a `window.confirm` dialog summarizing what will be imported (background present? wall count? door count? lights skipped count? grid size?), then commits the patches on confirmation.
+- **`parseUvtt(raw)` parser** in new `src/state/uvtt-import.ts` — pure helper. Defensive against every field being optional or malformed in the spec; returns an `ImportedScene` with the parsed grid + image data URL + wall list + summary stats + a `warnings: string[]` for the modal to show.
+- **Supported sub-fields:**
+  - `resolution.pixels_per_grid` → `cellSize`.
+  - `resolution.map_size.{x, y}` → `cols` / `rows`.
+  - `image` (base64 PNG) → background image (decoded to a Blob via `dataUrlToBlob`, written through `putImage`, scaled to fill the grid).
+  - `line_of_sight` polylines → `WallSegment` pairs with `blocksSight: true, blocksMovement: true`.
+  - `objects_line_of_sight` (Foundry-specific extension) → merged with the same wall set.
+  - `portals` array → `WallSegment` with `door: { open: !portal.closed }`. Defaults to closed when the field is missing (matches the spec's implicit default).
+
+### Why this matters
+Pre-141, importing a Dungeondraft map looked like:
+1. Open Dungeondraft, export the map as PNG (separately export the wall geometry as JSON).
+2. Drag the PNG into the GM's "Upload Map" → wait for IDB write → eyeball the scale.
+3. Open the wall editor + trace every wall freehand against the printed JSON. A 200-wall dungeon = 200 manual draws.
+4. Place doors by promoting individual segments via the door-toggle preset.
+
+Phase 141 collapses the whole flow to "pick the .dd2vtt file → confirm → done" in two clicks. The most common scenes (Dungeondraft exports, Foundry imports) come together in seconds.
+
+### Architecture
+- **`src/state/uvtt-import.ts`** (new, ~225 lines) — pure parser. No DOM, no IDB, no fetch. Imports only `nid` from `util/id.ts` and types from `state/types.ts`. Three exports: `parseUvtt`, `dataUrlToBlob`, `gridUpdateFromScene`.
+- **`src/ui/session-menu.ts`** — new optional `onUvttImport?` action. Conditional menu entry + hidden `<input type="file">`. Same opt-in pattern as `onReplayTour` and `onRemotePlay` so Spectator-side mounts (which don't author maps) don't ship the button.
+- **`src/entries/gm.ts`** — wires `onUvttImport`. Lazy-imports `parseUvtt` / `dataUrlToBlob` / `gridUpdateFromScene` via `await import('../state/uvtt-import.js')`, so the parser ships in a separate chunk and doesn't bloat the initial-load budget for users who never use the feature. Build the summary string + `window.confirm`. On approval: write the image Blob to IDB, emit the `background-update` patch (with auto-derived scale to fill the grid), `grid-update` patch, and a batched series of `walls-clear` + `wall-add` patches.
+- **No new patch types.** Existing patch shapes cover everything (background-update, grid-update, walls-clear, wall-add).
+
+### UX details
+- **Walls-clear is destructive.** The import REPLACES the existing wall set (since UVTT files are a complete map definition). The confirm dialog explicitly warns "Walls + grid + background will replace any current values." The undo stack records the patches, so Ctrl+Z still rewinds — but the GM should treat UVTT import as a "starting fresh on this scene" operation.
+- **Lights are counted but not imported in v1.16.** The summary lists "Lights: N skipped" so the GM knows their light setup didn't transfer. Importing lights as Phase 57 `Token.light` records (or Phase 139 auras) is straightforward but takes design decisions about which token to attach them to; deferred.
+- **Defensive parsing.** The parser drops malformed entries (vertices with non-numeric coords, portals with malformed bounds, polylines with < 2 vertices) without failing the whole import. The dropped count surfaces in `scene.warnings` so the GM can investigate.
+- **Scale computation.** The image is scaled to exactly `cols × cellSize × rows × cellSize` world pixels — i.e. it fills the grid the spec describes. UVTT's `resolution.pixels_per_grid` matches our `cellSize` directly, so 1 grid cell of art = 1 grid cell of game state.
+
+### Tests
+- **+16 unit tests** in `src/state/uvtt-import.test.ts` (new): empty envelope returns fallbacks + warnings; `pixels_per_grid` + `map_size` reads; `(n-1)` wall segments per polyline of length n; skips polylines < 2 vertices; drops vertices with non-numeric coords; merges `objects_line_of_sight` with `line_of_sight`; portals → `door: {open}` with closed defaulting to true; skips malformed portal bounds; base64 image → data URL; strips an existing `data:` prefix; counts but skips lights; survives null / non-object / number input. Plus 2 helper tests for `dataUrlToBlob` (decodes valid; throws on garbage) and 1 for `gridUpdateFromScene` (preserves `showGridLines` + `gridShape`).
+- **+2 Playwright specs** in `e2e/uvtt-import.spec.ts` (new): the menu button is present; importing a fixture file applies walls + grid + background end-to-end. The fixture is a 12×8 cell map with a 5-vertex closed polyline + 1 closed-door portal + a 1×1 transparent PNG (smallest valid base64).
+- **All 1496 unit tests + 354 Playwright specs pass** locally.
+- **Visual regression baselines refreshed** (Win32 via `playwright test --update-snapshots`; Linux via the Phase 68 `npm run baselines -- --linux-only` Docker pipeline). The new "Import VTT…" button extends the session menu by ~39 px; the `session-menu-light-chromium-{win32,linux}.png` baselines were regenerated to reflect the new height.
+
+### Bundle
+- **JS budget bumped 110 → 120 KB** in `package.json`, per the workflow's "one bigger bump beats per-phase scrambles" rule. Phase 141 itself lands at 108.55 / 120 KB initial-load brotli (+1.77 KB for the wiring + the lazy-import boilerplate); Phase 142's tile-paint mode will use the rest of the headroom.
+- The parser module ships as a lazy chunk via the dynamic `import()`, so users who never use UVTT don't pay the parser bundle cost on initial load.
+- Lazy chunks: 19.05 / 20 KB (+0.22 KB for the new chunk; well under).
+- CSS unchanged.
+
+### Pre-push checklist
+Caught zero issues — full unit suite + full e2e + visual-regression specs + size-limit (after the proactive 110 → 120 KB bump) all green before push.
+
+---
+
 ## [1.15.0] — 2026-05-04 — Map rotate / flip H/V
 
 Phase 140 — first phase of the **map authoring track**. Adds 90° rotation + horizontal / vertical flip to the background image, accessed via four new entries in the right-click menu when a background is set. Pre-140, fixing a misoriented map required uploading a re-rotated copy.
