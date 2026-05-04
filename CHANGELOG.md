@@ -131,6 +131,42 @@ gaps so the v1.0 cut is genuinely "stable + remote-play-capable."
 
 ---
 
+## [1.13.0] — 2026-05-03 — Visual condition icons on tokens
+
+Phase 138 — second phase of the **token visual layer track**. The condition chips above each token (Phase 50, then re-styled in Phase 67) used 1-2 letter glyphs (`B` for blinded, `Co` for concentrating, `Pt` for petrified, etc.) at chip radius ≥ 9 px. Letters work but require reading; vector icons leverage shape recognition for faster mid-combat scanning.
+
+### Added
+- **17 vector icons** for the SRD condition presets (`blinded`, `charmed`, `concentrating`, `deafened`, `exhaustion`, `frightened`, `grappled`, `incapacitated`, `invisible`, `paralyzed`, `petrified`, `poisoned`, `prone`, `restrained`, `stunned`, `unconscious`, `bloodied`). Each is a small SVG path authored in a 24×24 viewBox, stored as a string, and lazily compiled to a `Path2D` on first lookup. Iconography uses conventional silhouettes (heart for charmed, lightning bolt for paralyzed, crescent moon for unconscious) so a GM scanning the canvas mid-fight recognizes the condition by shape.
+- **`drawConditionIcon(ctx, id, cx, cy, chipR, strokeStyle)`** in new `src/render/condition-icons.ts` — render helper. Scales the path to ~70% of chip diameter, picks line width that scales with chip size, strokes (not fills — thicker monochrome strokes read better at small sizes than gradient-filled shapes). Picks white-or-black stroke automatically based on the chip color via the existing `preferBlackText` helper. Returns `false` when no icon is registered for the id, and `layer-tokens.ts` falls back to the legacy letter-glyph paint.
+
+### Why this matters
+Pre-138 a chip showing `Pt` required a moment of "petrified, right" pattern-matching from the GM. With icons, the same chip shows a hexagon the GM recognizes instantly. The change is purely visual — chip layout, position, color, the +N overflow behavior (when many conditions stack on one token), and the touch / hover targets are all unchanged. The fallback path keeps the letter glyph for any custom condition id the GM tracks via `addCondition` that isn't in the preset list.
+
+### Architecture
+- **`src/render/condition-icons.ts`** (new, ~135 lines including the path-data table) — pure helper. SVG paths in a 24×24 viewBox, lazy `Path2D` cache (`Map<string, Path2D>`), single render entry-point. The cache is bounded by the 17 preset ids; total memory < 1 KB at runtime.
+- **`src/render/layer-tokens.ts`** — the existing chip-drawing loop in `drawTokenStatus` swaps the letter-glyph branch for `drawConditionIcon`. The branch still gates on `chipR >= 9` (same readability threshold the letter glyph used). Falls back to the legacy `ctx.fillText(preset.symbol, ...)` when `drawConditionIcon` returns `false` (unknown id).
+- **No changes to `state/conditions.ts`.** The `symbol` field on `ConditionPreset` stays — it's the fallback glyph when an icon path is missing AND it's still used by the editor's text-only condition picker.
+- **Path2D under jsdom.** vitest's jsdom environment doesn't ship `Path2D`; the test file stubs `globalThis.Path2D` in a `beforeAll` hook so the icon module's lazy-build path runs without the chromium / canvas bindings.
+
+### UX details
+- **Chip layout unchanged.** Same horizontal row above the token, same dot size (`chipR = max(5, cellSize * 0.09)`), same colored fill, same outline. Only the inside content changes.
+- **Stroke contrast preserved.** The icon stroke color picks white-or-black via `preferBlackText(color)` — identical to the pre-138 letter-glyph color rule. So a yellow `paralyzed` chip gets a black bolt; a dark `unconscious` chip gets a white moon.
+- **Custom conditions still work.** A GM tracking a homebrew flag (e.g. "stalking") via `addCondition('stalking')` keeps showing the colored chip — the helper's `null` return means `layer-tokens.ts` paints the chip without any inner glyph (since there's no preset to look up either, no letter fallback). A future polish could expose a custom-icon UI; out of scope for v138.
+- **Visual regression baselines unchanged.** The committed baseline scene (`e2e/visual-regression.spec.ts` "GM: two tokens + a partially revealed fog region") doesn't include conditions on either token, so the chip swap doesn't drift any baseline PNG. If a future baseline scene adds a conditioned token, baselines will need a refresh — the path-data is deterministic, so baselines once captured will stay stable.
+
+### Tests
+- **+9 unit tests** in `src/render/condition-icons.test.ts` (new): every `CONDITION_PRESETS` id has an icon (catches future preset additions that forget the icon table); 17-icon count matches the preset list size; `getConditionIconPath` returns `Path2D` for known ids + `null` for unknown; cache returns the same instance on repeated lookup; `_resetIconCache` clears the cache deterministically; `drawConditionIcon` returns `false` for unknown ids; returns `true` + invokes `ctx.stroke` once for known ids; balances `save` / `restore`.
+- **No new e2e spec.** The render path is exercised by every existing token-with-conditions e2e (e.g. `conditions.spec.ts`); the visual is best validated by the visual-regression spec, which doesn't currently include a conditioned token. Skip-document explicitly here so a future maintainer adding such a baseline knows to refresh the PNG.
+- **All 1471 unit tests + 351 Playwright specs pass** locally.
+
+### Bundle
+- 105.63 / 110 KB initial-load brotli (+0.72 KB for the icon path data + the cache + the render helper + the layer-tokens swap). CSS unchanged. Lazy chunks unchanged.
+
+### Pre-push checklist
+Caught zero issues — full unit suite + full e2e + visual-regression specs + size-limit all green before push.
+
+---
+
 ## [1.12.0] — 2026-05-03 — Multi-token auto-numbering
 
 Phase 137 — first phase of the **token visual layer track**. When you Alt+stamp, paste, duplicate, or drop multiple library tokens with the same name, the new ones get numeric suffixes ("Goblin", "Goblin 2", "Goblin 3") so they're individually distinguishable in the initiative tracker, the canvas-outline (Phase 87), and on-canvas labels.

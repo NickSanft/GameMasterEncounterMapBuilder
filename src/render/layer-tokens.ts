@@ -12,6 +12,7 @@ import { isTokenFullyHidden } from './fog-visibility.js';
 import type { DragOverlay } from '../input/context.js';
 import { hpBarColor, hpFraction } from '../state/token-hp.js';
 import { getConditionPreset } from '../state/conditions.js';
+import { drawConditionIcon } from './condition-icons.js';
 import { groupTokensByStack } from '../state/token-stack.js';
 import { tokenCenterWorld } from '../state/grid-coords.js';
 
@@ -400,15 +401,25 @@ function drawTokenStatus(
       ctx.lineWidth = 1.5;
       ctx.strokeStyle = 'rgba(0, 0, 0, 0.6)';
       ctx.stroke();
-      // Show glyph at larger scales only (otherwise it's unreadable).
+      // Phase 138 — at chipR >= 9 (the same threshold the pre-138
+      // letter-glyph path used), draw a vector icon centered in the
+      // chip. Stroked in white-or-black for contrast against the
+      // chip's fill color (same `preferBlackText` rule the glyph
+      // path used for its text fill). Falls back to the letter
+      // glyph when no icon path is registered for the condition id
+      // (e.g. a custom GM-defined condition the GM tracks via
+      // `addCondition`).
       if (chipR >= 9 && preset) {
-        const fontSize = Math.max(8, chipR * 1.0);
-        ctx.font = `700 ${fontSize}px system-ui, sans-serif`;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        // Pick white or black text for contrast against the chip color.
-        ctx.fillStyle = preferBlackText(color) ? '#000' : '#fff';
-        ctx.fillText(preset.symbol, x, y);
+        const stroke = preferBlackText(color) ? '#000' : '#fff';
+        const drew = drawConditionIcon(ctx, preset.id, x, y, chipR, stroke);
+        if (!drew) {
+          const fontSize = Math.max(8, chipR * 1.0);
+          ctx.font = `700 ${fontSize}px system-ui, sans-serif`;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillStyle = stroke;
+          ctx.fillText(preset.symbol, x, y);
+        }
       }
       x += chipR * 2 + gap;
     }
