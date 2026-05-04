@@ -830,7 +830,7 @@ if (channel) {
     } else if (msg.type === 'camera') {
       applyRemoteCamera(msg.camera);
     } else if (msg.type === 'ping') {
-      pingManager.add(msg.x, msg.y, msg.color);
+      pingManager.add(msg.x, msg.y, msg.color, msg.senderName);
       if (msg.senderName) announcer.announce(`${msg.senderName} pinged the map.`);
     } else if (msg.type === 'hello' && msg.from === 'gm') {
       // GM just loaded — (re)announce our viewport so the indicator appears.

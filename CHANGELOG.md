@@ -131,6 +131,44 @@ gaps so the v1.0 cut is genuinely "stable + remote-play-capable."
 
 ---
 
+## [1.21.0] — 2026-05-04 — Player ping attribution
+
+Phase 146 — first phase of the **spectator UX track**. Pings (Phase 38) now show a floating sender pill above the ring with the player's name, colored to match the player's identity. Pre-146 pings were anonymous flashes — receivers couldn't tell who pointed at the door. Post-146 they're socially navigable: "Alice pointed there."
+
+### Added
+- **`Ping.senderName` field** in `src/state/ping-manager.ts`. Optional — local pings without identity context (or pings from peers without identity-registry entries) leave it undefined and the renderer falls back to the legacy ring-only paint.
+- **`pingManager.add(x, y, color, senderName?)` signature extension.** Existing 3-arg callers continue to work unchanged.
+- **Sender pill in `src/render/layer-pings.ts`.** A rounded-rectangle pill drawn above the ring, filled with the ping's color, with white-or-black text picked by a `preferBlackText` luma heuristic (same one `layer-tokens.ts` uses for token labels). The pill fades on a slower curve than the ring (`labelAlpha = 1 - t * 0.7`) so the name stays readable through ~70% of the ping's 1.5-second lifetime even as the ring expands + fades to nothing.
+- **GM `ping(x, y)` now passes the local identity's name AND color** to both `pingManager.add` and the broadcast `channel.send`. Pre-146 the local copy used the default orange; only the broadcast carried the senderName. Now both ends see the same attribution.
+- **Both GM + Spectator ping receivers** thread `msg.senderName` through `pingManager.add`. Existing announcer announcement (`"X pinged the map."`) is unchanged — Phase 146 adds the visual pill on top.
+
+### Why this matters
+Pre-146, a player pointing at "the door over there" via a ping showed up on the GM's canvas as an anonymous orange flash. With multiple players in a remote-play session this was friction-of-confusion: "who pointed at what?" The sender pill makes pings feel like first-class table communication — visually equivalent to a player physically pointing at a paper map.
+
+### Architecture
+- **`src/state/ping-manager.ts`** — `Ping` interface gains optional `senderName?: string`. The factory's `add()` signature gets a 4th optional parameter; empty-string names collapse to undefined so `if (p.senderName)` guards work cleanly.
+- **`src/render/layer-pings.ts`** — adds the pill paint after the inner-dot eye-anchor. Local `preferBlackText(hex)` helper duplicates the `layer-tokens.ts` formula instead of importing it (the pings layer doesn't currently depend on the tokens layer; keeping it that way avoids a cross-layer import for a 6-line function).
+- **`src/entries/gm.ts`** + **`src/entries/spectator.ts`** — both ping-emit + receive call sites updated to thread the identity. The GM's local ping now includes its own identity (was anonymous default-orange pre-146).
+
+### UX details
+- **Pill position is above the ring's outer edge.** `ty = p.y - radius - h - 4`. As the ring expands, the pill stays clear of the expanding stroke (the radius is recomputed every frame, so the pill rises with the ring).
+- **Color contrast.** Pill text uses `preferBlackText(p.color)` to pick black or white — handles dark identity colors (orange, purple, dark blue) correctly. Pulled inline from `layer-tokens.ts`'s formula instead of imported (the layers stay decoupled).
+- **Empty-string senders are not rendered.** A peer that broadcasts `senderName: ""` (or omits it entirely) falls through to the legacy ring-only paint. This is also the local fallback when `ownIdentity().name` is empty (the unnamed-player case).
+- **Backward compatible.** Pre-146 peers don't know about the pill rendering, but the wire format already carried `senderName` (Phase 63's pre-existing field). New senders → old receivers: the receiver still sees the ring + the announcer announcement; pill is rendered locally on the new sender's screen. New senders ↔ new receivers: pill renders on both.
+
+### Tests
+- **+3 unit tests** in `src/state/ping-manager.test.ts`: senderName carried through; omitted senderName → undefined; empty-string senderName collapses to undefined.
+- **No new e2e or visual-regression specs.** The pill is a rendered paint over the canvas, not a DOM element — visually validating it would require a new visual-regression baseline scene with a live ping. Documented as a skip; the existing ping e2e specs (Phase 38) cover the ring + announcer; the pill paints alongside without changing existing assertions.
+- **All 1516 unit tests + 367 Playwright specs pass** locally.
+
+### Bundle
+- 110.06 / 120 KB initial-load brotli (+0.13 KB for the pill paint + identity threading). CSS unchanged. Lazy chunks unchanged.
+
+### Pre-push checklist
+Caught zero issues — full unit suite + full e2e + visual-regression specs + size-limit all green before push.
+
+---
+
 ## [1.20.0] — 2026-05-04 — Scene-switch loading overlay
 
 Phase 145 — third + final phase of the **visual polish trio**. During the ~50-200ms gap between a scene switch (or a fresh background-image upload, or an incoming sync patch on the spectator side) and the IDB-fetched image landing, the canvas painted the theme's fallback color slab. Pre-145 that looked like a "did the app crash?" flash. Phase 145 covers that gap with a thin dimmed overlay + small CSS spinner.

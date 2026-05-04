@@ -1748,12 +1748,18 @@ const slashInput = mountSlashCommandInput({
 });
 
 function ping(worldX: number, worldY: number) {
-  pingManager.add(worldX, worldY);
+  // Phase 146 — local pings now carry the GM's identity name + color
+  // so the floating sender pill rendered in `layer-pings.ts` shows
+  // attribution even on the local canvas (not just the broadcast
+  // copy on remote peers).
+  const identity = ownIdentity();
+  pingManager.add(worldX, worldY, identity.color, identity.name);
   channel?.send({
     type: 'ping',
     x: worldX,
     y: worldY,
-    senderName: ownIdentity().name,
+    color: identity.color,
+    senderName: identity.name,
   });
 }
 
@@ -2557,7 +2563,7 @@ if (channel) {
       // Spectators don't currently emit pings (GM-only mechanic), but
       // any incoming `ping` message is honored — a future per-
       // Spectator `canPing` permission would gate it here.
-      pingManager.add(msg.x, msg.y, msg.color);
+      pingManager.add(msg.x, msg.y, msg.color, msg.senderName);
       if (msg.senderName) {
         announcer.announce(`${msg.senderName} pinged the map.`);
       }

@@ -6,13 +6,20 @@ export interface Ping {
   y: number;
   color: string;
   startedAt: number;
+  /**
+   * Phase 146 — display name of the player who emitted the ping.
+   * Optional — local pings or pings from peers without identity
+   * registry entries fall back to no label. The renderer draws a
+   * pill above the ping when this is non-empty.
+   */
+  senderName?: string;
 }
 
 export const PING_DURATION_MS = 1500;
 export const DEFAULT_PING_COLOR = '#ff9f43';
 
 export interface PingManager {
-  add(x: number, y: number, color?: string): void;
+  add(x: number, y: number, color?: string, senderName?: string): void;
   getActive(): readonly Ping[];
 }
 
@@ -41,8 +48,17 @@ export function createPingManager(onTick: () => void): PingManager {
   }
 
   return {
-    add(x: number, y: number, color: string = DEFAULT_PING_COLOR) {
-      pings.push({ id: nid(), x, y, color, startedAt: performance.now() });
+    add(
+      x: number,
+      y: number,
+      color: string = DEFAULT_PING_COLOR,
+      senderName?: string,
+    ) {
+      const entry: Ping = { id: nid(), x, y, color, startedAt: performance.now() };
+      if (senderName !== undefined && senderName.length > 0) {
+        entry.senderName = senderName;
+      }
+      pings.push(entry);
       startTickerIfNeeded();
     },
     getActive() {

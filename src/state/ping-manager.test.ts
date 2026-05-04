@@ -76,6 +76,24 @@ describe('createPingManager', () => {
     expect(mgr.getActive()).toEqual([]);
   });
 
+  it('Phase 146 — carries senderName when provided', () => {
+    const mgr = createPingManager(() => {});
+    mgr.add(0, 0, '#ff0000', 'Alice');
+    expect(mgr.getActive()[0]!.senderName).toBe('Alice');
+  });
+
+  it('Phase 146 — leaves senderName undefined when omitted', () => {
+    const mgr = createPingManager(() => {});
+    mgr.add(0, 0);
+    expect(mgr.getActive()[0]!.senderName).toBeUndefined();
+  });
+
+  it('Phase 146 — empty-string senderName collapses to undefined', () => {
+    const mgr = createPingManager(() => {});
+    mgr.add(0, 0, '#ff0000', '');
+    expect(mgr.getActive()[0]!.senderName).toBeUndefined();
+  });
+
   it('multiple pings coexist and expire independently', () => {
     const mgr = createPingManager(() => {});
     mgr.add(10, 10);
