@@ -3355,6 +3355,7 @@ function placeTokenAt(gx: number, gy: number) {
     deathSaves: { successes: 0, failures: 0 },
     ownerId: null,
     auras: [],
+    speedFt: 30,
   };
   store.applyPatch({ kind: 'token-add', token });
   lastPlacedRef.current = token;

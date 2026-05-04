@@ -31,6 +31,7 @@ function tok(imageId: string | null, x = 0, y = 0): Token {
     deathSaves: { successes: 0, failures: 0 },
     ownerId: null,
     auras: [],
+    speedFt: 30,
   };
 }
 
@@ -98,6 +99,7 @@ describe('idb-cleanup', () => {
       deathSaves: { successes: 0, failures: 0 },
       ownerId: null,
     auras: [],
+    speedFt: 30,
     });
 
     const state = createDefaultState();

@@ -251,6 +251,20 @@ export function mountTokenEditor(opts: TokenEditorOptions): TokenEditorHandle {
         </p>
       </fieldset>
 
+      <fieldset class="movement-block">
+        <legend>Movement</legend>
+        <label>Speed (ft/round)
+          <input type="number" data-field="speedFt" step="5" min="0" max="240" />
+        </label>
+        <p class="settings-hint">
+          Phase 149 — when this token is the active initiative entry,
+          the movement-distance pip during a drag flips between green
+          ("12 / 30 ft") and red ("over by 5 ft") based on whether
+          the drag exceeds the speed. Set to 0 to disable the budget
+          HUD for this token. Default 30 ft (SRD humanoid base).
+        </p>
+      </fieldset>
+
       <fieldset class="hp-block">
         <legend>Hit points</legend>
         <label class="check">
@@ -430,6 +444,8 @@ export function mountTokenEditor(opts: TokenEditorOptions): TokenEditorHandle {
     '[data-field="condition-timers"]',
   )!;
   const initiativeModInput = modal.querySelector<HTMLInputElement>('[data-field="initiativeMod"]')!;
+  // Phase 149 — movement speed input.
+  const speedFtInput = modal.querySelector<HTMLInputElement>('[data-field="speedFt"]')!;
   const rotationInput = modal.querySelector<HTMLInputElement>('[data-field="rotation"]')!;
   const rotationCompass = modal.querySelector<HTMLSpanElement>('[data-field="rotation-compass"]')!;
   const rotationQuickBtns = Array.from(
@@ -525,6 +541,8 @@ export function mountTokenEditor(opts: TokenEditorOptions): TokenEditorHandle {
     syncConditionUI(token.conditions, token.conditionExpirations);
     syncRotationUI(token.rotation);
     syncInitiativeModUI(token.initiativeMod);
+    // Phase 149 — sync the speed input.
+    speedFtInput.value = String(token.speedFt);
     syncVisibilityUI(token.id);
     syncOwnerUI(token.ownerId);
     syncCounter();
@@ -1393,6 +1411,29 @@ export function mountTokenEditor(opts: TokenEditorOptions): TokenEditorHandle {
   initiativeModInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') {
       commitInitiativeMod();
+      e.preventDefault();
+    }
+  });
+
+  // Phase 149 — movement speed listener. Clamp to [0, 240] (the
+  // editor input also has min/max attrs, but parsed value can be
+  // negative if the user types one in).
+  function commitSpeedFt() {
+    const tok = currentToken();
+    if (!tok) return;
+    const n = parseInt(speedFtInput.value, 10);
+    if (!Number.isFinite(n)) {
+      speedFtInput.value = String(tok.speedFt);
+      return;
+    }
+    const clamped = Math.max(0, Math.min(240, n));
+    if (clamped !== tok.speedFt) update({ speedFt: clamped });
+    speedFtInput.value = String(clamped);
+  }
+  speedFtInput.addEventListener('change', commitSpeedFt);
+  speedFtInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      commitSpeedFt();
       e.preventDefault();
     }
   });

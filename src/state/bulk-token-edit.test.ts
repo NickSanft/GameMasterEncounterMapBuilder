@@ -30,6 +30,7 @@ function tk(over: Partial<Token> = {}): Token {
     deathSaves: over.deathSaves ?? { successes: 0, failures: 0 },
     ownerId: over.ownerId ?? null,
     auras: over.auras ?? [],
+    speedFt: over.speedFt ?? 30,
   };
 }
 

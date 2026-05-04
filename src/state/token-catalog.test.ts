@@ -28,6 +28,7 @@ const sample: Token = {
   deathSaves: { successes: 0, failures: 0 },
   ownerId: null,
     auras: [],
+    speedFt: 30,
 };
 
 beforeEach(() => {

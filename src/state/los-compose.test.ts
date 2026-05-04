@@ -28,6 +28,7 @@ function token(overrides: Partial<Token> & { id: string }): Token {
     deathSaves: overrides.deathSaves ?? { successes: 0, failures: 0 },
     ownerId: overrides.ownerId ?? null,
     auras: overrides.auras ?? [],
+    speedFt: overrides.speedFt ?? 30,
   };
 }
 

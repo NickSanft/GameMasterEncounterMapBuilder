@@ -51,6 +51,7 @@ describe('saveState / loadPersistedState', () => {
       deathSaves: { successes: 0, failures: 0 },
       ownerId: null,
     auras: [],
+    speedFt: 30,
     });
     state.fog[0] = 1;
     state.fog[99] = 1;
@@ -101,6 +102,7 @@ describe('saveState / loadPersistedState', () => {
       deathSaves: { successes: 0, failures: 0 },
       ownerId: null,
     auras: [],
+    speedFt: 30,
     });
     await saveState(state);
     expect(localStorage.getItem(STORAGE_KEY)).not.toBeNull();
@@ -139,6 +141,7 @@ describe('saveState / loadPersistedState', () => {
       deathSaves: { successes: 0, failures: 0 },
       ownerId: null,
     auras: [],
+    speedFt: 30,
     });
     // Seed LS with an old value so we can detect that the oversized
     // save removed it rather than overwriting.

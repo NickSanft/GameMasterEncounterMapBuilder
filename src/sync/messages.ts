@@ -619,6 +619,16 @@ export function deserializeState(s: SerializedSessionState): SessionState {
       // entry is defensively validated by `normalizeAuras` so a
       // malformed peer can't sneak `radius: NaN` past the renderer.
       auras: normalizeAuras((t as { auras?: unknown }).auras),
+      // Phase 149 — movement speed in feet per round. Pre-149 saves
+      // default to 30 (SRD humanoid base). Defensive: clamp to a
+      // non-negative finite number so a malformed peer can't make
+      // the HUD divide by NaN.
+      speedFt:
+        typeof (t as { speedFt?: unknown }).speedFt === 'number' &&
+        Number.isFinite((t as { speedFt: number }).speedFt) &&
+        (t as { speedFt: number }).speedFt >= 0
+          ? (t as { speedFt: number }).speedFt
+          : 30,
     })),
     fog: Uint8Array.from(s.fog),
     annotations: (s.annotations ?? []).map((a) => ({

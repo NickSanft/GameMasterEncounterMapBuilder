@@ -88,6 +88,7 @@ export function placeTemplate(
     // Phase 126 — placed-from-template tokens always start GM-controlled.
     ownerId: null,
     auras: [],
+    speedFt: 30,
   }));
 }
 

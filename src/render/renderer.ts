@@ -27,7 +27,11 @@ import { drawAoeTemplates, type AoePreview } from './layer-aoe.js';
 import {
   drawSpectatorViewport,
 } from './layer-spectator-viewport.js';
-import { drawMovementIndicator } from './layer-movement-indicator.js';
+import {
+  drawMovementIndicator,
+  DEFAULT_MOVEMENT_STYLE,
+  type MovementIndicatorStyle,
+} from './layer-movement-indicator.js';
 import { drawStrokes } from './layer-strokes.js';
 import { drawWalls } from './layer-walls.js';
 import { drawLosPolygons } from './layer-los.js';
@@ -618,7 +622,44 @@ function drawMovementOverlay(
   if (cells === 0) return;
   const unit = prefs?.distanceUnit ?? 'squares';
   const feetPerSquare = prefs?.feetPerSquare ?? 5;
-  const label = formatDistance(cells, unit, feetPerSquare);
+  const baseLabel = formatDistance(cells, unit, feetPerSquare);
 
-  drawMovementIndicator(ctx, originX, originY, endX, endY, cellSize, zoom, label);
+  // Phase 149 — movement budget HUD. When the dragged token is the
+  // active initiative entry AND has a non-zero speedFt, augment the
+  // pill: append "/ <speed> ft" and switch to a red urgency style
+  // when the drag exceeds the budget. Inactive tokens or zero-speed
+  // tokens fall through to the pre-149 plain-distance behavior.
+  const activeTokenId = state.initiative.activeId
+    ? state.initiative.order.find(
+        (e) => e.id === state.initiative.activeId,
+      )?.tokenId ?? null
+    : null;
+  const isActive = activeTokenId !== null && token.id === activeTokenId;
+  const speedFt = isActive && token.speedFt > 0 ? token.speedFt : 0;
+  const distanceFt = cells * feetPerSquare;
+  let label = baseLabel;
+  let style: MovementIndicatorStyle = DEFAULT_MOVEMENT_STYLE;
+  if (speedFt > 0) {
+    label = `${baseLabel} / ${speedFt} ft`;
+    if (distanceFt > speedFt) {
+      const over = distanceFt - speedFt;
+      label = `${baseLabel} / ${speedFt} ft — over by ${over} ft`;
+      style = MOVEMENT_OVER_BUDGET_STYLE;
+    }
+  }
+
+  drawMovementIndicator(ctx, originX, originY, endX, endY, cellSize, zoom, label, style);
 }
+
+/**
+ * Phase 149 — red-urgency style used when the active token's drag
+ * distance exceeds its `speedFt`. Same shape as the default style;
+ * only colors change.
+ */
+const MOVEMENT_OVER_BUDGET_STYLE: MovementIndicatorStyle = {
+  lineColor: '#ef5350',
+  dashPattern: [10, 6],
+  lineWidth: 3,
+  labelBg: 'rgba(60, 0, 0, 0.9)',
+  labelFg: '#ff8a80',
+};

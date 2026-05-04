@@ -95,5 +95,6 @@ export function tokenFromCatalogEntry(
     // tokens always start GM-controlled.
     ownerId: null,
     auras: [],
+    speedFt: 30,
   };
 }

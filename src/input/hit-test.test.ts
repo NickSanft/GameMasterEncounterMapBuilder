@@ -24,6 +24,7 @@ function token(partial: Partial<Token> & { id: string }): Token {
     deathSaves: partial.deathSaves ?? { successes: 0, failures: 0 },
     ownerId: partial.ownerId ?? null,
     auras: partial.auras ?? [],
+    speedFt: partial.speedFt ?? 30,
   };
 }
 

@@ -193,6 +193,21 @@ export interface Token {
    * peers will drop the field on receive.
    */
   auras: Aura[];
+  /**
+   * Phase 149 — D&D-style movement speed in feet per round. Drives
+   * the "movement budget" HUD: while THIS token is the active
+   * initiative entry AND being dragged, the existing Phase 129
+   * yellow distance pip flips between "X / speedFt" (green) and
+   * "X / speedFt — over by Y" (red) depending on whether the drag
+   * exceeds the budget.
+   *
+   * `0` disables the HUD (the indicator falls back to its pre-149
+   * plain-distance behavior). Default `30` ft (the SRD's typical
+   * humanoid base speed). Pre-149 sessions don't carry this field;
+   * `deserializeState` defaults missing values to 30. Editable in
+   * the token editor's "Movement" section.
+   */
+  speedFt: number;
 }
 
 export interface Background {

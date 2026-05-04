@@ -131,6 +131,49 @@ gaps so the v1.0 cut is genuinely "stable + remote-play-capable."
 
 ---
 
+## [1.24.0] — 2026-05-04 — Token movement budget HUD
+
+Phase 149 — sole phase of the **combat ergonomics track** (Track C from the v1.18 → v1.28 plan). Adds a per-token movement speed (`Token.speedFt`) and an in-flight HUD that flips the existing Phase 129 movement-distance pip from green to red when the active token's drag exceeds its budget.
+
+### Added
+- **`Token.speedFt: number`** in `src/state/types.ts`. Default 30 (the SRD's typical humanoid base). `0` disables the budget HUD for this token (the indicator falls back to its pre-149 plain-distance behavior). Optional in the wire format with back-compat default — pre-149 saves load with 30 ft.
+- **Defensive deserialize** in `messages.ts`. NaN / negative / non-finite values fall back to 30. Explicit 0 is honored (disables the HUD intentionally).
+- **HUD logic** in `src/render/renderer.ts` `drawMovementOverlay`. When the token being dragged matches `state.initiative.activeId`'s token AND `speedFt > 0`:
+  - Label changes from "12 sq" / "20 ft" to "12 sq / 30 ft" (within budget) or "12 sq / 30 ft — over by 5 ft" (exceeded).
+  - Indicator color flips to a red urgency style (`MOVEMENT_OVER_BUDGET_STYLE`) when distance exceeds speed.
+- **Token editor "Movement" section** with a `Speed (ft/round)` number input. Range 0–240, step 5 (matches D&D 5e's 5-ft increments). Inline hint explains the budget HUD's behavior + the 0-disables-it semantic.
+
+### Why this matters
+Pre-149 a GM mid-combat had to mentally compare the existing distance pip ("20 ft") to the active token's speed stat (which lived nowhere visible — the GM had to remember it). For a 5e party that's mostly 30-ft humanoids, easy. For a party with a 25-ft Dwarf, a 35-ft Tabaxi (Feline Agility 70), and a Dash-using 60-ft monk, hard to track. The HUD makes the speed limit explicit at the moment of decision (mid-drag), and the red urgency on overrun saves the GM from "wait, can he reach that?" mental math.
+
+### Architecture
+- **`src/state/types.ts`** — `speedFt: number` required field. Same back-compat-via-deserializer pattern as Phase 70 conditionExpirations / Phase 124 gridShape / Phase 126 ownerId / Phase 139 auras.
+- **`src/sync/messages.ts`** — defensive parser. `typeof === 'number'` + `isFinite` + `>= 0` checks; missing / malformed → 30.
+- **`src/render/renderer.ts`** — `drawMovementOverlay` looks up the active token's id, checks if the dragged token is the active one, computes `distanceFt = cells * feetPerSquare`, branches the label + style. The HUD piggybacks on the existing distance pip — no new render layer.
+- **New `MOVEMENT_OVER_BUDGET_STYLE` const** — red lineColor + red labelFg + dark-red labelBg. Same shape as `DEFAULT_MOVEMENT_STYLE` (Phase 129); just colors change.
+- **`src/ui/token-editor.ts`** — new `<fieldset class="movement-block">` with the speedFt input + commit handler. Clamped to [0, 240] on parse; falls back to current value on NaN.
+
+### UX details
+- **Per-token speed.** Different tokens can have different speeds (Dwarf 25, Tabaxi 35, Wizard 30, etc.). The HUD reads the active token's stat at drag time.
+- **Active-only.** A GM dragging a non-active token (e.g. moving an enemy out of turn) sees the plain pre-149 distance pip — no budget judgment for tokens whose turn it isn't.
+- **Speed in feet, distance in squares OR feet.** The HUD always displays the budget in feet (since speed is conventionally a ft value), but the leading distance respects the user's `preferences.distanceUnit` ("12 sq / 30 ft" or "60 ft / 30 ft"). Slightly awkward when distanceUnit is squares, but consistent with how D&D players talk.
+- **Hides on no-active-turn / 0-speed.** No HUD when there's no active initiative entry, or when the active token's speedFt is 0 (intentional disable). Falls through to pre-149 behavior cleanly.
+- **No auto-stop.** The drag isn't restricted by the budget — the GM CAN move further if they want (it's still legal in some rule variants like Dash). The HUD just makes the overrun visible.
+
+### Tests
+- **+5 unit tests** in `src/sync/messages.test.ts` (under "Phase 149 — movement speed (speedFt)"): legacy default to 30; round-trip; negative clamps to 30; NaN clamps to 30; explicit 0 honored.
+- **No new e2e or visual-regression specs** — the HUD is a per-frame paint over the canvas, timing-sensitive (the indicator only renders mid-drag). Best validated by visual regression on a baseline scene with an active-turn drag in flight; that's a future polish on the baselines, not a phase blocker.
+- **Existing test fixtures updated** via `sed` to add `speedFt: 30` (the same workflow pattern used in Phase 139).
+- **All 1533 unit tests + 373 Playwright specs pass** locally.
+
+### Bundle
+- 111.26 / 120 KB initial-load brotli (+0.53 KB for the type field + deserialize + renderer logic + editor input). CSS unchanged. Lazy chunks unchanged.
+
+### Pre-push checklist
+Caught zero issues — full unit suite + full e2e + visual-regression specs + size-limit all green before push.
+
+---
+
 ## [1.23.0] — 2026-05-04 — Recently-used tokens strip
 
 Phase 148 — third + final phase of the **spectator UX track** (closes Track B from the v1.18 → v1.28 plan). A horizontal 6-slot rail showing the GM's most recent token templates. Click a slot → the next pointerdown on the canvas stamps that template (sets `lastPlaced.current`, the same ref Alt+stamp uses). Right-click a slot → evict it.

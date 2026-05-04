@@ -27,6 +27,7 @@ function token(id: string, imageId: string | null = null, borderColor: string | 
     deathSaves: { successes: 0, failures: 0 },
     ownerId: null,
     auras: [],
+    speedFt: 30,
   };
 }
 

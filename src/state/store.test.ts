@@ -22,6 +22,7 @@ function newToken(id: string, overrides: Partial<Token> = {}): Token {
     deathSaves: { successes: 0, failures: 0 },
     ownerId: null,
     auras: [],
+    speedFt: 30,
     ...overrides,
   };
 }

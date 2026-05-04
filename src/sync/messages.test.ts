@@ -30,6 +30,7 @@ describe('serializeState / deserializeState', () => {
       deathSaves: { successes: 0, failures: 0 },
       ownerId: null,
     auras: [],
+    speedFt: 30,
     });
     const serialized = serializeState(state);
     const restored = deserializeState(serialized);
@@ -189,6 +190,7 @@ describe('serializeState / deserializeState', () => {
           },
           { id: 'a2', radius: 100, color: '#ff5252', visibility: 'gm' },
         ],
+        speedFt: 30,
       });
       const restored = deserializeState(serializeState(state));
       expect(restored.tokens[0]!.auras).toEqual(state.tokens[0]!.auras);
@@ -226,6 +228,136 @@ describe('serializeState / deserializeState', () => {
       const restored = deserializeState(state);
       expect(restored.tokens[0]!.auras.length).toBe(1);
       expect(restored.tokens[0]!.auras[0]!.id).toBe('good');
+    });
+  });
+
+  describe('Phase 149 — movement speed (speedFt)', () => {
+    it('defaults speedFt to 30 for legacy saves (pre-149)', () => {
+      const legacy = {
+        ...serializeState(createDefaultState()),
+        tokens: [
+          {
+            id: 't1',
+            x: 0,
+            y: 0,
+            label: 'A',
+            color: '#ff0000',
+            imageId: null,
+            size: 1,
+            // speedFt missing entirely — pre-149 sessions
+          },
+        ],
+      } as unknown as SerializedSessionState;
+      const restored = deserializeState(legacy);
+      expect(restored.tokens[0]!.speedFt).toBe(30);
+    });
+
+    it('preserves a custom speedFt across a round-trip', () => {
+      const state = createDefaultState();
+      state.tokens.push({
+        id: 't-fast',
+        x: 0,
+        y: 0,
+        label: 'Monk',
+        color: '#fff',
+        imageId: null,
+        size: 1,
+        borderColor: null,
+        hp: null,
+        conditions: [],
+        rotation: 0,
+        losRadius: null,
+        light: null,
+        initiativeMod: 0,
+        conditionExpirations: {},
+        deathSaves: { successes: 0, failures: 0 },
+        ownerId: null,
+        auras: [],
+        speedFt: 45,
+      });
+      const restored = deserializeState(serializeState(state));
+      expect(restored.tokens[0]!.speedFt).toBe(45);
+    });
+
+    it('clamps a negative speedFt back to 30 (defensive)', () => {
+      const state = serializeState(createDefaultState());
+      (state.tokens as unknown[]).push({
+        id: 't-bad',
+        x: 0,
+        y: 0,
+        label: 'X',
+        color: '#000',
+        imageId: null,
+        size: 1,
+        borderColor: null,
+        hp: null,
+        conditions: [],
+        rotation: 0,
+        losRadius: null,
+        light: null,
+        initiativeMod: 0,
+        conditionExpirations: {},
+        deathSaves: { successes: 0, failures: 0 },
+        ownerId: null,
+        auras: [],
+        speedFt: -10,
+      });
+      const restored = deserializeState(state);
+      expect(restored.tokens[0]!.speedFt).toBe(30);
+    });
+
+    it('treats NaN speedFt as the default (defensive)', () => {
+      const state = serializeState(createDefaultState());
+      (state.tokens as unknown[]).push({
+        id: 't-nan',
+        x: 0,
+        y: 0,
+        label: 'X',
+        color: '#000',
+        imageId: null,
+        size: 1,
+        borderColor: null,
+        hp: null,
+        conditions: [],
+        rotation: 0,
+        losRadius: null,
+        light: null,
+        initiativeMod: 0,
+        conditionExpirations: {},
+        deathSaves: { successes: 0, failures: 0 },
+        ownerId: null,
+        auras: [],
+        speedFt: NaN,
+      });
+      const restored = deserializeState(state);
+      expect(restored.tokens[0]!.speedFt).toBe(30);
+    });
+
+    it('allows speedFt = 0 to disable the budget HUD', () => {
+      const state = createDefaultState();
+      state.tokens.push({
+        id: 't-still',
+        x: 0,
+        y: 0,
+        label: 'Statue',
+        color: '#aaa',
+        imageId: null,
+        size: 1,
+        borderColor: null,
+        hp: null,
+        conditions: [],
+        rotation: 0,
+        losRadius: null,
+        light: null,
+        initiativeMod: 0,
+        conditionExpirations: {},
+        deathSaves: { successes: 0, failures: 0 },
+        ownerId: null,
+        auras: [],
+        speedFt: 0,
+      });
+      const restored = deserializeState(serializeState(state));
+      expect(restored.tokens[0]!.speedFt).toBe(0);
     });
   });
 
@@ -568,6 +700,7 @@ describe('serializeState / deserializeState', () => {
       deathSaves: { successes: 0, failures: 0 },
       ownerId: 'spec-42',
       auras: [],
+    speedFt: 30,
     });
     const restored = deserializeState(serializeState(state));
     expect(restored.tokens[0]!.ownerId).toBe('spec-42');
