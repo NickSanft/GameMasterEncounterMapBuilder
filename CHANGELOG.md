@@ -131,6 +131,35 @@ gaps so the v1.0 cut is genuinely "stable + remote-play-capable."
 
 ---
 
+## [1.18.0] — 2026-05-04 — Selected-token z-order fix
+
+Phase 143 — first phase of the **visual polish trio**. Fixes a z-order quirk where a dragged token's HP bar / condition chips / owner indicator could end up *underneath* an unselected token at the same destination cell. The pre-143 paint order walked `{ unselected → selected }` for bodies + labels, but **raw `state.tokens` order** for status (HP, conditions) and owner dots — meaning whichever token had the higher index in the array won the status z-fight, regardless of which one the GM was actively dragging.
+
+### Changed
+- **`drawTokens` in `src/render/layer-tokens.ts`** uses a 3-bucket split (`unselected` / `selectedNonDragged` / `dragged`) and walks the order in EVERY pass (bodies, labels, status, owner). The dragged bucket paints LAST in every pass, so nothing overpaints it.
+- The pass model itself is preserved (all bodies → all labels → all status → all owners), so within-pass z-order for non-dragged tokens is unchanged. Visual regression baselines stay valid.
+
+### Why this matters
+Pre-143 a GM dragging a wounded token onto a stack of full-HP enemies would lose sight of the dragged token's HP bar mid-drag — the unselected enemy's HP bar painted on top, hiding crucial information. The fix ensures the dragged token always shows its full status, regardless of what's underneath it.
+
+### Architecture
+The 5-line "selected" → "selectedNonDragged" rename + the 3-bucket loop split is purely a paint-order change. No state model changes, no new exports, no API surface changes for callers of `drawTokens`. The function signature is identical.
+
+The 4 paint passes (body → label → status → owner) are now explicit per-bucket nested loops instead of two flat-loop interleaves. Total LOC delta is +~30 lines (the explicit loops are slightly longer than the implicit raw-order iterators) but readability + paint-order correctness wins.
+
+### Tests
+No new tests. The non-dragged paint order is identical to pre-143 (existing visual-regression baselines unchanged). A dragged-token-over-stack scenario isn't in the current baseline scenes; adding one would require Win32 + Linux baseline regen for an essentially preventive change. Documented as a skip — a future baseline that exercises drag-over-stack would catch any regression in this code path.
+
+All 1508 unit tests + 364 Playwright specs pass locally.
+
+### Bundle
+- 109.63 / 120 KB initial-load brotli (+0.15 KB for the bucket-splitting glue). CSS unchanged. Lazy chunks unchanged.
+
+### Pre-push checklist
+Caught zero issues — full unit suite + full e2e + visual-regression specs + size-limit all green before push. (The `scenes.spec.ts:56` parallel flake didn't reappear this run.)
+
+---
+
 ## [1.17.0] — 2026-05-04 — Tile-based dungeon paint mode
 
 Phase 142 — closing phase of the **map authoring track** + the post-1.0 backlog you asked me to plan back in Phase 132. Adds a fully cosmetic tile-paint layer: a brush, 5 tile kinds (floor / wall / water / rough / pit), an erase mode, and a "Clear all tiles" affordance. Runs alongside any uploaded background, doesn't touch LoS / movement / fog — purely visual annotation for "this room is flooded" / "this corridor is rough terrain" / "trap pit here."

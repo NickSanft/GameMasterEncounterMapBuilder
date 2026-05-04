@@ -73,17 +73,29 @@ export function drawTokens(
   const draggedIds =
     overlay && (overlay.deltaX !== 0 || overlay.deltaY !== 0) ? overlay.ids : [];
 
+  // Phase 143 — three-bucket split. Pre-143 the loops walked
+  //   { unselected → selected } for bodies + labels, then raw
+  // `state.tokens` order for status + owner dots. The latter
+  // meant a dragged token's HP / condition chips / owner indicator
+  // could end up *underneath* an unselected token at the same
+  // destination cell — the unselected token's status / owner pass
+  // ran later in `state.tokens` order and painted on top of the
+  // dragged ghost.
+  //
+  // Three buckets — `unselected`, `selectedNonDragged`, `dragged`
+  // — make the dragged token paint LAST in every pass so nothing
+  // overpaints it. The pass model (all bodies → all labels →
+  // all status → all owners) is preserved so within-pass z-order
+  // is unchanged for non-dragged tokens.
   const unselected: Token[] = [];
-  const selected: Token[] = [];
+  const selectedNonDragged: Token[] = [];
+  const dragged: Token[] = [];
   for (const t of state.tokens) {
     if (options.mode === 'spectator' && isTokenFullyHidden(t, state)) continue;
     const display = withOverlay(t, overlay, cellSize);
-    if (highlightIds.has(t.id)) selected.push(display);
+    if (draggedIds.includes(t.id)) dragged.push(display);
+    else if (highlightIds.has(t.id)) selectedNonDragged.push(display);
     else unselected.push(display);
-  }
-
-  function isDragged(t: Token): boolean {
-    return draggedIds.includes(t.id);
   }
 
   const activeId = options.activeInitiativeTokenId ?? null;
@@ -99,51 +111,63 @@ export function drawTokens(
     drawTokenAuras(ctx, display, state.grid, options.mode);
   }
 
+  // Pass 1: bodies. unselected → selected → dragged.
   for (const t of unselected) {
     drawTokenBody(
-      ctx,
-      t,
-      state.grid,
-      false,
-      getImage,
-      options.showColorblindMarkers,
-      isDragged(t),
-      t.id === activeId,
+      ctx, t, state.grid, false, getImage,
+      options.showColorblindMarkers, false, t.id === activeId,
     );
   }
-  for (const t of selected) {
+  for (const t of selectedNonDragged) {
     drawTokenBody(
-      ctx,
-      t,
-      state.grid,
-      true,
-      getImage,
-      options.showColorblindMarkers,
-      isDragged(t),
-      t.id === activeId,
+      ctx, t, state.grid, true, getImage,
+      options.showColorblindMarkers, false, t.id === activeId,
     );
   }
-  for (const t of unselected) {
-    drawTokenLabel(ctx, t, state.grid, labelScale, false, isDragged(t));
-  }
-  for (const t of selected) {
-    drawTokenLabel(ctx, t, state.grid, labelScale, true, isDragged(t));
-  }
-  // HP bars and condition chips live on top of labels / active-turn rings so
-  // they remain legible regardless of layering beneath.
-  for (const t of state.tokens) {
-    if (options.mode === 'spectator' && isTokenFullyHidden(t, state)) continue;
-    const display = withOverlay(t, overlay, cellSize);
-    drawTokenStatus(ctx, display, state.grid, options.mode, labelScale, isDragged(t));
+  for (const t of dragged) {
+    drawTokenBody(
+      ctx, t, state.grid, true, getImage,
+      options.showColorblindMarkers, true, t.id === activeId,
+    );
   }
 
-  // Phase 126 — owner-indicator dot. Painted on top of the body /
-  // status passes so it sits above HP bars + condition chips.
-  for (const t of state.tokens) {
+  // Pass 2: labels.
+  for (const t of unselected) {
+    drawTokenLabel(ctx, t, state.grid, labelScale, false, false);
+  }
+  for (const t of selectedNonDragged) {
+    drawTokenLabel(ctx, t, state.grid, labelScale, true, false);
+  }
+  for (const t of dragged) {
+    drawTokenLabel(ctx, t, state.grid, labelScale, true, true);
+  }
+
+  // Pass 3: HP bars + condition chips. Phase 143 — bucketed (was
+  // raw `state.tokens` order) so dragged tokens' status paints
+  // last.
+  for (const t of unselected) {
+    drawTokenStatus(ctx, t, state.grid, options.mode, labelScale, false);
+  }
+  for (const t of selectedNonDragged) {
+    drawTokenStatus(ctx, t, state.grid, options.mode, labelScale, false);
+  }
+  for (const t of dragged) {
+    drawTokenStatus(ctx, t, state.grid, options.mode, labelScale, true);
+  }
+
+  // Pass 4: owner-indicator dots. Phase 126 → 143 — bucketed for
+  // the same reason as status.
+  for (const t of unselected) {
     if (!t.ownerId) continue;
-    if (options.mode === 'spectator' && isTokenFullyHidden(t, state)) continue;
-    const display = withOverlay(t, overlay, cellSize);
-    drawOwnerDot(ctx, display, state.grid, t.ownerId, options.getOwnerColor);
+    drawOwnerDot(ctx, t, state.grid, t.ownerId, options.getOwnerColor);
+  }
+  for (const t of selectedNonDragged) {
+    if (!t.ownerId) continue;
+    drawOwnerDot(ctx, t, state.grid, t.ownerId, options.getOwnerColor);
+  }
+  for (const t of dragged) {
+    if (!t.ownerId) continue;
+    drawOwnerDot(ctx, t, state.grid, t.ownerId, options.getOwnerColor);
   }
 
   // Stack-count badge — one per cell that contains ≥2 tokens. Drawn after
