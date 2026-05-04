@@ -87,6 +87,7 @@ export function placeTemplate(
     deathSaves: { successes: 0, failures: 0 },
     // Phase 126 — placed-from-template tokens always start GM-controlled.
     ownerId: null,
+    auras: [],
   }));
 }
 

@@ -131,6 +131,52 @@ gaps so the v1.0 cut is genuinely "stable + remote-play-capable."
 
 ---
 
+## [1.14.0] — 2026-05-04 — Token aura / emanation rings
+
+Phase 139 — third phase of the **token visual layer track**. Adds a colored ring centered on a token to track persistent area effects ("Bless 10 ft", "Spirit Guardians 15 ft") that follow the caster as they move. Distinct from `AoeTemplate` (Phase 31), which is anchored at a fixed world position.
+
+### Added
+- **`Aura` interface + `Token.auras: Aura[]`** in `src/state/types.ts`. Each `Aura = { id, radius, color, label?, visibility }`. Multiple auras stack on the same token in the wire format; the v139 editor UI manages a single primary aura per token (multi-aura authoring is future polish — the format supports it).
+- **`normalizeAuras` defensive parser** in `src/sync/messages.ts`. Drops malformed entries (missing id / non-finite radius / empty color); collapses unknown `visibility` values to `'shared'`. Pre-139 sessions get the default `[]`. Forward-only — pre-139 peers drop the field on receive (same forward-only pattern as Phase 109's `hiddenTokenIds`).
+- **`drawTokenAuras` renderer** in `src/render/layer-tokens.ts`. Translucent fill (18% alpha) + solid stroke; optional label tag at the top edge of the ring. GM-only auras hidden on the Spectator canvas via the same `visibility: 'gm'` mechanism walls + annotations use. Renders BELOW token bodies so the icon sits cleanly on top.
+- **Token editor "Aura" section.** New fieldset between Light and Initiative. Toggle + label input (24 char max) + radius (5-240 ft, in 5 ft increments using `feetPerSquare`) + color picker + GM-only checkbox. Inline hint explains the v139 single-aura cut + the future multi-aura roadmap.
+
+### Why this matters
+Pre-139 a Cleric maintaining Spirit Guardians had to either (a) drop a fixed `AoeTemplate` and re-place it every time the Cleric moved (~5 clicks per turn), or (b) eyeball the radius. Both are friction. v139 makes the ring follow the token automatically, with one editor toggle.
+
+### Architecture
+- **`src/state/types.ts`** — `Aura` interface + `Token.auras: Aura[]` (required field, default `[]` from `deserializeState`). Same back-compat pattern as Phase 70's `conditionExpirations`, Phase 124's `gridShape`, Phase 126's `ownerId`.
+- **`src/sync/messages.ts`** —
+  - `normalizeAuras(raw: unknown): Aura[]` — defensive parser. Accepts `unknown`, narrows entry-by-entry, drops invalid entries (not the whole array). Bounds: `radius > 0`, `id` non-empty string, `color` non-empty string.
+  - `deserializeState` calls it inside the token map step. Token shape now has `auras` after `ownerId`.
+- **`src/render/layer-tokens.ts`** —
+  - New `drawTokenAuras(ctx, token, grid, mode)` helper. Iterates `token.auras`, draws each as filled disk + outlined ring + optional label-pill via `roundRect` (the existing local helper).
+  - New `withAlpha(hex, alpha)` helper — converts `#rrggbb` to `rgba(r, g, b, a)` for the translucent fill. Falls back to neutral gray on malformed hex. Same parsing pattern as the existing `hexToRgba` in `layer-fog.ts`.
+  - The pre-token-body loop in `drawTokens` adds an aura-rendering pass before the existing body / label / status passes, so auras render below tokens (the icon overlaps the center of its own emanation).
+- **`src/ui/token-editor.ts`** — Fieldset HTML between Light and Initiative. New input refs (`hasAuraInput`, `auraDetails`, `auraLabelInput`, `auraRadiusFeetInput`, `auraColorInput`, `auraGmOnlyInput`) wired in `mountTokenEditor`. New `syncAuraUI(auras)` for read; new `commitAuraField` for write. The toggle creates an entry with default 10 ft purple ring; disabling drops the first entry only (preserves any extras a future multi-aura UI might have added).
+
+### UX details
+- **Single primary aura per token in the editor.** The wire format already supports the array; only the v139 UI is single-edit. Documented in the editor hint + the changelog so users know multi-aura authoring is on the roadmap.
+- **Radius in feet, not pixels.** Same convention as `losRadius` + `light.bright/dim`. The editor multiplies by `feetPerSquare` to derive the world-pixel value `Aura.radius` stores.
+- **GM-only auras still take effect on the GM canvas.** They just don't paint on the Spectator canvas. Matches the secret-door pattern from Phase 85 walls.
+- **Auras don't currently clip to walls.** A token in a 10x10 room with a 30-ft Spirit Guardians ring shows the full ring, including the parts that would be blocked by the room walls. Wall-clipping (line-of-effect, not line-of-sight) would need a separate ray-cast pass; deferred polish.
+- **No aura distance readout.** Hover doesn't show the radius in feet. The label tag (if set) gives some context. Future polish.
+
+### Tests
+- **+4 unit tests** in `src/sync/messages.test.ts` (under a new "Phase 139 — auras" describe block): legacy saves default to `[]`; valid auras round-trip across serialize+deserialize; malformed entries (empty id, negative radius, empty color, wrong type) are dropped while valid entries survive; unknown visibility values collapse to `'shared'`.
+- **+2 Playwright specs** in `e2e/token-aura.spec.ts` (new): aura editor toggle + radius + label round-trip across editor close + reopen; disabling clears the entry.
+- **All 1475 unit tests + 353 Playwright specs pass** locally.
+- **Existing test fixtures updated.** Adding `auras: Aura[]` to `Token` made every test that constructs a `Token` literal fail typecheck. Updated via `sed` across ~20 files (the workflow's recommended pattern for mass test-fixture updates).
+
+### Bundle
+- 106.36 / 110 KB initial-load brotli (+0.73 KB for the type definitions + the deserializer + the renderer + the editor UI). Lazy chunks unchanged. CSS unchanged.
+- **Headroom note:** the JS budget will be bumped 110 → 120 KB before Phase 141 (UVTT import) lands, since 141 + 142 (tile paint) together need ~4 KB.
+
+### Pre-push checklist
+Caught zero issues — full unit suite + full e2e + visual-regression specs + size-limit all green before push.
+
+---
+
 ## [1.13.0] — 2026-05-03 — Visual condition icons on tokens
 
 Phase 138 — second phase of the **token visual layer track**. The condition chips above each token (Phase 50, then re-styled in Phase 67) used 1-2 letter glyphs (`B` for blinded, `Co` for concentrating, `Pt` for petrified, etc.) at chip radius ≥ 9 px. Letters work but require reading; vector icons leverage shape recognition for faster mid-combat scanning.

@@ -26,6 +26,7 @@ function token(id: string, imageId: string | null = null, borderColor: string | 
     conditionExpirations: {},
     deathSaves: { successes: 0, failures: 0 },
     ownerId: null,
+    auras: [],
   };
 }
 

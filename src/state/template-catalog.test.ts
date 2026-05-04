@@ -29,6 +29,7 @@ function tok(overrides: Partial<Token> = {}): Token {
     conditionExpirations: overrides.conditionExpirations ?? {},
     deathSaves: overrides.deathSaves ?? { successes: 0, failures: 0 },
     ownerId: overrides.ownerId ?? null,
+    auras: overrides.auras ?? [],
   };
 }
 

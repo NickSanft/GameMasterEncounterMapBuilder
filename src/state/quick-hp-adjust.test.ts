@@ -24,6 +24,7 @@ function tk(over: Partial<Token> = {}): Token {
     conditionExpirations: {},
     deathSaves: { successes: 0, failures: 0 },
     ownerId: null,
+    auras: [],
     ...over,
   };
 }

@@ -172,6 +172,7 @@ function token(partial: Partial<Token> & { id: string }): Token {
     conditionExpirations: partial.conditionExpirations ?? {},
     deathSaves: partial.deathSaves ?? { successes: 0, failures: 0 },
     ownerId: partial.ownerId ?? null,
+    auras: partial.auras ?? [],
   };
 }
 

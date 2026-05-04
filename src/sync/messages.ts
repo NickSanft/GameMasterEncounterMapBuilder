@@ -1,6 +1,7 @@
 import type {
   Annotation,
   AoeTemplate,
+  Aura,
   Background,
   Camera,
   DrawStroke,
@@ -73,6 +74,36 @@ function normalizeHp(hp: unknown): TokenHp | null {
  * must be positive finite numbers, otherwise the whole light goes
  * back to `null` (safer than silently rendering garbage).
  */
+/**
+ * Phase 139 — defensive parser for the optional `auras: Aura[]`
+ * field. Returns `[]` for any non-array input (covers `undefined` on
+ * pre-139 saves + malformed wire payloads). Each entry must have a
+ * non-empty string `id`, finite positive `radius`, and string
+ * `color`; bad entries are dropped (not the whole array). Visibility
+ * defaults to `'shared'` when missing or unknown.
+ */
+function normalizeAuras(raw: unknown): Aura[] {
+  if (!Array.isArray(raw)) return [];
+  const out: Aura[] = [];
+  for (const v of raw) {
+    if (!v || typeof v !== 'object') continue;
+    const a = v as Partial<Aura>;
+    if (typeof a.id !== 'string' || a.id.length === 0) continue;
+    if (typeof a.radius !== 'number' || !Number.isFinite(a.radius) || a.radius <= 0) continue;
+    if (typeof a.color !== 'string' || a.color.length === 0) continue;
+    const visibility: 'gm' | 'shared' = a.visibility === 'gm' ? 'gm' : 'shared';
+    const entry: Aura = {
+      id: a.id,
+      radius: a.radius,
+      color: a.color,
+      visibility,
+    };
+    if (typeof a.label === 'string' && a.label.length > 0) entry.label = a.label;
+    out.push(entry);
+  }
+  return out;
+}
+
 function normalizeLight(light: unknown): TokenLight | null {
   if (!light || typeof light !== 'object') return null;
   const l = light as Partial<TokenLight>;
@@ -526,6 +557,11 @@ export function deserializeState(s: SerializedSessionState): SessionState {
         typeof t.ownerId === 'string' && t.ownerId.length > 0
           ? t.ownerId
           : null,
+      // Phase 139 — colored emanation rings centered on this token.
+      // Pre-139 sessions don't carry the field; default to []. Each
+      // entry is defensively validated by `normalizeAuras` so a
+      // malformed peer can't sneak `radius: NaN` past the renderer.
+      auras: normalizeAuras((t as { auras?: unknown }).auras),
     })),
     fog: Uint8Array.from(s.fog),
     annotations: (s.annotations ?? []).map((a) => ({

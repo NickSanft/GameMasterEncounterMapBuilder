@@ -62,6 +62,7 @@ export function createTokenTool(
         conditionExpirations: {},
         deathSaves: { successes: 0, failures: 0 },
         ownerId: null,
+    auras: [],
       };
     }
     store.applyPatch({ kind: 'token-add', token: newToken });

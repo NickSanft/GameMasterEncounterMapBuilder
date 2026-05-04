@@ -94,5 +94,6 @@ export function tokenFromCatalogEntry(
     // Phase 126 — ownership is GM-authored after placement; library
     // tokens always start GM-controlled.
     ownerId: null,
+    auras: [],
   };
 }

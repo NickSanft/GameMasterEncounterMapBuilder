@@ -107,6 +107,7 @@ describe('duplicateScene', () => {
       conditionExpirations: {},
       deathSaves: { successes: 0, failures: 0 },
       ownerId: null,
+    auras: [],
     });
     await saveScene(original.id, state);
 
@@ -191,6 +192,7 @@ describe('ensureActiveScene', () => {
       conditionExpirations: {},
       deathSaves: { successes: 0, failures: 0 },
       ownerId: null,
+    auras: [],
     });
     await runTx(SESSIONS_STORE, 'readwrite', (s) =>
       s.put({

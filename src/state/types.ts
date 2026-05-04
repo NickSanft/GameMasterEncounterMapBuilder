@@ -62,6 +62,32 @@ export interface TokenHp {
   visibility: HpVisibility;
 }
 
+/**
+ * Phase 139 — a colored emanation ring centered on a token. Tracks
+ * persistent area effects ("Bless 10 ft", "Spirit Guardians 15 ft",
+ * "Bardic Rune 20 ft") that follow the caster as they move. Distinct
+ * from `AoeTemplate` (Phase 31), which is anchored at a fixed world
+ * position; auras follow their token.
+ *
+ * Multiple auras stack on the same token (a 7th-level Cleric can be
+ * concentrating on Spirit Guardians AND benefiting from a partyl
+ * Bless at the same time — the renderer paints both rings).
+ *
+ * `radius` is in world pixels (same units as `losRadius`); the
+ * editor exposes it in feet using the active `feetPerSquare`. The
+ * `label` (optional) renders as a small tag at the ring's edge for
+ * scannability ("Bless"). `visibility: 'gm'` hides the ring on the
+ * Spectator canvas (the GM-only "I know about this aura but the
+ * party doesn't yet" pattern).
+ */
+export interface Aura {
+  id: ID;
+  radius: number;
+  color: string;
+  label?: string;
+  visibility: 'gm' | 'shared';
+}
+
 export interface Token {
   id: ID;
   x: number;
@@ -159,6 +185,14 @@ export interface Token {
    * defaults missing values to `null` so back-compat holds.
    */
   ownerId: ID | null;
+  /**
+   * Phase 139 — colored emanation rings centered on this token. See
+   * the `Aura` interface docstring for semantics. Default `[]`. Pre-
+   * 139 sessions don't carry this field; `deserializeState` defaults
+   * missing values to `[]`. Forward-only over the wire — pre-139
+   * peers will drop the field on receive.
+   */
+  auras: Aura[];
 }
 
 export interface Background {

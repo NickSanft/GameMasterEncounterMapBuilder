@@ -88,6 +88,17 @@ export function drawTokens(
 
   const activeId = options.activeInitiativeTokenId ?? null;
 
+  // Phase 139 — auras render BELOW token bodies so the token icon
+  // sits cleanly on top of its own emanation. GM-only auras are
+  // hidden on the Spectator canvas (mirrors `visibility: 'gm'` for
+  // walls + annotations).
+  for (const t of state.tokens) {
+    if (options.mode === 'spectator' && isTokenFullyHidden(t, state)) continue;
+    if (t.auras.length === 0) continue;
+    const display = withOverlay(t, overlay, cellSize);
+    drawTokenAuras(ctx, display, state.grid, options.mode);
+  }
+
   for (const t of unselected) {
     drawTokenBody(
       ctx,
@@ -177,6 +188,78 @@ function drawOwnerDot(
 }
 
 const DRAG_GHOST_ALPHA = 0.6;
+
+/**
+ * Phase 139 — draw the colored emanation rings centered on a token.
+ * Auras render below token bodies so the token icon sits on top.
+ * Each aura paints a translucent disk + a solid outline + an
+ * optional label tag at the top edge of the disk.
+ */
+function drawTokenAuras(
+  ctx: CanvasRenderingContext2D,
+  t: Token,
+  grid: GridConfig,
+  mode: ViewMode,
+): void {
+  const center = tokenCenterWorld(t, grid);
+  const cx = center.x;
+  const cy = center.y;
+  for (const aura of t.auras) {
+    if (mode === 'spectator' && aura.visibility === 'gm') continue;
+    if (!Number.isFinite(aura.radius) || aura.radius <= 0) continue;
+    ctx.save();
+    // Translucent fill + solid stroke for visibility against any
+    // background; same opacity / line-width recipe used by the
+    // Phase 31 AoE templates so auras + AoEs share visual language.
+    ctx.fillStyle = withAlpha(aura.color, 0.18);
+    ctx.strokeStyle = aura.color;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(cx, cy, aura.radius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    // Optional label tag at the top edge of the ring. Drawn as a
+    // solid-color pill with white text so it pops against any
+    // background.
+    if (aura.label) {
+      const fontSize = 11;
+      ctx.font = `600 ${fontSize}px system-ui, sans-serif`;
+      const metrics = ctx.measureText(aura.label);
+      const padX = 6;
+      const padY = 3;
+      const w = metrics.width + padX * 2;
+      const h = fontSize + padY * 2;
+      const tx = cx - w / 2;
+      const ty = cy - aura.radius - h - 2;
+      ctx.fillStyle = aura.color;
+      roundRect(ctx, tx, ty, w, h, 3);
+      ctx.fill();
+      ctx.fillStyle = preferBlackText(aura.color) ? '#000' : '#fff';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(aura.label, cx, ty + h / 2);
+    }
+    ctx.restore();
+  }
+}
+
+/**
+ * Convert a #rrggbb hex color to an `rgba(r, g, b, a)` string. Used
+ * by `drawTokenAuras` to paint a translucent fill from the
+ * preset-color hex without parsing it through CSS each frame.
+ * Falls back to a neutral gray if `hex` isn't a valid 6-digit code.
+ */
+function withAlpha(hex: string, alpha: number): string {
+  const normalized = hex.startsWith('#') ? hex.slice(1) : hex;
+  if (normalized.length !== 6) return `rgba(160, 160, 160, ${alpha})`;
+  const r = parseInt(normalized.slice(0, 2), 16);
+  const g = parseInt(normalized.slice(2, 4), 16);
+  const b = parseInt(normalized.slice(4, 6), 16);
+  if (Number.isNaN(r) || Number.isNaN(g) || Number.isNaN(b)) {
+    return `rgba(160, 160, 160, ${alpha})`;
+  }
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
 
 function drawTokenBody(
   ctx: CanvasRenderingContext2D,

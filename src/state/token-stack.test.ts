@@ -26,6 +26,7 @@ function tok(id: string, x: number, y: number, label = id): Token {
     conditionExpirations: {},
     deathSaves: { successes: 0, failures: 0 },
     ownerId: null,
+    auras: [],
   };
 }
 

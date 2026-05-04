@@ -29,6 +29,7 @@ describe('serializeState / deserializeState', () => {
       conditionExpirations: {},
       deathSaves: { successes: 0, failures: 0 },
       ownerId: null,
+    auras: [],
     });
     const serialized = serializeState(state);
     const restored = deserializeState(serialized);
@@ -135,6 +136,125 @@ describe('serializeState / deserializeState', () => {
     } as unknown as SerializedSessionState;
     const restored = deserializeState(malformed);
     expect(restored.timeOfDay).toBe('none');
+  });
+
+  describe('Phase 139 — auras', () => {
+    it('defaults auras to [] for legacy saves (pre-139)', () => {
+      const legacy = {
+        ...serializeState(createDefaultState()),
+        tokens: [
+          {
+            id: 't1',
+            x: 0,
+            y: 0,
+            label: 'A',
+            color: '#ff0000',
+            imageId: null,
+            size: 1,
+            // auras field missing entirely
+          },
+        ],
+      } as unknown as SerializedSessionState;
+      const restored = deserializeState(legacy);
+      expect(restored.tokens[0]!.auras).toEqual([]);
+    });
+
+    it('preserves valid auras across a round-trip', () => {
+      const state = createDefaultState();
+      state.tokens.push({
+        id: 't-aura',
+        x: 5,
+        y: 5,
+        label: 'Cleric',
+        color: '#7e57c2',
+        imageId: null,
+        size: 1,
+        borderColor: null,
+        hp: null,
+        conditions: [],
+        rotation: 0,
+        losRadius: null,
+        light: null,
+        initiativeMod: 0,
+        conditionExpirations: {},
+        deathSaves: { successes: 0, failures: 0 },
+        ownerId: null,
+        auras: [
+          {
+            id: 'a1',
+            radius: 50,
+            color: '#7e57c2',
+            label: 'Bless',
+            visibility: 'shared',
+          },
+          { id: 'a2', radius: 100, color: '#ff5252', visibility: 'gm' },
+        ],
+      });
+      const restored = deserializeState(serializeState(state));
+      expect(restored.tokens[0]!.auras).toEqual(state.tokens[0]!.auras);
+    });
+
+    it('drops malformed aura entries (defensive parse)', () => {
+      const state = serializeState(createDefaultState());
+      state.tokens.push({
+        id: 't-bad',
+        x: 0,
+        y: 0,
+        label: 'X',
+        color: '#000',
+        imageId: null,
+        size: 1,
+        borderColor: null,
+        hp: null,
+        conditions: [],
+        rotation: 0,
+        losRadius: null,
+        light: null,
+        initiativeMod: 0,
+        conditionExpirations: {},
+        deathSaves: { successes: 0, failures: 0 },
+        ownerId: null,
+        // 5 entries: 1 valid, 4 malformed.
+        auras: [
+          { id: 'good', radius: 30, color: '#fff', visibility: 'shared' },
+          { id: '', radius: 30, color: '#fff' }, // empty id
+          { id: 'a', radius: -1, color: '#fff' }, // non-positive radius
+          { id: 'a', radius: 30, color: '' }, // empty color
+          'not an object', // wrong type
+        ] as never,
+      } as never);
+      const restored = deserializeState(state);
+      expect(restored.tokens[0]!.auras.length).toBe(1);
+      expect(restored.tokens[0]!.auras[0]!.id).toBe('good');
+    });
+
+    it("collapses unknown visibility values to 'shared'", () => {
+      const state = serializeState(createDefaultState());
+      state.tokens.push({
+        id: 't-aura',
+        x: 0,
+        y: 0,
+        label: 'A',
+        color: '#fff',
+        imageId: null,
+        size: 1,
+        borderColor: null,
+        hp: null,
+        conditions: [],
+        rotation: 0,
+        losRadius: null,
+        light: null,
+        initiativeMod: 0,
+        conditionExpirations: {},
+        deathSaves: { successes: 0, failures: 0 },
+        ownerId: null,
+        auras: [
+          { id: 'a1', radius: 30, color: '#fff', visibility: 'frob' },
+        ] as never,
+      } as never);
+      const restored = deserializeState(state);
+      expect(restored.tokens[0]!.auras[0]!.visibility).toBe('shared');
+    });
   });
 
   it("defaults weather to 'none' for legacy saves (Phase 78 and earlier)", () => {
@@ -397,6 +517,7 @@ describe('serializeState / deserializeState', () => {
       conditionExpirations: {},
       deathSaves: { successes: 0, failures: 0 },
       ownerId: 'spec-42',
+      auras: [],
     });
     const restored = deserializeState(serializeState(state));
     expect(restored.tokens[0]!.ownerId).toBe('spec-42');

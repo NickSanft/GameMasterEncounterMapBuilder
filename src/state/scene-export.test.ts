@@ -34,6 +34,7 @@ function stateWithToken(label: string) {
     conditionExpirations: {},
     deathSaves: { successes: 0, failures: 0 },
     ownerId: null,
+    auras: [],
   });
   return s;
 }

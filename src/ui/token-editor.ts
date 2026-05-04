@@ -1,6 +1,7 @@
 import type { Store } from '../state/store.js';
 import type { SelectionState } from '../input/context.js';
-import type { ID, Token, TokenHp, TokenLight } from '../state/types.js';
+import type { Aura, ID, Token, TokenHp, TokenLight } from '../state/types.js';
+import { nid as nanoNid } from '../util/id.js';
 import {
   isStable,
   isDead,
@@ -206,6 +207,38 @@ export function mountTokenEditor(opts: TokenEditorOptions): TokenEditorHandle {
         </div>
       </fieldset>
 
+      <fieldset class="aura-block">
+        <legend>Aura</legend>
+        <label class="check">
+          <input type="checkbox" data-field="hasAura" />
+          <span>Show a colored emanation ring (e.g. Bless, Spirit Guardians)</span>
+        </label>
+        <div class="aura-details" data-field="aura-details" hidden>
+          <div class="grid-row">
+            <label>Label
+              <input type="text" data-field="auraLabel" maxlength="24" placeholder="(optional)" />
+            </label>
+            <label>Radius (ft)
+              <input type="number" data-field="auraRadiusFeet" step="5" min="5" max="240" />
+            </label>
+            <label>Color
+              <input type="color" data-field="auraColor" />
+            </label>
+          </div>
+          <label class="check">
+            <input type="checkbox" data-field="auraGmOnly" />
+            <span>GM-only (hide ring from Spectator)</span>
+          </label>
+          <p class="settings-hint">
+            Phase 139 — the ring follows the token as it moves and stacks
+            visually with other tokens' auras. Stores a single aura per
+            token in this cut; the wire format (Token.auras array) already
+            supports multiple, so a future phase can ship a multi-aura
+            authoring UI without breaking the format.
+          </p>
+        </div>
+      </fieldset>
+
       <fieldset class="initiative-mod-block">
         <legend>Initiative</legend>
         <label>Bonus
@@ -365,6 +398,13 @@ export function mountTokenEditor(opts: TokenEditorOptions): TokenEditorHandle {
   const lightPresetBtns = Array.from(
     modal.querySelectorAll<HTMLButtonElement>('[data-light-preset]'),
   );
+  // Phase 139 — aura section.
+  const hasAuraInput = modal.querySelector<HTMLInputElement>('[data-field="hasAura"]')!;
+  const auraDetails = modal.querySelector<HTMLDivElement>('[data-field="aura-details"]')!;
+  const auraLabelInput = modal.querySelector<HTMLInputElement>('[data-field="auraLabel"]')!;
+  const auraRadiusFeetInput = modal.querySelector<HTMLInputElement>('[data-field="auraRadiusFeet"]')!;
+  const auraColorInput = modal.querySelector<HTMLInputElement>('[data-field="auraColor"]')!;
+  const auraGmOnlyInput = modal.querySelector<HTMLInputElement>('[data-field="auraGmOnly"]')!;
   const trackHpInput = modal.querySelector<HTMLInputElement>('[data-field="trackHp"]')!;
   const hpFields = modal.querySelector<HTMLDivElement>('[data-field="hp-fields"]')!;
   const hpCurrentInput = modal.querySelector<HTMLInputElement>('[data-field="hpCurrent"]')!;
@@ -481,6 +521,7 @@ export function mountTokenEditor(opts: TokenEditorOptions): TokenEditorHandle {
     syncDeathSavesUI(token.hp, token.deathSaves);
     syncSightUI(token.losRadius);
     syncLightUI(token.light);
+    syncAuraUI(token.auras);
     syncConditionUI(token.conditions, token.conditionExpirations);
     syncRotationUI(token.rotation);
     syncInitiativeModUI(token.initiativeMod);
@@ -630,6 +671,27 @@ export function mountTokenEditor(opts: TokenEditorOptions): TokenEditorHandle {
       lightBrightFeetInput.value = '20';
       lightDimFeetInput.value = '20';
       lightColorInput.value = '#ffe1a4';
+    }
+  }
+
+  // Phase 139 — sync the aura UI from `Token.auras`. The v139 cut
+  // edits the FIRST aura entry only (multi-aura authoring is future
+  // polish; the wire format already supports the array).
+  function syncAuraUI(auras: readonly Aura[]) {
+    const aura = auras[0] ?? null;
+    const enabled = aura !== null;
+    hasAuraInput.checked = enabled;
+    auraDetails.hidden = !enabled;
+    if (enabled && aura) {
+      auraLabelInput.value = aura.label ?? '';
+      auraRadiusFeetInput.value = String(radiusPxToFeet(aura.radius));
+      auraColorInput.value = aura.color || '#7e57c2';
+      auraGmOnlyInput.checked = aura.visibility === 'gm';
+    } else {
+      auraLabelInput.value = '';
+      auraRadiusFeetInput.value = '10';
+      auraColorInput.value = '#7e57c2';
+      auraGmOnlyInput.checked = false;
     }
   }
 
@@ -1132,6 +1194,68 @@ export function mountTokenEditor(opts: TokenEditorOptions): TokenEditorHandle {
     const light: TokenLight = { ...tok.light, color: lightColorInput.value };
     update({ light });
     syncLightUI(light);
+  });
+
+  // Phase 139 — aura listeners. Edits the FIRST aura entry only;
+  // multi-aura authoring is a future polish.
+  function commitAuraField() {
+    const tok = currentToken();
+    if (!tok || tok.auras.length === 0) return;
+    const radiusFeet = parseInt(auraRadiusFeetInput.value, 10);
+    if (!Number.isFinite(radiusFeet) || radiusFeet <= 0) {
+      syncAuraUI(tok.auras);
+      return;
+    }
+    const next: Aura = {
+      ...tok.auras[0]!,
+      label: auraLabelInput.value.trim() || undefined,
+      radius: radiusFeetToPx(radiusFeet),
+      color: auraColorInput.value,
+      visibility: auraGmOnlyInput.checked ? 'gm' : 'shared',
+    };
+    const auras: Aura[] = [next, ...tok.auras.slice(1)];
+    update({ auras });
+    syncAuraUI(auras);
+  }
+
+  hasAuraInput.addEventListener('change', () => {
+    const tok = currentToken();
+    if (!tok) return;
+    if (hasAuraInput.checked) {
+      const aura: Aura = {
+        id: nanoNid(),
+        label: undefined,
+        radius: radiusFeetToPx(10),
+        color: '#7e57c2',
+        visibility: 'shared',
+      };
+      const auras = [aura, ...tok.auras];
+      update({ auras });
+      syncAuraUI(auras);
+    } else {
+      // Drop only the first aura (the one this UI manages); preserve
+      // any extras a future multi-aura UI might have added.
+      const auras = tok.auras.slice(1);
+      update({ auras });
+      syncAuraUI(auras);
+    }
+  });
+
+  auraLabelInput.addEventListener('change', commitAuraField);
+  auraRadiusFeetInput.addEventListener('change', commitAuraField);
+  auraColorInput.addEventListener('change', commitAuraField);
+  auraGmOnlyInput.addEventListener('change', commitAuraField);
+  auraLabelInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      commitAuraField();
+      e.preventDefault();
+    }
+  });
+  auraRadiusFeetInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      commitAuraField();
+      e.preventDefault();
+    }
   });
 
   function commitHpField(which: 'current' | 'max') {
