@@ -18,6 +18,10 @@ import { createToolManager } from '../input/tool-manager.js';
 import { createSelectTool } from '../input/tool-select.js';
 import { createTokenTool } from '../input/tool-token.js';
 import {
+  createTilePaintTool,
+  createTilePaintOptionsRef,
+} from '../input/tool-tile-paint.js';
+import {
   createFogTool,
   createFogPreviewRef,
   createFogOptionsRef,
@@ -84,6 +88,7 @@ import { mountWallEditor } from '../ui/wall-editor.js';
 import { mountCanvasOutline } from '../ui/canvas-outline.js';
 import { mountFogSettings } from '../ui/fog-settings.js';
 import { mountWallsSettings } from '../ui/walls-settings.js';
+import { mountTilePaintSettings } from '../ui/tile-paint-settings.js';
 import { mountSettingsModal } from '../ui/settings-modal.js';
 import { mountZoomControls } from '../ui/zoom-controls.js';
 import { createSyncChannel } from '../sync/channel.js';
@@ -558,6 +563,11 @@ toolManager.register(
     autoNumber: () => preferences.get().autoNumberDuplicateTokens,
   }),
 );
+// Phase 142 — tile-paint tool. Options ref shared with the side
+// panel mounted below; the panel mutates `optionsRef.current` so
+// changes apply on the next pointerdown.
+const tilePaintOptionsRef = createTilePaintOptionsRef();
+toolManager.register(createTilePaintTool(inputContext, tilePaintOptionsRef));
 toolManager.register(createFogTool(inputContext, 'reveal', fogPreviewRef, fogOptionsRef, fogHoverRef));
 toolManager.register(createFogTool(inputContext, 'hide', fogPreviewRef, fogOptionsRef, fogHoverRef));
 toolManager.register(createBackgroundTool(inputContext));
@@ -608,6 +618,7 @@ const toolbarHandle = mountToolbar(
     { id: 'aoe', label: 'AoE (Y)', title: 'Drag to place an area-of-effect template.' },
     { id: 'draw', label: 'Draw (K)', title: 'Freehand ink on the map. Right-click a stroke to delete or toggle visibility.' },
     { id: 'walls', label: 'Walls (W)', title: 'Click to drop wall vertices; Escape / right-click / double-click ends the chain. Walls are GM-only — sight-blocking walls occlude both viewer line-of-sight and token light sources.' },
+    { id: 'tile-paint', label: 'Paint (P)', title: 'Phase 142 — paint colored tiles (floor / wall / water / rough / pit) on the grid. Cosmetic visual layer; doesn\'t affect LoS or movement.' },
   ],
   [
     {
@@ -635,6 +646,7 @@ toolManager.onChange((id) => {
 });
 
 mountFogSettings(document.body, fogOptionsRef, toolManager);
+mountTilePaintSettings(document.body, tilePaintOptionsRef, toolManager, store);
 // Phase 112 — Walls tool mode toggle (Lines / Block) shown only
 // while the Walls tool is active.
 mountWallsSettings(document.body, wallsToolOptionsRef, toolManager);
@@ -4131,6 +4143,11 @@ window.addEventListener('keydown', (e) => {
       break;
     case 'w':
       toolManager.setActive('walls');
+      e.preventDefault();
+      break;
+    case 'p':
+      // Phase 142 — tile-paint tool.
+      toolManager.setActive('tile-paint');
       e.preventDefault();
       break;
     case 'e': {

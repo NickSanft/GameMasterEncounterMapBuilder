@@ -96,6 +96,12 @@ export function mergeImportState(
     // Phase 80 — time-of-day pairs with weather as scene-mood, so it
     // travels under the same `background` opt-in.
     timeOfDay: selection.background ? imported.timeOfDay : base.timeOfDay,
+    // Phase 142 — tile paint travels with the grid (same opt-in as
+    // fog, since tile coords are grid-cell-indexed). Imported into
+    // base when the GM imports the grid; left alone otherwise.
+    tilePaints: takeGrid
+      ? imported.tilePaints.map((t) => ({ ...t }))
+      : base.tilePaints.map((t) => ({ ...t })),
   };
 }
 

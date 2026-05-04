@@ -131,6 +131,74 @@ gaps so the v1.0 cut is genuinely "stable + remote-play-capable."
 
 ---
 
+## [1.17.0] — 2026-05-04 — Tile-based dungeon paint mode
+
+Phase 142 — closing phase of the **map authoring track** + the post-1.0 backlog you asked me to plan back in Phase 132. Adds a fully cosmetic tile-paint layer: a brush, 5 tile kinds (floor / wall / water / rough / pit), an erase mode, and a "Clear all tiles" affordance. Runs alongside any uploaded background, doesn't touch LoS / movement / fog — purely visual annotation for "this room is flooded" / "this corridor is rough terrain" / "trap pit here."
+
+Also folds in a **hotfix for v1.16.0 (Phase 141)**: CI on the v1.16.0 commit went red because the new "Import VTT…" file input's `accept` attribute matched the `partial-import.spec.ts` selector `.session-menu input[type="file"][accept*="json"]`. Tightened the UVTT input's `accept` from `.dd2vtt,.uvtt,application/json` to just `.dd2vtt,.uvtt` so the test selector disambiguates. v1.16.0 was never tagged because of the failure; v1.17.0 ships the fix alongside Phase 142.
+
+### Added
+- **`TilePaint` + `TilePaintKind` types** in `src/state/types.ts`. New required-but-default-`[]` field `SessionState.tilePaints`. 5 kinds with fixed colors in the renderer (sandstone tan, slate gray, deep blue, dusty brown, near-black).
+- **3 new `StatePatch` variants:** `tile-paint-add` / `tile-paint-remove` / `tile-paint-clear`. The store reducer dedupes adds by `(cellX, cellY, kind)` so a brush drag doesn't pile up duplicate entries differing only by id; remove drops by id; clear is gated on a non-empty array.
+- **Defensive deserialize** in `messages.ts`. `normalizeTilePaints` drops malformed entries (empty id, NaN coords, unknown kind, wrong-type elements). Pre-142 saves default to `[]`.
+- **`drawTilePaints` renderer** in new `src/render/layer-tile-paint.ts`. Renders BETWEEN the background image and the grid lines, so painted tiles obscure the art they cover but grid lines stay visible above them.
+- **`tile-paint` tool** in new `src/input/tool-tile-paint.ts`. Click or drag to paint cells in the active kind; erase mode removes every tile on the targeted cell regardless of kind. Same `painted` Set pattern the fog tool uses to skip redundant patches when the pointer hovers a single cell.
+- **Tile-paint side panel** in new `src/ui/tile-paint-settings.ts`. Mounted only when the tool is active (mirrors the fog / walls / draw / aoe panels). Mode toggle (Paint / Erase) + Kind buttons (5 kinds) + a destructive "Clear all tiles" affordance with confirm.
+- **`P` keyboard shortcut** + **Paint (P) toolbar button** for activating the tool.
+
+### Why this matters
+Pre-142 the only ways to mark a tile as "this is special" were (a) an annotation pin (which is text-based and visually intrusive), (b) a freehand draw stroke (which doesn't snap to the grid), or (c) a custom uploaded background (which is heavyweight). Phase 142 adds the missing middle ground: snap-to-grid colored tiles for the common GM markers — flooded room, rough terrain, pit trap, painted floor over a featureless background. The visual layer is fully cosmetic by design; if a GM wants the tiles to ALSO block movement / sight, they can pair with a Phase 112 block wall.
+
+### Architecture
+- **`src/state/types.ts`** — adds `TilePaintKind`, `TilePaint`, `Token` field doesn't change. `SessionState.tilePaints: TilePaint[]` (required field; `createDefaultState()` returns `[]`). Three new `StatePatch` variants under the existing `weather-set` / `time-set` block.
+- **`src/state/store.ts`** —
+  - `snapshot()` deep-copies `tilePaints` per entry (each entry is a flat record so a shallow `{...t}` is fine).
+  - Reducer has explicit cases for the 3 new patch kinds; the dedupe + no-op fast paths mirror the Phase 79 / 80 patterns.
+- **`src/state/import-merge.ts`** — `tilePaints` travels under the same `takeGrid` opt-in as fog (since both are grid-cell-indexed and only meaningful paired with the matching grid).
+- **`src/sync/messages.ts`** —
+  - `SerializedSessionState.tilePaints?: TilePaint[]` (optional for back-compat).
+  - `serializeState` only emits the field when non-empty (keeps pre-142 saves' wire shape minimal).
+  - `normalizeTilePaints` defensive parser. Drops malformed entries; rounds non-integer coords to ints; rejects unknown kinds via a `Set<TilePaintKind>` check.
+- **`src/render/layer-tile-paint.ts`** (new) — pure renderer. Color table + `drawTilePaints(ctx, tiles, grid)`. Skips out-of-bounds entries (defensive against grid-resize state drift). Test helper `_tileColorsForTesting()` exports the palette for unit assertions.
+- **`src/render/renderer.ts`** — single new call between `drawBackground` (or `bgCache.getBitmap`) and `drawGrid`.
+- **`src/input/tool-tile-paint.ts`** (new) — tool factory + options ref. Pointer state machine; deduped paint set; erase batches all matching tiles via `store.batch`.
+- **`src/ui/tile-paint-settings.ts`** (new) — side panel.
+- **`src/entries/gm.ts`** — registers tool, mounts panel, adds `P` shortcut + Paint (P) toolbar entry.
+- **`src/ui/styles.css`** — adds `.tile-paint-settings*` to the existing `.fog-settings` / `.walls-settings` rule groups (single-source styling for all tool-side panels).
+
+### UX details
+- **Painted tiles are purely cosmetic.** They don't block LoS or movement, don't appear in the canvas-outline (Phase 87), don't trigger auto-reveal. A GM who wants a "painted wall tile" to ACTUALLY block sight needs to pair with a Phase 112 block wall.
+- **Multi-kind stacking on one cell** intentionally allowed. Useful for "rough terrain under water" — paint rough first, then water; both render, water on top.
+- **Erase removes EVERY kind on the targeted cell.** Simpler than per-kind erase and matches the "wipe this cell clean" intent.
+- **No undo grouping by drag.** Each painted cell is its own patch (so a 30-cell drag is 30 entries on the undo stack). Future polish could batch a drag into a single undo step; out of scope for v142.
+- **Grid coords stored on the tile, not world pixels.** Tile paint stays valid across cellSize changes (cells re-render at the new size).
+
+### Tests
+- **+12 unit tests** in `src/state/tile-paint.test.ts` (new): store starts with `[]`; add appends; add dedupes by `(cellX, cellY, kind)`; different kinds on same cell stack; remove by id; remove unknown id is no-op; clear empties; clear when empty is no-op (no notify); legacy saves default to `[]`; valid entries round-trip; malformed entries dropped via defensive parse; non-integer coords rounded.
+- **+6 Playwright specs** in `e2e/tile-paint.spec.ts` (new): P shortcut activates the tool + panel + default Paint/Floor selection; Paint toolbar button present; switching kinds updates active state; Erase toggle works; Clear button visible; panel hides when switching to a different tool.
+- **All 1508 unit tests + 363 Playwright specs pass** locally (the same `scenes.spec.ts:56` parallel flake reappeared once on the parallel run; passes in isolation, CI runs serially with retries=2, absorbed).
+
+### Bundle
+- 109.48 / 120 KB initial-load brotli (+0.93 KB for the type fields + reducer cases + renderer + tool + side panel + toolbar entry). The 110 → 120 KB bump from v1.16.0 covers Phase 142 with comfortable headroom (~10.5 KB).
+- Lazy chunks: 19.08 / 20 KB (unchanged).
+- CSS: 12.62 / 14 KB (+0.05 KB for the `.tile-paint-settings*` selectors folded into the existing rules).
+
+### Pre-push checklist
+Caught zero issues — full unit suite + full e2e + visual-regression specs (no baseline drift; tile-paint isn't in any baseline scene yet) + size-limit all green before push.
+
+### Closes the post-1.0 backlog
+Phase 142 ships the last item in the planning batch the GM asked for after v1.7.0 (the "10 features I suggested" list from the Phase 132 conversation). All 11 phases in that plan + the v1.7.1 docs patch + the v1.16.0 → v1.17.0 hotfix shipped:
+
+| Track | Phases |
+|---|---|
+| Hex polish trilogy | v1.8 (brush) · v1.9 (rectangle) · v1.10 (auto-reveal) |
+| Wall presets | v1.11 (door-removal) |
+| Token visual layer | v1.12 (auto-numbering) · v1.13 (condition icons) · v1.14 (auras) |
+| Map authoring | v1.15 (rotate / flip) · v1.16 (UVTT import) · v1.17 (tile paint) |
+| Docs | v1.7.1 |
+
+---
+
 ## [1.16.0] — 2026-05-04 — Universal VTT (.dd2vtt / .uvtt) import
 
 Phase 141 — second phase of the **map authoring track**. Imports the JSON envelope produced by Dungeondraft / Foundry / similar tools — a single file containing the background image, the grid sizing, and the wall + door geometry. Pre-141 a GM had to upload the image, then trace every wall by hand; v1.16 collapses that to a single file pick + one confirm dialog.

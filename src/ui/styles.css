@@ -466,7 +466,8 @@ body.view {
 .aoe-settings,
 .ruler-settings,
 .draw-settings,
-.walls-settings {
+.walls-settings,
+.tile-paint-settings {
   position: absolute;
   top: 3.25rem;
   left: 8.75rem;
@@ -592,7 +593,8 @@ body.view {
 }
 
 .fog-settings-label,
-.walls-settings-label {
+.walls-settings-label,
+.tile-paint-settings-label {
   font-size: 0.68rem;
   color: var(--fg-muted);
   text-transform: uppercase;
@@ -600,13 +602,16 @@ body.view {
 }
 
 .fog-settings-row,
-.walls-settings-row {
+.walls-settings-row,
+.tile-paint-settings-row {
   display: flex;
   gap: 0.25rem;
 }
 
 .fog-settings-row button,
-.walls-settings-row button {
+.walls-settings-row button,
+.tile-paint-settings-row button,
+.tile-paint-settings-clear {
   appearance: none;
   background: transparent;
   border: 1px solid var(--border);
@@ -621,12 +626,15 @@ body.view {
 }
 
 .fog-settings-row button:hover,
-.walls-settings-row button:hover {
+.walls-settings-row button:hover,
+.tile-paint-settings-row button:hover,
+.tile-paint-settings-clear:hover {
   background: var(--hover-overlay);
 }
 
 .fog-settings-row button.active,
-.walls-settings-row button.active {
+.walls-settings-row button.active,
+.tile-paint-settings-row button.active {
   background: var(--accent);
   border-color: var(--accent);
   color: white;

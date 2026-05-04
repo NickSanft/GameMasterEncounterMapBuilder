@@ -113,7 +113,15 @@ export function mountSessionMenu(
       )
     : null;
   const uvttInput = actions.onUvttImport
-    ? createFileInput('.dd2vtt,.uvtt,application/json')
+    ? // Phase 141 → 142 fix — `accept` is restricted to the two
+      // VTT extensions only. Keeping `application/json` in here was
+      // a courtesy to the OS file picker, but it made
+      // `.session-menu input[type="file"][accept*="json"]` (the
+      // partial-import test's selector) ambiguous; tightening to
+      // just the extensions disambiguates without affecting the
+      // file-pick UX (the dialog still accepts any file the user
+      // selects manually).
+      createFileInput('.dd2vtt,.uvtt')
     : null;
   if (uvttBtn && uvttInput && actions.onUvttImport) {
     const handler = actions.onUvttImport;

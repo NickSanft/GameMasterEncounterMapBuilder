@@ -51,6 +51,10 @@ function snapshot(s: SessionState): SessionState {
     walls: s.walls.map((w) => ({ ...w })),
     weather: s.weather,
     timeOfDay: s.timeOfDay,
+    // Phase 142 — copy the tile-paint array. Each entry is a flat
+    // record (id + cellX + cellY + kind), so a shallow clone per
+    // entry is sufficient.
+    tilePaints: s.tilePaints.map((t) => ({ ...t })),
   };
 }
 
@@ -341,6 +345,31 @@ export function createStore(initial?: SessionState): Store {
         // Phase 80 — same same-value no-op fast path.
         if (state.timeOfDay === patch.timeOfDay) return;
         state = { ...state, timeOfDay: patch.timeOfDay };
+        break;
+      case 'tile-paint-add': {
+        // Phase 142 — dedup by (cellX, cellY, kind). Painting the
+        // same tile kind onto the same cell is a no-op (so a brush
+        // drag doesn't pile up duplicate entries that differ only
+        // by id).
+        const existing = state.tilePaints.find(
+          (t) =>
+            t.cellX === patch.tile.cellX &&
+            t.cellY === patch.tile.cellY &&
+            t.kind === patch.tile.kind,
+        );
+        if (existing) return;
+        state = { ...state, tilePaints: [...state.tilePaints, patch.tile] };
+        break;
+      }
+      case 'tile-paint-remove': {
+        const filtered = state.tilePaints.filter((t) => t.id !== patch.id);
+        if (filtered.length === state.tilePaints.length) return;
+        state = { ...state, tilePaints: filtered };
+        break;
+      }
+      case 'tile-paint-clear':
+        if (state.tilePaints.length === 0) return;
+        state = { ...state, tilePaints: [] };
         break;
       case 'session-reset':
         state = patch.state;

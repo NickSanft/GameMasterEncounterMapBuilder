@@ -431,6 +431,36 @@ export type WeatherKind = 'none' | 'rain' | 'snow' | 'fog';
  */
 export type TimeOfDay = 'none' | 'dawn' | 'day' | 'dusk' | 'night';
 
+/**
+ * Phase 142 — tile-based dungeon paint kind. Each value maps to a
+ * fixed color in the renderer (`layer-tile-paint.ts`). Solid colors
+ * only in v1.17; sprite-based tiles are deferred polish.
+ *
+ *   - `'floor'`    — tan / sandstone (the default brush).
+ *   - `'wall'`     — slate gray. Visual only in v1.17 (doesn't block
+ *     LoS / movement; promote to a Phase 112 block wall via the
+ *     editor for that). A future polish could couple them.
+ *   - `'water'`    — deep blue.
+ *   - `'rough'`    — dusty brown (difficult terrain visual cue).
+ *   - `'pit'`      — near-black with a slight purple tint.
+ */
+export type TilePaintKind = 'floor' | 'wall' | 'water' | 'rough' | 'pit';
+
+/**
+ * Phase 142 — a single painted tile. World position is stored as
+ * grid cell coords (`cellX`, `cellY`) so tile paint stays
+ * resolution-independent. One tile per cell per kind; the painter
+ * deduplicates so a cell never has two tiles of the same kind, but
+ * different kinds CAN coexist (e.g. a rough-terrain tile under a
+ * water tile renders water-on-rough).
+ */
+export interface TilePaint {
+  id: ID;
+  cellX: number;
+  cellY: number;
+  kind: TilePaintKind;
+}
+
 export interface SessionState {
   version: 1;
   grid: GridConfig;
@@ -453,6 +483,14 @@ export interface SessionState {
    * unknown kinds to `'none'` for back-compat.
    */
   timeOfDay: TimeOfDay;
+  /**
+   * Phase 142 — tile-based dungeon paint layer. Default `[]`. Pre-
+   * 142 sessions don't carry the field; `deserializeState` defaults
+   * missing values to `[]`. Forward-only over the wire — pre-142
+   * peers ignore the field on receive (same forward-only pattern as
+   * Phase 109's `hiddenTokenIds`, Phase 139's `auras`).
+   */
+  tilePaints: TilePaint[];
 }
 
 export interface Camera {
@@ -509,6 +547,9 @@ export type StatePatch =
   | { kind: 'walls-clear' }
   | { kind: 'weather-set'; weather: WeatherKind }
   | { kind: 'time-set'; timeOfDay: TimeOfDay }
+  | { kind: 'tile-paint-add'; tile: TilePaint }
+  | { kind: 'tile-paint-remove'; id: ID }
+  | { kind: 'tile-paint-clear' }
   | { kind: 'session-reset'; state: SessionState };
 
 export const DEFAULT_GRID: GridConfig = {
@@ -553,5 +594,6 @@ export function createDefaultState(): SessionState {
     walls: [],
     weather: 'none',
     timeOfDay: 'none',
+    tilePaints: [],
   };
 }

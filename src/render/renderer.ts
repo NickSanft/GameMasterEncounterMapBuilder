@@ -6,6 +6,7 @@ import type {
 } from '../state/types.js';
 import { drawGrid } from './layer-grid.js';
 import { drawTokens } from './layer-tokens.js';
+import { drawTilePaints } from './layer-tile-paint.js';
 import {
   drawFog,
   drawFogPreview,
@@ -293,6 +294,10 @@ export function createRenderer(opts: CreateRendererOptions): Renderer {
     } else {
       drawBackground(ctx, state.background, state.grid, getImage, { theme });
     }
+    // Phase 142 — tile-paint layer renders BETWEEN background and
+    // grid, so painted tiles obscure the background art they cover
+    // but grid lines stay visible above them.
+    drawTilePaints(ctx, state.tilePaints, state.grid);
     drawGrid(ctx, state.grid, { highContrast, theme });
     const dragOverlay = getDragOverlay ? getDragOverlay() : null;
     const activeEntry = state.initiative.order.find(

@@ -3,6 +3,8 @@ import type {
   AoeTemplate,
   Aura,
   Background,
+  TilePaint,
+  TilePaintKind,
   Camera,
   DrawStroke,
   GridConfig,
@@ -104,6 +106,40 @@ function normalizeAuras(raw: unknown): Aura[] {
   return out;
 }
 
+/**
+ * Phase 142 — defensive parser for `tilePaints: TilePaint[]`. Returns
+ * `[]` for non-array input. Drops entries with malformed shape, bad
+ * coords, or unknown `kind`. Called from `deserializeState`.
+ */
+const VALID_TILE_KINDS: ReadonlySet<TilePaintKind> = new Set<TilePaintKind>([
+  'floor',
+  'wall',
+  'water',
+  'rough',
+  'pit',
+]);
+
+function normalizeTilePaints(raw: unknown): TilePaint[] {
+  if (!Array.isArray(raw)) return [];
+  const out: TilePaint[] = [];
+  for (const v of raw) {
+    if (!v || typeof v !== 'object') continue;
+    const t = v as Partial<TilePaint>;
+    if (typeof t.id !== 'string' || t.id.length === 0) continue;
+    if (typeof t.cellX !== 'number' || !Number.isFinite(t.cellX)) continue;
+    if (typeof t.cellY !== 'number' || !Number.isFinite(t.cellY)) continue;
+    if (typeof t.kind !== 'string') continue;
+    if (!VALID_TILE_KINDS.has(t.kind as TilePaintKind)) continue;
+    out.push({
+      id: t.id,
+      cellX: Math.round(t.cellX),
+      cellY: Math.round(t.cellY),
+      kind: t.kind as TilePaintKind,
+    });
+  }
+  return out;
+}
+
 function normalizeLight(light: unknown): TokenLight | null {
   if (!light || typeof light !== 'object') return null;
   const l = light as Partial<TokenLight>;
@@ -144,6 +180,11 @@ export interface SerializedSessionState {
    * the same way as `weather`.
    */
   timeOfDay?: TimeOfDay;
+  /**
+   * Phase 142 — tile-paint layer. Optional in the serialized form so
+   * pre-142 saves load with `[]` defaulted by `deserializeState`.
+   */
+  tilePaints?: TilePaint[];
 }
 
 export type SerializablePatch =
@@ -494,6 +535,12 @@ export function serializeState(s: SessionState): SerializedSessionState {
     walls: s.walls.map((w) => ({ ...w })),
     weather: s.weather,
     timeOfDay: s.timeOfDay,
+    // Phase 142 — only emit `tilePaints` when non-empty so the
+    // serialized form for pre-142 saves stays minimal (the field
+    // is optional in `SerializedSessionState`).
+    ...(s.tilePaints.length > 0
+      ? { tilePaints: s.tilePaints.map((t) => ({ ...t })) }
+      : {}),
   };
 }
 
@@ -728,6 +775,11 @@ export function deserializeState(s: SerializedSessionState): SessionState {
       s.timeOfDay === 'none'
         ? s.timeOfDay
         : 'none',
+    // Phase 142 — pre-142 saves don't carry `tilePaints`; default
+    // to []. Each entry defensively validated via `normalizeTilePaints`.
+    tilePaints: normalizeTilePaints(
+      (s as { tilePaints?: unknown }).tilePaints,
+    ),
   };
 }
 
