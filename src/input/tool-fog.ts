@@ -5,6 +5,7 @@ import type { FogHoverPreview, FogMode, FogPreview } from '../render/layer-fog.j
 import {
   worldToHexCell,
   rectCellsOverlappingHex,
+  hexNeighbors,
 } from '../render/hex-geometry.js';
 
 export type FogShape = 'rectangle' | 'freehand';
@@ -80,12 +81,31 @@ export function createFogTool(
   function brushCellsAt(cell: { x: number; y: number }): Array<{ x: number; y: number }> {
     const grid = store.getState().grid;
     const { cols, rows } = grid;
-    // Phase 132 — hex mode: ignore brushSize and paint the rect
-    // cells overlapping the targeted hex. Brushing across many
-    // hexes would need a hex-aware brush (a future polish);
-    // single-hex brush per pointermove is the v1.7 minimum.
+    // Phase 132 → 133 — hex mode: brushSize maps to a hex disk
+    // radius (`brushSize - 1`), so brush 1 = 1 hex (radius 0),
+    // brush 2 = 7 hexes (radius 1, center + 6 neighbors), brush 3
+    // = 19 hexes (radius 2). Each targeted hex contributes its
+    // overlapping rect cells; the union dedupes shared cells.
     if (grid.gridShape === 'hex') {
-      return rectCellsOverlappingHex(cell.x, cell.y, cols, rows, grid.cellSize);
+      const radius = Math.max(0, optionsRef.current.brushSize - 1);
+      const hexes = hexNeighbors(cell.x, cell.y, radius, cols, rows);
+      const seen = new Set<string>();
+      const out: Array<{ x: number; y: number }> = [];
+      for (const hex of hexes) {
+        for (const c of rectCellsOverlappingHex(
+          hex.col,
+          hex.row,
+          cols,
+          rows,
+          grid.cellSize,
+        )) {
+          const key = `${c.x},${c.y}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          out.push(c);
+        }
+      }
+      return out;
     }
     const n = optionsRef.current.brushSize;
     const half = Math.floor((n - 1) / 2);

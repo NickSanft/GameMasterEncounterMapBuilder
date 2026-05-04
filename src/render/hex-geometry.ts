@@ -189,6 +189,64 @@ export function worldToHexCell(
 }
 
 /**
+ * Phase 133 — inverse of `offsetToAxial`. Convert axial (q, r) back
+ * to (col, row) offset coords for the same odd-r layout that
+ * `hexCenter` paints.
+ */
+export function axialToOffset(q: number, r: number): { col: number; row: number } {
+  return { col: q + (r - (r & 1)) / 2, row: r };
+}
+
+/**
+ * Phase 133 — return every hex within hex distance `radius` of the
+ * one at offset coords (centerCol, centerRow), clamped to the grid
+ * bounds. `radius = 0` returns just the center hex; `radius = 1`
+ * returns center + the 6 immediate neighbors (7 total); `radius = 2`
+ * returns 19 hexes; in general `1 + 3 * radius * (radius + 1)` for
+ * an unbounded grid.
+ *
+ * Iterates in cube space (the standard `q in [-N, N]` × `r in
+ * [max(-N, -q-N), min(N, -q+N)]` range bounds the hex disk). Converts
+ * back to offset for the caller. Out-of-bounds cells are filtered;
+ * a Set dedupes (defensive — the cube enumeration shouldn't produce
+ * dupes, but the offset round-trip is parity-aware so the safety
+ * net is cheap).
+ */
+export function hexNeighbors(
+  centerCol: number,
+  centerRow: number,
+  radius: number,
+  gridCols: number,
+  gridRows: number,
+): Array<{ col: number; row: number }> {
+  if (!Number.isFinite(radius) || radius < 0) return [];
+  const r0 = Math.floor(radius);
+  const center = offsetToAxial(centerCol, centerRow);
+  const out: Array<{ col: number; row: number }> = [];
+  const seen = new Set<string>();
+  for (let dq = -r0; dq <= r0; dq++) {
+    const minDr = Math.max(-r0, -dq - r0);
+    const maxDr = Math.min(r0, -dq + r0);
+    for (let dr = minDr; dr <= maxDr; dr++) {
+      const offset = axialToOffset(center.q + dq, center.r + dr);
+      if (
+        offset.col < 0 ||
+        offset.row < 0 ||
+        offset.col >= gridCols ||
+        offset.row >= gridRows
+      ) {
+        continue;
+      }
+      const key = `${offset.col},${offset.row}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(offset);
+    }
+  }
+  return out;
+}
+
+/**
  * Phase 132 — point-in-hex test. Returns true when (px, py) is
  * inside (or on the boundary of) the hex centered at (cx, cy) with
  * vertex-radius `size`. Uses the standard ray-cast even-odd rule on

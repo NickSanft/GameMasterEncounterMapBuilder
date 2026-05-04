@@ -11,6 +11,8 @@ import {
   hexVertices,
   hexDistance,
   offsetToAxial,
+  axialToOffset,
+  hexNeighbors,
   worldToHexCell,
   pointInHex,
   rectCellsOverlappingHex,
@@ -185,6 +187,100 @@ describe('rectCellsOverlappingHex', () => {
         Math.abs(c.x - expectedCx) <= 1 && Math.abs(c.y - expectedCy) <= 1,
     );
     expect(hit).toBe(true);
+  });
+});
+
+describe('axialToOffset (Phase 133)', () => {
+  it('round-trips with offsetToAxial', () => {
+    for (const [col, row] of [
+      [0, 0],
+      [3, 0],
+      [3, 1],
+      [3, 2],
+      [5, 7],
+      [10, 0],
+      [0, 5],
+    ] as Array<[number, number]>) {
+      const ax = offsetToAxial(col, row);
+      expect(axialToOffset(ax.q, ax.r)).toEqual({ col, row });
+    }
+  });
+});
+
+describe('hexNeighbors (Phase 133)', () => {
+  it('radius 0 returns just the center hex', () => {
+    const cells = hexNeighbors(5, 5, 0, 30, 20);
+    expect(cells).toEqual([{ col: 5, row: 5 }]);
+  });
+
+  it('radius 1 returns 7 cells (center + 6 neighbors) when far from edges', () => {
+    const cells = hexNeighbors(5, 5, 1, 30, 20);
+    expect(cells.length).toBe(7);
+    // Center is included.
+    expect(cells.some((c) => c.col === 5 && c.row === 5)).toBe(true);
+    // All 6 returned non-center cells are at hex distance 1 from center.
+    for (const c of cells) {
+      if (c.col === 5 && c.row === 5) continue;
+      expect(hexDistance(5, 5, c.col, c.row)).toBe(1);
+    }
+  });
+
+  it('radius 2 returns 19 cells when far from edges', () => {
+    const cells = hexNeighbors(10, 10, 2, 30, 20);
+    expect(cells.length).toBe(19);
+    for (const c of cells) {
+      const d = hexDistance(10, 10, c.col, c.row);
+      expect(d).toBeGreaterThanOrEqual(0);
+      expect(d).toBeLessThanOrEqual(2);
+    }
+  });
+
+  it('parity correct on even vs odd center rows', () => {
+    // Even-row center (3, 2) — neighbors verified by hexDistance.
+    const evenCells = hexNeighbors(3, 2, 1, 30, 20);
+    expect(evenCells.length).toBe(7);
+    for (const c of evenCells) {
+      if (c.col === 3 && c.row === 2) continue;
+      expect(hexDistance(3, 2, c.col, c.row)).toBe(1);
+    }
+    // Odd-row center (3, 3).
+    const oddCells = hexNeighbors(3, 3, 1, 30, 20);
+    expect(oddCells.length).toBe(7);
+    for (const c of oddCells) {
+      if (c.col === 3 && c.row === 3) continue;
+      expect(hexDistance(3, 3, c.col, c.row)).toBe(1);
+    }
+  });
+
+  it('clamps to grid bounds — center at (0, 0) loses out-of-grid neighbors', () => {
+    const cells = hexNeighbors(0, 0, 1, 30, 20);
+    // Center hex at (0,0) has neighbors that fall off the top + left
+    // edges; the helper drops those. Exact survivor count depends on
+    // odd-r parity; we only assert "fewer than 7" + "all in bounds".
+    expect(cells.length).toBeGreaterThan(0);
+    expect(cells.length).toBeLessThan(7);
+    for (const c of cells) {
+      expect(c.col).toBeGreaterThanOrEqual(0);
+      expect(c.row).toBeGreaterThanOrEqual(0);
+      expect(c.col).toBeLessThan(30);
+      expect(c.row).toBeLessThan(20);
+    }
+    // Center is always included (it IS in bounds).
+    expect(cells.some((c) => c.col === 0 && c.row === 0)).toBe(true);
+  });
+
+  it('negative radius returns empty', () => {
+    expect(hexNeighbors(5, 5, -1, 30, 20)).toEqual([]);
+  });
+
+  it('NaN radius returns empty (defensive)', () => {
+    expect(hexNeighbors(5, 5, NaN, 30, 20)).toEqual([]);
+  });
+
+  it('returns deduped cells (no offset round-trip dupes)', () => {
+    const cells = hexNeighbors(5, 5, 2, 30, 20);
+    const keys = cells.map((c) => `${c.col},${c.row}`);
+    expect(new Set(keys).size).toBe(keys.length);
   });
 });
 

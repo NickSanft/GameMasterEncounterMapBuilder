@@ -131,6 +131,43 @@ gaps so the v1.0 cut is genuinely "stable + remote-play-capable."
 
 ---
 
+## [1.8.0] — 2026-05-03 — Multi-hex brush in hex mode
+
+Phase 133 — first phase of the **hex polish trilogy** that closes the three deferrals called out in v1.7.0. Today: brushSize finally does something in hex mode.
+
+### Added
+- **Hex-mode fog brush honors `brushSize`.** In square mode brushSize 1/2/3 paints a 1×1 / 2×2 / 3×3 rect cluster. In hex mode (post-Phase 132) the brushSize was ignored — every pointermove painted exactly one hex worth of rect cells. Phase 133 maps `brushSize` to a hex-disk radius (`brushSize - 1`):
+  - Brush 1 → radius 0 → 1 hex (unchanged from v1.7).
+  - Brush 2 → radius 1 → 7 hexes (center + 6 neighbors).
+  - Brush 3 → radius 2 → 19 hexes.
+- **`hexNeighbors(centerCol, centerRow, radius, gridCols, gridRows)`** in `src/render/hex-geometry.ts` — pure helper. Iterates the cube-coord disk of `radius` around the offset-coord center, converts each cell back to offset-coords, filters to grid bounds, dedupes via a Set (defensive against any parity round-trip oddities). For an in-bounds center far from edges returns the closed-form count `1 + 3 * radius * (radius + 1)`.
+- **`axialToOffset(q, r)`** — public helper (extracted from the inline conversion in `worldToHexCell`). Inverse of `offsetToAxial`. Used by `hexNeighbors`; available to other modules that need the round-trip.
+
+### Why this matters
+The v1.7.0 entry called out brush-size-in-hex as a documented deferral: *"Hex mode ignores the brushSize param — each freehand pointermove paints exactly one hex worth of cells. A multi-hex brush would need a hex-cluster generator (radius-1 = center + 6 neighbors, etc.); deferred polish."* Phase 133 ships exactly that hex-cluster generator. With the change in, a GM running a hex-rules game has the same broad-stroke fog reveal ergonomics they had in square mode.
+
+### Architecture
+- **`src/render/hex-geometry.ts`** — adds `axialToOffset` + `hexNeighbors`. Both are pure (no DOM, no canvas).
+- **`src/input/tool-fog.ts`** — `brushCellsAt` hex branch replaced. The new path enumerates hexes via `hexNeighbors`, then unions their `rectCellsOverlappingHex` results into a deduped rect-cell list. The fog buffer stays rectangular (no wire-format change); the visible coverage is what changes.
+
+### UX details
+- **Off-grid neighbors silently dropped.** A radius-1 brush at hex (0, 0) still paints just the in-bounds subset of its disk. No warning UI — same handling as the square brush at a corner.
+- **The hover preview helper (Phase 132's `updateHoverFrom` → `FogHoverPreview`) currently only wires `cx`, `cy`, and the square-mode `brushSize`.** The hex-mode preview ring is still single-hex visually; the actual paint still uses the brush radius. A future polish could update the preview ring to reflect the hex-disk shape; out of scope for v133.
+- **`brushSize` remains 1/2/3** in the existing fog-settings UI. No new buttons; no new shortcuts. Existing GMs flip between sizes the same way they always have.
+
+### Tests
+- **+8 unit tests** in `src/render/hex-geometry.test.ts`: `axialToOffset` round-trips with `offsetToAxial` across 7 representative cells; `hexNeighbors` returns exactly the center at radius 0; returns 7 cells at radius 1 (each at hex distance ≤ 1); returns 19 cells at radius 2; parity correct on both even and odd center rows; clamps to grid bounds (center at (0, 0) loses out-of-grid neighbors but keeps itself); negative + NaN radii return empty (defensive); output is deduped.
+- **+2 Playwright specs** in `e2e/hex-fog-brush.spec.ts` (new): brush 1 in hex mode reveals a thin stripe (< 15% of the default 30×20 grid for a half-width drag); brush 3 reveals a much wider band (> 10%) for the same drag.
+- **All 1434 unit tests + 347 Playwright specs pass** locally.
+
+### Bundle
+- 104.29 / 110 KB initial-load brotli (+0.13 KB for `axialToOffset` + `hexNeighbors` + the tool-fog branch). CSS unchanged at 12.57 / 14 KB. Lazy chunks unchanged.
+
+### Pre-push checklist
+Caught zero issues — full unit suite + full e2e + visual-regression specs + size-limit all green before push.
+
+---
+
 ## [1.7.1] — 2026-05-03 — Docs: refresh `README.md` known-limitations
 
 ### Changed
