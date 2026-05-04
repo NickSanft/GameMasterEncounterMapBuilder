@@ -131,6 +131,44 @@ gaps so the v1.0 cut is genuinely "stable + remote-play-capable."
 
 ---
 
+## [1.9.0] — 2026-05-03 — Hex-aware fog rectangle mode
+
+Phase 134 — second phase of the **hex polish trilogy**. v1.8 made the freehand brush hex-aware; v1.9 makes the rectangle shape behave like an actual hex selection rather than a rect AABB rendered in the rect coord space.
+
+### Added
+- **Rectangle drag in hex mode now selects every hex in the offset-coord rectangle from corner to corner.** Each selected hex contributes its overlapping rect cells to the patch; the union dedupes shared cells. Pre-134 the same drag treated the two corners as rect cells and painted the rect AABB between them — which (because hex coords near the origin map to small rect-coord values) collapsed to a tiny region in the upper-left of the canvas.
+- **Hex-shaped rectangle preview overlay.** While dragging, the preview now draws each hex polygon outline (filled with the same accent color as before) instead of a single rectangle in rect coords. The preview now visually matches what the commit will paint, so the GM can sight the hex selection accurately mid-drag.
+- **`hexesInRect(c1, r1, c2, r2, gridCols, gridRows)`** in `src/render/hex-geometry.ts` — pure helper. Returns every offset-coord cell in the inclusive rectangle from (min(c1,c2), min(r1,r2)) to (max(c1,c2), max(r1,r2)), clamped to grid bounds. Symmetric in corner order. Empty when fully out of bounds. Row-major output.
+
+### Why this matters
+The v1.7.0 entry called out the rectangle case as a documented deferral: *"Fog Rectangle-shape mode in hex. The rectangle shape continues to paint rect cells, NOT hex cells. The rectangle preview in hex mode is the rect AABB between the two hex coords (interpreted as rect cells); the fill is rect cells."* Phase 134 closes that deferral. Manual hex fog (freehand from v1.7 / v1.8 + rectangle from v1.9) is now end-to-end hex-aware.
+
+### Architecture
+- **`src/render/hex-geometry.ts`** — adds `hexesInRect`. Pure (no DOM). 7-line implementation: clamp the corners, early-return for fully-out-of-bounds rects, row-major nested-loop emission.
+- **`src/render/layer-fog.ts`** —
+  - `drawFogPreview` signature changed: third arg was `cellSize: number`, now `grid: GridConfig`. The hex branch enumerates `hexesInRect`, draws each as a hex polygon with `pathHex` + fill / stroke. Square branch unchanged.
+  - The hex-mode early-return (when the enumerated set is empty) avoids a final stroke / fill on a zero-cell selection that could otherwise paint a residual ghost outline.
+- **`src/render/renderer.ts`** — single call-site updated to pass `state.grid` instead of `state.grid.cellSize`. No other changes.
+- **`src/input/tool-fog.ts`** — rectangle commit branch reads `grid.gridShape`. Hex path enumerates `hexesInRect`, then calls `rectCellsOverlappingHex` per hex, deduping with a Set keyed on `${x},${y}` and emitting a single `fog-set` patch. Square path unchanged.
+
+### UX details
+- **Symmetric drag direction.** Drag from upper-left to lower-right or lower-right to upper-left — both produce the same selection.
+- **Defensive against zero-area drags.** Same hex twice → 1-hex selection → ~3-4 rect cells flipped (matching brush 1's footprint). The user gets visible feedback that a click landed.
+- **Brush size still ignored in rectangle mode.** Same as square — rectangle is a marquee shape, not a brush. The Phase 133 brush radius applies to freehand only.
+
+### Tests
+- **+7 unit tests** in `src/render/hex-geometry.test.ts`: `hexesInRect` single-cell range; inclusive (rows × cols) rectangle; symmetric corner order yields the same set; clamps negative corner to 0; clamps over-max corner; fully out-of-bounds returns empty; row-major order assertion.
+- **+1 Playwright spec** in `e2e/hex-fog-rectangle.spec.ts` (new): rectangle drag covering ~30% of the canvas in hex mode flips > 5% of fog cells. Validates that the hex coord interpretation is correct (pre-134 the same drag would have collapsed to far less).
+- **All 1441 unit tests + 348 Playwright specs pass** locally (the same `scenes.spec.ts:56` parallel flake reappeared once on the parallel run; passes in isolation, CI runs serially with retries=2, absorbed).
+
+### Bundle
+- 104.62 / 110 KB initial-load brotli (+0.33 KB for `hexesInRect` + the `drawFogPreview` hex branch + the `tool-fog` rectangle branch). CSS unchanged at 12.57 / 14 KB. Lazy chunks unchanged.
+
+### Pre-push checklist
+Caught zero issues — full unit suite + full e2e + visual-regression specs + size-limit all green before push.
+
+---
+
 ## [1.8.0] — 2026-05-03 — Multi-hex brush in hex mode
 
 Phase 133 — first phase of the **hex polish trilogy** that closes the three deferrals called out in v1.7.0. Today: brushSize finally does something in hex mode.

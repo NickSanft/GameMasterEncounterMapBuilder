@@ -1,9 +1,10 @@
-import type { SessionState, ViewMode } from '../state/types.js';
+import type { GridConfig, SessionState, ViewMode } from '../state/types.js';
 import {
   compactFogRects,
   drawCompactedFogRects,
   type FogRect,
 } from './fog-rects.js';
+import { hexCenter, pathHex, hexesInRect } from './hex-geometry.js';
 
 export type FogMode = 'reveal' | 'hide';
 
@@ -86,8 +87,44 @@ export function drawFogHoverPreview(
 export function drawFogPreview(
   ctx: CanvasRenderingContext2D,
   preview: FogPreview,
-  cellSize: number,
+  grid: GridConfig,
 ): void {
+  const { cellSize } = grid;
+  const fillStyle =
+    preview.mode === 'reveal'
+      ? 'rgba(129, 199, 132, 0.35)'
+      : 'rgba(239, 83, 80, 0.4)';
+  const strokeStyle = preview.mode === 'reveal' ? '#81c784' : '#ef5350';
+
+  // Phase 134 — hex mode renders the preview as the union of every
+  // hex in the offset-coord rectangle from corner to corner. Each
+  // hex is drawn as its actual polygon outline so the preview
+  // matches the hex grid the GM is targeting (pre-134 the preview
+  // was a square AABB rendered in the rect coord space, which
+  // visually drifted from the hex centers).
+  if (grid.gridShape === 'hex') {
+    const hexes = hexesInRect(
+      preview.x1,
+      preview.y1,
+      preview.x2,
+      preview.y2,
+      grid.cols,
+      grid.rows,
+    );
+    if (hexes.length === 0) return;
+    ctx.fillStyle = fillStyle;
+    ctx.strokeStyle = strokeStyle;
+    ctx.lineWidth = 2;
+    for (const hex of hexes) {
+      const center = hexCenter(hex.col, hex.row, cellSize);
+      ctx.beginPath();
+      pathHex(ctx, center.x, center.y, cellSize);
+      ctx.fill();
+      ctx.stroke();
+    }
+    return;
+  }
+
   const x1 = Math.min(preview.x1, preview.x2);
   const x2 = Math.max(preview.x1, preview.x2);
   const y1 = Math.min(preview.y1, preview.y2);
@@ -97,13 +134,8 @@ export function drawFogPreview(
   const pw = (x2 - x1 + 1) * cellSize;
   const ph = (y2 - y1 + 1) * cellSize;
 
-  if (preview.mode === 'reveal') {
-    ctx.fillStyle = 'rgba(129, 199, 132, 0.35)';
-    ctx.strokeStyle = '#81c784';
-  } else {
-    ctx.fillStyle = 'rgba(239, 83, 80, 0.4)';
-    ctx.strokeStyle = '#ef5350';
-  }
+  ctx.fillStyle = fillStyle;
+  ctx.strokeStyle = strokeStyle;
   ctx.fillRect(px, py, pw, ph);
   ctx.lineWidth = 2;
   ctx.strokeRect(px, py, pw, ph);

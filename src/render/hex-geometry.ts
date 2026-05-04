@@ -247,6 +247,41 @@ export function hexNeighbors(
 }
 
 /**
+ * Phase 134 — return every hex in the inclusive offset-coord
+ * rectangle from (c1, r1) to (c2, r2), clamped to grid bounds.
+ * Order is row-major (rows then cols). Used by the fog rectangle
+ * tool's hex branch: a drag from corner to corner selects every
+ * hex in the rectangular range, then each hex's overlapping rect
+ * cells are unioned.
+ *
+ * The helper is symmetric in its corner args — `hexesInRect(2, 3, 5,
+ * 7)` returns the same set as `hexesInRect(5, 7, 2, 3)`. Out-of-
+ * bounds args are clamped via the grid-size args; a fully out-of-
+ * bounds rect returns an empty list.
+ */
+export function hexesInRect(
+  c1: number,
+  r1: number,
+  c2: number,
+  r2: number,
+  gridCols: number,
+  gridRows: number,
+): Array<{ col: number; row: number }> {
+  const minCol = Math.max(0, Math.min(c1, c2));
+  const maxCol = Math.min(gridCols - 1, Math.max(c1, c2));
+  const minRow = Math.max(0, Math.min(r1, r2));
+  const maxRow = Math.min(gridRows - 1, Math.max(r1, r2));
+  if (minCol > maxCol || minRow > maxRow) return [];
+  const out: Array<{ col: number; row: number }> = [];
+  for (let row = minRow; row <= maxRow; row++) {
+    for (let col = minCol; col <= maxCol; col++) {
+      out.push({ col, row });
+    }
+  }
+  return out;
+}
+
+/**
  * Phase 132 — point-in-hex test. Returns true when (px, py) is
  * inside (or on the boundary of) the hex centered at (cx, cy) with
  * vertex-radius `size`. Uses the standard ray-cast even-odd rule on

@@ -408,7 +408,7 @@ export function createRenderer(opts: CreateRendererOptions): Renderer {
     });
     const preview = getFogPreview ? getFogPreview() : null;
     if (preview) {
-      drawFogPreview(ctx, preview, state.grid.cellSize);
+      drawFogPreview(ctx, preview, state.grid);
     } else {
       const hover = getFogHoverPreview ? getFogHoverPreview() : null;
       if (hover) drawFogHoverPreview(ctx, hover, state.grid.cellSize);

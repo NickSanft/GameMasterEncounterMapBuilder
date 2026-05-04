@@ -6,6 +6,7 @@ import {
   worldToHexCell,
   rectCellsOverlappingHex,
   hexNeighbors,
+  hexesInRect,
 } from '../render/hex-geometry.js';
 
 export type FogShape = 'rectangle' | 'freehand';
@@ -245,15 +246,45 @@ export function createFogTool(
     painted.clear();
 
     if (shape === 'rectangle' && preview) {
-      const x1 = Math.min(preview.x1, preview.x2);
-      const x2 = Math.max(preview.x1, preview.x2);
-      const y1 = Math.min(preview.y1, preview.y2);
-      const y2 = Math.max(preview.y1, preview.y2);
+      const grid = store.getState().grid;
       const value: 0 | 1 = mode === 'reveal' ? 1 : 0;
       const cells: Array<{ x: number; y: number; value: 0 | 1 }> = [];
-      for (let y = y1; y <= y2; y++) {
-        for (let x = x1; x <= x2; x++) {
-          cells.push({ x, y, value });
+      // Phase 134 — hex mode: the rectangle's two corner coords are
+      // HEX (col, row) values; treat them as the inclusive offset-coord
+      // bounds of a hex selection. Each selected hex contributes its
+      // overlapping rect cells; the union dedupes shared cells.
+      if (grid.gridShape === 'hex') {
+        const seen = new Set<string>();
+        for (const hex of hexesInRect(
+          preview.x1,
+          preview.y1,
+          preview.x2,
+          preview.y2,
+          grid.cols,
+          grid.rows,
+        )) {
+          for (const c of rectCellsOverlappingHex(
+            hex.col,
+            hex.row,
+            grid.cols,
+            grid.rows,
+            grid.cellSize,
+          )) {
+            const key = `${c.x},${c.y}`;
+            if (seen.has(key)) continue;
+            seen.add(key);
+            cells.push({ x: c.x, y: c.y, value });
+          }
+        }
+      } else {
+        const x1 = Math.min(preview.x1, preview.x2);
+        const x2 = Math.max(preview.x1, preview.x2);
+        const y1 = Math.min(preview.y1, preview.y2);
+        const y2 = Math.max(preview.y1, preview.y2);
+        for (let y = y1; y <= y2; y++) {
+          for (let x = x1; x <= x2; x++) {
+            cells.push({ x, y, value });
+          }
         }
       }
       if (cells.length > 0) {

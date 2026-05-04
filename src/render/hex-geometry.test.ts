@@ -13,6 +13,7 @@ import {
   offsetToAxial,
   axialToOffset,
   hexNeighbors,
+  hexesInRect,
   worldToHexCell,
   pointInHex,
   rectCellsOverlappingHex,
@@ -281,6 +282,61 @@ describe('hexNeighbors (Phase 133)', () => {
     const cells = hexNeighbors(5, 5, 2, 30, 20);
     const keys = cells.map((c) => `${c.col},${c.row}`);
     expect(new Set(keys).size).toBe(keys.length);
+  });
+});
+
+describe('hexesInRect (Phase 134)', () => {
+  it('single-cell range returns just that cell', () => {
+    expect(hexesInRect(3, 4, 3, 4, 30, 20)).toEqual([{ col: 3, row: 4 }]);
+  });
+
+  it('returns the inclusive (rows × cols) rectangle', () => {
+    const cells = hexesInRect(2, 3, 4, 5, 30, 20);
+    // (2..4) × (3..5) inclusive = 3 × 3 = 9 cells.
+    expect(cells.length).toBe(9);
+    expect(cells[0]).toEqual({ col: 2, row: 3 });
+    expect(cells[cells.length - 1]).toEqual({ col: 4, row: 5 });
+  });
+
+  it('symmetric in corner order — both directions yield the same set', () => {
+    const a = hexesInRect(2, 3, 5, 7, 30, 20);
+    const b = hexesInRect(5, 7, 2, 3, 30, 20);
+    expect(a.length).toBe(b.length);
+    const keysA = new Set(a.map((c) => `${c.col},${c.row}`));
+    const keysB = new Set(b.map((c) => `${c.col},${c.row}`));
+    expect(keysA).toEqual(keysB);
+  });
+
+  it('clamps to grid bounds — negative corner clipped to 0', () => {
+    const cells = hexesInRect(-2, -3, 1, 1, 30, 20);
+    for (const c of cells) {
+      expect(c.col).toBeGreaterThanOrEqual(0);
+      expect(c.row).toBeGreaterThanOrEqual(0);
+    }
+    expect(cells.length).toBe(2 * 2); // (0..1) × (0..1) = 4
+  });
+
+  it('clamps to grid bounds — over-max corner clipped', () => {
+    const cells = hexesInRect(28, 18, 100, 100, 30, 20);
+    for (const c of cells) {
+      expect(c.col).toBeLessThan(30);
+      expect(c.row).toBeLessThan(20);
+    }
+    expect(cells.length).toBe(2 * 2); // (28..29) × (18..19) = 4
+  });
+
+  it('fully out-of-bounds rect returns empty', () => {
+    expect(hexesInRect(100, 100, 200, 200, 30, 20)).toEqual([]);
+  });
+
+  it('returns row-major order (rows iterate inside cols)', () => {
+    const cells = hexesInRect(0, 0, 1, 1, 30, 20);
+    expect(cells).toEqual([
+      { col: 0, row: 0 },
+      { col: 1, row: 0 },
+      { col: 0, row: 1 },
+      { col: 1, row: 1 },
+    ]);
   });
 });
 
