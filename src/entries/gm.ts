@@ -580,7 +580,14 @@ toolManager.register(
 // panel mounted below; the panel mutates `optionsRef.current` so
 // changes apply on the next pointerdown.
 const tilePaintOptionsRef = createTilePaintOptionsRef();
-toolManager.register(createTilePaintTool(inputContext, tilePaintOptionsRef));
+toolManager.register(
+  createTilePaintTool(inputContext, tilePaintOptionsRef, {
+    // Phase 150 — gate the wall-coupling behavior on the user
+    // preference flag. When ON, painting a 'wall' tile creates a
+    // 1×1 block wall on the same cell; erasing removes it.
+    coupleWalls: () => preferences.get().coupleTilePaintWalls,
+  }),
+);
 toolManager.register(createFogTool(inputContext, 'reveal', fogPreviewRef, fogOptionsRef, fogHoverRef));
 toolManager.register(createFogTool(inputContext, 'hide', fogPreviewRef, fogOptionsRef, fogHoverRef));
 toolManager.register(createBackgroundTool(inputContext));

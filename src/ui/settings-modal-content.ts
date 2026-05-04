@@ -90,6 +90,10 @@ export function buildSettingsModal(
   // gates the checkbox on viewMode === 'gm'); null on the Spectator
   // modal. Use optional chaining at every access site.
   const autoNumberInput = modal.querySelector<HTMLInputElement>('[data-field="autoNumberDuplicateTokens"]');
+  // Phase 150 — same GM-only gating as autoNumber.
+  const coupleTileWallsInput = modal.querySelector<HTMLInputElement>(
+    '[data-field="coupleTilePaintWalls"]',
+  );
   const playerNameInput = modal.querySelector<HTMLInputElement>('[data-field="playerName"]')!;
   const playerColorInput = modal.querySelector<HTMLInputElement>('[data-field="playerColor"]')!;
   const labelSizeRadios = Array.from(
@@ -178,6 +182,7 @@ export function buildSettingsModal(
     colorblindInput.checked = prefs.colorblindMarkers;
     voiceTranscriptionInput.checked = prefs.voiceTranscription;
     if (autoNumberInput) autoNumberInput.checked = prefs.autoNumberDuplicateTokens;
+    if (coupleTileWallsInput) coupleTileWallsInput.checked = prefs.coupleTilePaintWalls;
     // Phase 67 — identity now lives in its own per-role store; the
     // Settings modal reads it from `identityPrefs.get()` instead of
     // peeling out scoped fields from `preferences`.
@@ -319,6 +324,14 @@ export function buildSettingsModal(
     autoNumberInput.addEventListener('change', () => {
       preferences.update({
         autoNumberDuplicateTokens: autoNumberInput.checked,
+      });
+    });
+  }
+
+  if (coupleTileWallsInput) {
+    coupleTileWallsInput.addEventListener('change', () => {
+      preferences.update({
+        coupleTilePaintWalls: coupleTileWallsInput.checked,
       });
     });
   }
@@ -590,6 +603,14 @@ function renderAppearancePane(viewMode: ViewMode): string {
             <span>Auto-suffix duplicate token labels</span>
           </label>
           <p class="settings-hint">Phase 137. When you Alt+stamp, paste, duplicate, or drop multiple library tokens with the same name, the new ones get numeric suffixes (Goblin, Goblin 2, Goblin 3) so they're individually distinguishable in the initiative tracker + canvas outline. Doesn't touch labels you've manually edited.</p>
+        </fieldset>
+        <fieldset class="settings-subgroup">
+          <legend>Tile paint</legend>
+          <label class="check">
+            <input type="checkbox" data-field="coupleTilePaintWalls" />
+            <span>Painting a "wall" tile also creates a block wall</span>
+          </label>
+          <p class="settings-hint">Phase 150. When ON, painting a tile of kind "wall" with the Phase 142 tile-paint tool also drops a 1×1 block wall on the same cell (sight-blocking + movement-blocking). Erasing the tile removes the matching wall. Other tile kinds (floor / water / rough / pit) are unaffected. Off by default — keeps the cosmetic-only behavior.</p>
         </fieldset>`
     : '';
 

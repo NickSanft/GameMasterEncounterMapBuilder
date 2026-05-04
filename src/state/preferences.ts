@@ -154,6 +154,16 @@ export interface Preferences {
    * stamping behavior can disable it in Settings.
    */
   autoNumberDuplicateTokens: boolean;
+  /**
+   * Phase 150 — when true, painting a tile of kind `'wall'` (Phase
+   * 142 tile-paint tool) atomically creates a 1×1 Phase 112 block
+   * wall on the same cell, and erasing the tile removes the
+   * matching wall. Other tile kinds (floor / water / rough / pit)
+   * are unaffected. Default `false` so the cosmetic-only behavior
+   * pre-150 stays the default; opt-in for GMs who want the
+   * cosmetic + LoS layers to stay in sync.
+   */
+  coupleTilePaintWalls: boolean;
   // Phase 67 — `playerNameGm`, `playerNameSpectator`,
   // `playerColorGm`, `playerColorSpectator` moved out of Preferences
   // into the dedicated `IdentityPrefsStore` (`state/identity-prefs.ts`).
@@ -188,6 +198,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   onboardingComplete: false,
   turnTimerSeconds: 0,
   autoNumberDuplicateTokens: true,
+  coupleTilePaintWalls: false,
 };
 
 export interface PreferencesStore {

@@ -131,6 +131,49 @@ gaps so the v1.0 cut is genuinely "stable + remote-play-capable."
 
 ---
 
+## [1.25.0] — 2026-05-04 — Tile-paint → block-wall coupling
+
+Phase 150 — first phase of the **authoring track** (Track D from the v1.18 → v1.28 plan). Optional preference: when ON, painting a tile of kind `'wall'` with the Phase 142 tile-paint tool atomically creates a 1×1 Phase 112 block wall on the same cell. Erasing the tile removes the matching wall.
+
+### Added
+- **`Preferences.coupleTilePaintWalls: boolean`** in `src/state/preferences.ts`. Default `false` (the cosmetic-only behavior pre-150 stays the default — opt-in).
+- **`TilePaintToolOptions.coupleWalls?: () => boolean`** — optional helper passed by the host. When omitted, defaults to OFF. Wired from `preferences.get().coupleTilePaintWalls` in `gm.ts`.
+- **Coupled paint** in `tool-tile-paint.ts` `paintCell`. When the active kind is `'wall'` AND coupling is ON, the patch atomically also emits a `wall-add` for a 1×1 `WallBlock` (sight + movement blocking) on the same cell. Existing matching wall? No-op (avoids duplicate-wall pile-up on re-paint).
+- **Coupled erase**. When erasing in coupling-ON mode, the erase ALSO removes any 1×1 block wall on the same cell. Walls authored independently of the coupling (block walls > 1×1, segment walls) are NOT touched — the coupling cleanup is intentionally narrow.
+- **Settings → Appearance → Tile paint** subsection with the new checkbox + a descriptive hint.
+
+### Why this matters
+Pre-150 the tile-paint tool was purely cosmetic — a "wall" tile was a gray square, but tokens could walk through it and viewer LoS ignored it. GMs who wanted both the visual and the rule-effect had to (a) paint the tile + (b) draw a block wall over it manually. Phase 150 makes the two ops atomic: ON for GMs who want them coupled, OFF (default) for GMs who prefer the cosmetic / gameplay layers separate.
+
+### Architecture
+- **`src/state/preferences.ts`** — adds the boolean field + DEFAULT_PREFERENCES. Back-compat: pre-150 saves load with `false`.
+- **`src/input/tool-tile-paint.ts`** —
+  - `TilePaintToolOptions` interface (new). Optional `coupleWalls?: () => boolean`. Read once per `paintCell` so a mid-drag pref flip applies on the next cell.
+  - `paintCell` paint branch: `store.batch` wraps both the tile-add AND the (conditional) wall-add so undo treats the pair as one step.
+  - `paintCell` erase branch: same batch, also conditionally removes a matching 1×1 block wall.
+- **`src/entries/gm.ts`** — `createTilePaintTool` call site adds the `coupleWalls` accessor reading from `preferences.get()`.
+- **`src/ui/settings-modal-content.ts`** — new GM-only Tile paint subsection in the Appearance pane with the `data-field="coupleTilePaintWalls"` checkbox.
+
+### UX details
+- **Block wall is exactly 1×1.** A larger area's worth of "wall" tiles creates many independent 1×1 walls — one per tile. Future polish could merge contiguous tiles into a single rectangular block wall on commit; out of scope for v150.
+- **Sight + movement both blocked by default.** Matches the user's likely intent ("I painted a wall tile = it's a wall"). To override (window: sight-blocking only, etc.), the GM can right-click the wall + edit it post-paint via Phase 117 wall presets.
+- **Coupling is bidirectional, scoped.** Erasing a coupled tile removes its matching 1×1 wall. Erasing a non-coupled-painted wall (e.g. a wall placed via the dedicated wall tool) keeps the wall — the tile-paint erase only cleans up walls it would have created via coupling.
+- **No backfill on toggle.** Flipping the pref ON doesn't go back and add walls under existing 'wall' tiles. Flipping OFF doesn't remove existing coupled walls. The coupling only affects future paint / erase operations.
+- **Undo is one step.** `store.batch` makes the tile + wall a single undo unit — Ctrl+Z reverts both at once.
+
+### Tests
+- **+3 Playwright specs** in `e2e/tile-paint-wall-coupling.spec.ts` (new): checkbox present + unchecked by default; coupling OFF → no Wall heading in the canvas-outline after painting; coupling ON → Wall heading appears + the outline shows "Wall block, 1 by 1 cells."
+- **No new unit tests** — the coupling logic is two `if` branches in `paintCell`; the existing tile-paint store-reducer tests (Phase 142) cover the underlying patches. The e2e validates the integration path.
+- **All 1533 unit tests + 376 Playwright specs pass** locally.
+
+### Bundle
+- 111.28 / 120 KB initial-load brotli (+0.02 KB — the coupling branches add a few lines but the rest is wired through existing pref + patch infrastructure). CSS unchanged. Lazy chunks unchanged.
+
+### Pre-push checklist
+Caught zero issues — full unit suite + full e2e + visual-regression specs + size-limit all green before push.
+
+---
+
 ## [1.24.0] — 2026-05-04 — Token movement budget HUD
 
 Phase 149 — sole phase of the **combat ergonomics track** (Track C from the v1.18 → v1.28 plan). Adds a per-token movement speed (`Token.speedFt`) and an in-flight HUD that flips the existing Phase 129 movement-distance pip from green to red when the active token's drag exceeds its budget.
