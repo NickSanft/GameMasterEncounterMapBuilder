@@ -461,6 +461,69 @@ body.view {
   background: var(--hover-overlay);
 }
 
+/* Phase 148 — recently-used tokens strip. Horizontal rail of up
+ * to 6 slots, each showing a small color swatch + the token's
+ * label. Click a slot to set it as the next stamp template;
+ * right-click to evict. Hidden when the list is empty.
+ */
+.recent-tokens-strip {
+  position: absolute;
+  bottom: 0.75rem;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 0.4rem;
+  padding: 0.4rem 0.5rem;
+  background: var(--panel-bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  z-index: 10;
+  max-width: 90vw;
+  overflow-x: auto;
+}
+
+.recent-tokens-strip[hidden] {
+  display: none;
+}
+
+.recent-tokens-slot {
+  appearance: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.2rem;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.3rem 0.45rem;
+  font-family: inherit;
+  font-size: 0.72rem;
+  color: var(--fg);
+  cursor: pointer;
+  min-width: 4rem;
+  max-width: 7rem;
+}
+
+.recent-tokens-slot:hover {
+  background: var(--hover-overlay);
+}
+
+.recent-tokens-slot-swatch {
+  width: 1.4rem;
+  height: 1.4rem;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.3);
+  flex-shrink: 0;
+}
+
+.recent-tokens-slot-label {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 6rem;
+}
+
 /* Phase 145 — scene-switch loading overlay. Absolutely-positioned
  * over the canvas while a background image is loading. Spinner is
  * pure CSS (no asset bundle). Respects `prefers-reduced-motion` —

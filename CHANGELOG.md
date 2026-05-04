@@ -131,6 +131,54 @@ gaps so the v1.0 cut is genuinely "stable + remote-play-capable."
 
 ---
 
+## [1.23.0] — 2026-05-04 — Recently-used tokens strip
+
+Phase 148 — third + final phase of the **spectator UX track** (closes Track B from the v1.18 → v1.28 plan). A horizontal 6-slot rail showing the GM's most recent token templates. Click a slot → the next pointerdown on the canvas stamps that template (sets `lastPlaced.current`, the same ref Alt+stamp uses). Right-click a slot → evict it.
+
+### Added
+- **`src/state/recent-tokens.ts`** (new, ~145 lines) — pure helper backed by localStorage. API:
+  - `recordTokenUse(token, now?)` — adds / dedupes / bumps to front. Trimmed to `MAX_RECENT_TOKENS = 6`.
+  - `listRecentTokens()` — newest-first list of templates.
+  - `removeRecentToken(templateId)` — silent no-op for unknown ids.
+  - `subscribeRecentTokens(listener)` — pub/sub for UI re-renders.
+  - `templateOf(token)` — pure key derivation. Two tokens with the same `(label, color, imageId, size, borderColor)` collapse to one template.
+- **`src/ui/recent-tokens-strip.ts`** (new, ~120 lines) — DOM strip mounted near the canvas. Each slot is a small color swatch + the label. Click sets `lastPlaced.current` (so the next Alt+stamp / token-tool drop reuses the template). Right-click evicts.
+- **`src/entries/gm.ts`** wires it via a single `store.subscribe(patch)` block: every `token-add` patch calls `recordTokenUse(patch.token)`. Catches all 5 drop paths (fresh drop / Alt+stamp / paste / duplicate / library drop) without touching their individual implementations.
+- **CSS for `.recent-tokens-strip` + `.recent-tokens-slot*`** — bottom-center horizontal rail, max-width 90vw with overflow-x: auto so the strip stays usable on narrow viewports.
+
+### Why this matters
+Pre-148 a GM who had stamped a custom-named "Cave Goblin Boss" token earlier in the session and wanted another one had to either (a) Alt+click and accept whatever the most-recently-placed-as-of-now template was, or (b) navigate to the explicit Token Library modal and search for it. With the strip, the GM's last 6 distinct templates are persistently visible — one click sets the next stamp without scrolling through a modal.
+
+### Architecture
+- **localStorage-backed.** Per-GM-tab; doesn't sync. Same persistence pattern as Phase 117 wall-presets / Phase 75 scene-recents.
+- **Defensive parser.** `isEntry()` validates every persisted record (templateId / label / color / imageId / size / borderColor / lastUsedAt fields all type-checked + length-checked). Malformed entries drop out silently.
+- **Subscribe model.** Listener Set notified after every persist (`recordTokenUse` / `removeRecentToken` / `_resetRecentTokens` all call the same `persist()` helper that flushes listeners).
+- **`token-add` is the central hook** — every drop path funnels through `store.applyPatch({ kind: 'token-add', token })`, so a single subscribe captures all of them. The hook explicitly skips `null` patches (the session-reset signal — those tokens already existed, not "uses").
+- **Strip → tool integration via `lastPlaced.current`.** The strip's click handler sets `lastPlaced.current = tokenFromRecent(entry)`. The token tool's `onPointerDown` then reads `ctx.lastPlaced.current` for its Alt+stamp template — same mechanism Alt+click uses today. No new state model.
+
+### UX details
+- **Hidden when empty.** Fresh installs see nothing; the strip appears the moment the GM drops their first token.
+- **Click = future stamp, not immediate drop.** Clicking a slot doesn't immediately place a token on the canvas; it just sets the next-stamp template. The GM still chooses where on the map to drop it. This matches the existing Alt+stamp flow and avoids accidental drops at random screen positions.
+- **Bottom-center placement.** Below the canvas; doesn't conflict with the top-center initiative bar (Phase 69), the left-edge toolbar, or the right-edge panels (chat / notes / etc.).
+- **Auto-scrolls horizontally.** Up to 6 slots fit on a wide viewport; on narrow / mobile the strip overflow-x scrolls.
+- **Survives page reload.** localStorage round-trip means the GM's templates persist across browser restarts.
+
+### Tests
+- **+12 unit tests** in `src/state/recent-tokens.test.ts` (new): `templateOf` stable across matching fields / differs across labels / differs across imageIds / null-vs-empty borderColor coalescing; `recordTokenUse` records / dedupes / bumps to front / caps at 6; `removeRecentToken` removes by id / no-op for unknown; `subscribeRecentTokens` notifies after every persist + unsub respected.
+- **+4 Playwright specs** in `e2e/recent-tokens-strip.spec.ts` (new): hidden on fresh boot; first drop shows a slot; same-template drops dedupe; right-click evicts.
+- **All 1528 unit tests + 373 Playwright specs pass** locally.
+
+### Bundle
+- 110.73 / 120 KB initial-load brotli (+0.65 KB for the recent-tokens helper + the strip UI + the gm.ts wiring). CSS 12.85 / 14 KB (+0.09 KB for the strip rules). Lazy chunks unchanged.
+
+### Pre-push checklist
+Caught zero issues — full unit suite + full e2e + visual-regression specs + size-limit all green before push.
+
+### Spectator UX track complete
+Phase 146 (ping attribution) + 147 (initiative-bar pip) + 148 (recent-tokens strip) close Track B. Next: Track C (combat ergonomics — Phase 149's movement budget HUD).
+
+---
+
 ## [1.22.0] — 2026-05-04 — Initiative-bar pip parity
 
 Phase 147 — second phase of the **spectator UX track**. Adds a colored pip to the initiative bar showing the active token's `color` + `borderColor`. Mounts on both GM and Spectator (the bar element itself is already mounted on both per Phase 69 / 93; this phase upgrades its visual prominence).

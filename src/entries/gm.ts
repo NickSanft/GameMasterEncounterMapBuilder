@@ -90,6 +90,8 @@ import { mountFogSettings } from '../ui/fog-settings.js';
 import { mountWallsSettings } from '../ui/walls-settings.js';
 import { mountTilePaintSettings } from '../ui/tile-paint-settings.js';
 import { mountSceneLoadingOverlay } from '../ui/scene-loading-overlay.js';
+import { mountRecentTokensStrip } from '../ui/recent-tokens-strip.js';
+import { recordTokenUse } from '../state/recent-tokens.js';
 import { mountSettingsModal } from '../ui/settings-modal.js';
 import { mountZoomControls } from '../ui/zoom-controls.js';
 import { createSyncChannel } from '../sync/channel.js';
@@ -2510,6 +2512,23 @@ store.subscribe(() => {
   // soon as a new background id appears.
   sceneLoadingOverlay.update(store.getState().background.imageId);
 });
+
+// Phase 148 — record every newly-added token as a "recently used"
+// template. Catches every drop / Alt+stamp / paste / duplicate /
+// library-drop in one hook (they all funnel through `token-add`).
+// Skipped for `session-reset` patches (the tokens loaded from a
+// scene aren't "uses" — those tokens already existed).
+store.subscribe((patch) => {
+  if (patch?.kind === 'token-add') {
+    recordTokenUse(patch.token);
+  }
+});
+
+// Phase 148 — recently-used tokens strip. Mounted on body so it
+// can absolute-position near the canvas. The strip reads
+// recent-tokens via its own subscribe; the GM-side store-subscribe
+// above feeds it via `recordTokenUse` from every token-add patch.
+mountRecentTokensStrip(document.body, lastPlacedRef);
 
 function sendCameraIfBroadcasting() {
   if (channel && preferences.get().broadcastCamera) {
