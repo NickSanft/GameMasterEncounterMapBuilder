@@ -129,10 +129,10 @@ See `src/state/types.ts` for the full state contract and `src/util/constants.ts`
 
 ## Known limitations
 
-- Single-device only — no network sync across browsers. By design.
-- No dice, initiative, measurement, or drawing tools. By design.
+- Default sync is single-origin via `BroadcastChannel` (GM + Spectator on the same machine / browser profile). Cross-network play is opt-in via the **Remote Play** modal (Phase 64+); both sides must be online and exchange a one-shot signaling code to establish the WebRTC peer connection.
 - `BroadcastChannel` is disabled in some private-browsing modes; the Spectator shows a warning banner when that's the case.
 - IndexedDB has a per-origin quota; large libraries of uploaded maps will eventually hit it.
+- Hex grid: distance, token snap, walls, and manual fog reveal are hex-aware (v1.4 → v1.7); auto-reveal still rasterizes into the rectangular fog buffer (visible stair-stepping along curved viewer perimeters in hex mode). A truly hex-grain fog buffer is a future major bump.
 
 ## Changelog
 

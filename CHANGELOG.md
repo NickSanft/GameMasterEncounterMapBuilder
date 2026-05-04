@@ -131,6 +131,22 @@ gaps so the v1.0 cut is genuinely "stable + remote-play-capable."
 
 ---
 
+## [1.7.1] — 2026-05-03 — Docs: refresh `README.md` known-limitations
+
+### Changed
+- **README "Known limitations"** updated to match the post-1.0 reality:
+  - Removed the stale "Single-device only — no network sync across browsers. By design." line. Phase 64 (and 1.0.0) shipped opt-in cross-network sync via the Remote Play modal (WebRTC peer + signaling-code handshake); the new wording reflects that BroadcastChannel is just the default same-origin path.
+  - Removed the "No dice, initiative, measurement, or drawing tools. By design." line. Phases 0.69, 0.73, the ruler tool, and the draw tool collectively shipped all four. Keeping the line as written misled new readers about the feature surface.
+  - Added a hex-grid known-limitation note: distance / snap / walls / manual fog reveal are hex-aware as of v1.4 → v1.7; auto-reveal still rasterizes into the rectangular fog buffer (the deferral called out in v1.7.0). A truly hex-grain fog buffer is a future major bump.
+
+### Why
+The README was the single visible doc surface that hadn't kept pace with the post-1.0 feature additions. New users were being told the app couldn't do things it can — a documentation gap that's worth a patch release on its own rather than waiting to bundle into a feature phase.
+
+### Tests / bundle
+Docs-only — no source code changed, no tests added, bundle unchanged.
+
+---
+
 ## [1.7.0] — 2026-04-30 — Hex-aware fog reveal · **closes the v1.0 hex limitation** 🎉
 
 Phase 132 — fourth and final phase of the **true hex semantics** track. v0.124 → v1.7 closed the v1.0 documented limitation that "hex grid is cosmetic in v1.0." As of v1.7, the four hex-rules-game pillars (distance, snap, walls, fog) all work natively on hex grids.
