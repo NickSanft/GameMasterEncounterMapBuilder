@@ -164,6 +164,16 @@ export interface Preferences {
    * cosmetic + LoS layers to stay in sync.
    */
   coupleTilePaintWalls: boolean;
+  /**
+   * Phase 153 — per-action key overrides for the 11 tool-activation
+   * shortcuts (S/T/R/H/M/N/L/Y/K/W/P). Keys are action ids from
+   * `TOOL_KEYBINDING_ACTIONS` in `state/keybindings.ts`; values are
+   * single lowercase chars. An empty record (default) means every
+   * action uses its built-in default key. Modifier-key shortcuts
+   * (Ctrl+Z, Tab, Esc, etc.) are NOT remappable — they stay
+   * hardcoded for safety.
+   */
+  keybindings: Record<string, string>;
   // Phase 67 — `playerNameGm`, `playerNameSpectator`,
   // `playerColorGm`, `playerColorSpectator` moved out of Preferences
   // into the dedicated `IdentityPrefsStore` (`state/identity-prefs.ts`).
@@ -199,6 +209,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   turnTimerSeconds: 0,
   autoNumberDuplicateTokens: true,
   coupleTilePaintWalls: false,
+  keybindings: {},
 };
 
 export interface PreferencesStore {

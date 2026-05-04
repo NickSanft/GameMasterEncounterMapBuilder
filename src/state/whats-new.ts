@@ -94,9 +94,16 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW_ENTRIES: readonly WhatsNewEntry[] = [
   {
+    version: '1.28.0',
+    date: '2026-05-04',
+    highlights: [
+      'Customizable tool-activation keybindings — Settings → Keybindings tab.',
+    ],
+  },
+  {
     version: '1.27.0',
     date: '2026-05-04',
-    highlights: ['"What\'s new" badge — see this modal on each update.'],
+    highlights: ['"What\'s new" modal — see this on each version bump.'],
   },
   {
     version: '1.26.0',

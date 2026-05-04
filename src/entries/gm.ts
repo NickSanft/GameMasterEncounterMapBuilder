@@ -94,6 +94,7 @@ import { mountRecentTokensStrip } from '../ui/recent-tokens-strip.js';
 import { recordTokenUse } from '../state/recent-tokens.js';
 import { mountWhatsNewModal } from '../ui/whats-new-modal.js';
 import { shouldShowWhatsNew } from '../state/whats-new.js';
+import { lookupTool } from '../state/keybindings.js';
 import { mountSettingsModal } from '../ui/settings-modal.js';
 import { mountZoomControls } from '../ui/zoom-controls.js';
 import { createSyncChannel } from '../sync/channel.js';
@@ -4178,52 +4179,19 @@ window.addEventListener('keydown', (e) => {
 
   if (e.altKey || e.shiftKey) return;
 
-  switch (e.key.toLowerCase()) {
-    case 's':
-      toolManager.setActive('select');
-      e.preventDefault();
-      break;
-    case 't':
-      toolManager.setActive('token');
-      e.preventDefault();
-      break;
-    case 'r':
-      toolManager.setActive('fog-reveal');
-      e.preventDefault();
-      break;
-    case 'h':
-      toolManager.setActive('fog-hide');
-      e.preventDefault();
-      break;
-    case 'm':
-      toolManager.setActive('background');
-      e.preventDefault();
-      break;
-    case 'n':
-      toolManager.setActive('note');
-      e.preventDefault();
-      break;
-    case 'l':
-      toolManager.setActive('measure');
-      e.preventDefault();
-      break;
-    case 'y':
-      toolManager.setActive('aoe');
-      e.preventDefault();
-      break;
-    case 'k':
-      toolManager.setActive('draw');
-      e.preventDefault();
-      break;
-    case 'w':
-      toolManager.setActive('walls');
-      e.preventDefault();
-      break;
-    case 'p':
-      // Phase 142 — tile-paint tool.
-      toolManager.setActive('tile-paint');
-      e.preventDefault();
-      break;
+  // Phase 153 — tool-activation shortcuts route through the
+  // keybindings helper so user-overridden keys in
+  // `preferences.keybindings` take effect. Modifier-key shortcuts
+  // (handled below this switch) stay hardcoded.
+  const lowered = e.key.toLowerCase();
+  const remappedTool = lookupTool(lowered, preferences.get().keybindings);
+  if (remappedTool) {
+    toolManager.setActive(remappedTool);
+    e.preventDefault();
+    return;
+  }
+
+  switch (lowered) {
     case 'e': {
       const state = store.getState();
       const firstSelectedToken = state.tokens.find((t) => selection.ids.has(t.id));

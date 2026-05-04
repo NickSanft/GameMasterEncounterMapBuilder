@@ -131,6 +131,66 @@ gaps so the v1.0 cut is genuinely "stable + remote-play-capable."
 
 ---
 
+## [1.28.0] — 2026-05-04 — Customizable tool-activation keybindings
+
+Phase 153 — final phase of the v1.18 → v1.28 batch. Closes the **discovery track** (Track E) and the entire 11-phase polish backlog. Adds a Keybindings tab to Settings; users can rebind the 11 tool-activation shortcuts (S/T/R/H/M/N/L/Y/K/W/P) to any letter or digit.
+
+### Added
+- **`Preferences.keybindings: Record<string, string>`** field. Default `{}` (every action uses its built-in default). Override values are single lowercase chars; malformed values fall through to defaults.
+- **`src/state/keybindings.ts`** (new, ~140 lines) — pure helper. Public exports:
+  - `TOOL_KEYBINDING_ACTIONS` — canonical 11-action array (id, defaultKey, label, toolId).
+  - `getEffectiveKey(actionId, bindings)` — resolves the user's current key for an action.
+  - `lookupTool(key, bindings)` — given a pressed key, returns the toolId it should activate (or `null`).
+  - `validateKey(actionId, candidateKey, bindings)` — returns an error message string for invalid / conflicting keys, `null` for OK.
+  - `setBinding(actionId, candidateKey, bindings)` — immutably set / clear an override.
+- **Refactored `src/entries/gm.ts` keydown handler** — the hardcoded `case 's' / 't' / 'r' / ...` switch is replaced with a single `lookupTool(lowered, prefs.keybindings)` call. Modifier-key shortcuts (Ctrl+Z, Tab, Esc, Ctrl+C, etc.) stay hardcoded — they're tangled with browser / OS conventions and unsafe to expose for free rebinding.
+- **Settings → Keybindings tab** — lists the 11 actions with a `<kbd>` showing the current key + a "Rebind" button. Click rebind → button state flips to "Press a key…", a `keydown` capture-phase listener intercepts the next keypress, validates it (`validateKey`), commits via `setBinding`, and re-renders the row.
+- **Conflict detection.** Trying to rebind an action to a key already in use shows an inline red error message: "X is already bound to {other action label}." The user must pick a different key (or first re-bind the conflicting action).
+- **Reset button** at the bottom of the tab — clears every override (`preferences.update({ keybindings: {} })`) so all 11 actions snap back to defaults.
+
+### Why this matters
+GMs come from many backgrounds — Roll20 / Foundry / Owlbear Rodeo each have their own muscle-memory shortcut sets. Pre-153 the GM had to retrain 11 keys to match this app's defaults. Post-153 they can rebind every tool-activation shortcut to whatever they're already used to. Plus the standard accessibility win: users with non-QWERTY layouts (Dvorak / Colemak / non-Latin scripts) can rebind to keys their layout actually has.
+
+### Architecture
+- **`src/state/keybindings.ts`** is import-free of state types beyond what it needs. Pure functions; no DOM, no I/O.
+- **The keydown handler refactor in `gm.ts`** is one new helper call + a 50-line switch deletion. Net negative LOC.
+- **Modifier-key shortcuts unchanged.** The handler's existing modifier-aware blocks (Ctrl+Z, Ctrl+Y, Ctrl+C/V/X/D, Tab, Escape, Enter, ?, Arrow keys, +/-, etc.) all run before the new `lookupTool` early-return, so they take precedence. The new lookup only runs for plain (no modifier) keypresses with an unhandled lowercased value — exactly where the old switch ran.
+- **Capture-phase listener** for the rebind input. Intercepting the next `keydown` at the window level with `capture: true` ensures the new binding is captured even if focus is on a sub-element of the modal. Escape during the capture cancels (the canonical "cancel rebind" gesture).
+- **`Record<string, string>` in prefs** is a string-keyed map; deserializer reads it as-is and validates per-action via `getEffectiveKey`. Pre-153 prefs blobs without the field load with `{}` (default).
+
+### UX details
+- **Single-character alphanumeric only.** No support for modifier combos (Ctrl+something) or symbols (! @ #). Modifier handling would need to differentiate between e.g. Shift+A and `a` which is a much bigger UX surface — out of scope.
+- **Conflict detection.** Inline error appears on the row whose Rebind was clicked. Persists until the user picks a non-conflicting key.
+- **Cancel via Escape.** During the "Press a key…" state, pressing Escape returns the row to idle without changing the binding.
+- **Persists across reload.** `preferences.update` writes to localStorage; the next boot's keydown handler reads the new bindings.
+- **Conflicts ALSO checked at the lookup site.** `lookupTool` walks the actions in display order; first match wins. So even if `validateKey` somehow lets a conflict through (e.g. via direct prefs editing), the lookup is deterministic.
+
+### Tests
+- **+22 unit tests** in `src/state/keybindings.test.ts` (new): 4 ACTIONS-table sanity tests; 5 `getEffectiveKey` cases (default / override / malformed multi-char / non-alphanumeric / unknown id); 4 `lookupTool` cases (default mappings / unbound key / overridden mapping / case-insensitive); 5 `validateKey` cases (valid / empty / multi-char / symbol / conflict / self-binding allowed); 4 `setBinding` cases (add / no mutation / lowercase / clear-on-null).
+- **+2 Playwright specs** in `e2e/keybindings.spec.ts` (new): Keybindings tab present + 11 rows + label + key + Rebind button per row; Reset button visible.
+- **All 1569 unit tests + 383 Playwright specs pass** locally.
+
+### Bundle
+- 112.81 / 120 KB initial-load brotli (+0.50 KB for the helper + tab UI + handler refactor). Lazy chunks 19.79 / 20 KB (the Settings modal grew with the new tab; close to the budget but still under). CSS 13.20 / 14 KB (+0.14 KB for the new keybindings rules + the recording-pulse animation).
+
+### Pre-push checklist
+Caught zero issues — full unit suite + full e2e + visual-regression specs + size-limit all green before push.
+
+### Discovery track + the v1.18 → v1.28 batch are complete
+Phase 152 (what's new modal) + 153 (keybindings UI) close Track E. Across 11 phases (143 → 153) the polish backlog you asked for after the original v1.7-style work is now fully shipped.
+
+| Track | Phases shipped |
+|---|---|
+| Visual polish | 143 z-order · 144 active-turn pulse · 145 scene-load overlay |
+| Spectator UX | 146 ping attribution · 147 init-bar pip · 148 recent-tokens strip |
+| Combat ergonomics | 149 movement budget HUD |
+| Authoring | 150 tile→wall coupling · 151 multi-aura UI |
+| Discovery | 152 what's new modal · 153 customizable keybindings |
+
+Total bundle delta across the batch: ~+5.7 KB JS initial-load (109.48 → 112.81 KB, well within the 120 KB budget set in v1.16).
+
+---
+
 ## [1.27.0] — 2026-05-04 — "What's new" modal
 
 Phase 152 — first phase of the **discovery track** (Track E from the v1.18 → v1.28 plan). Adds a "what's new" modal that auto-opens once after a version bump, listing recent CHANGELOG highlights. Closing it persists the user's last-seen version so it doesn't re-open until the NEXT version ships.

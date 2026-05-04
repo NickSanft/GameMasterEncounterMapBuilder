@@ -11,6 +11,12 @@ import type { Store } from '../state/store.js';
 import type { ViewMode } from '../state/types.js';
 import { attachFocusTrap, rememberFocus, restoreFocus, getFocusables } from '../util/focus.js';
 import { scanUnusedImages, removeUnusedImages } from '../state/idb-cleanup.js';
+import {
+  TOOL_KEYBINDING_ACTIONS,
+  getEffectiveKey,
+  validateKey,
+  setBinding,
+} from '../state/keybindings.js';
 
 export interface SettingsModalHandle {
   open(): void;
@@ -29,7 +35,7 @@ export interface SettingsModalOptions {
   store: Store;
 }
 
-const TAB_IDS = ['grid', 'appearance', 'camera', 'accessibility', 'diagnostics'] as const;
+const TAB_IDS = ['grid', 'appearance', 'camera', 'accessibility', 'keybindings', 'diagnostics'] as const;
 type TabId = (typeof TAB_IDS)[number];
 
 const TAB_LABELS: Record<TabId, string> = {
@@ -37,6 +43,7 @@ const TAB_LABELS: Record<TabId, string> = {
   appearance: 'Appearance',
   camera: 'Camera',
   accessibility: 'Accessibility',
+  keybindings: 'Keybindings',
   diagnostics: 'Diagnostics',
 };
 
@@ -117,6 +124,13 @@ export function buildSettingsModal(
   // Phase 93 — turn-timer duration. Only present in the GM view.
   const turnTimerSecondsInput = modal.querySelector<HTMLSelectElement>('[data-field="turnTimerSeconds"]');
   const resetBtn = modal.querySelector<HTMLButtonElement>('[data-action="reset-prefs"]')!;
+  // Phase 153 — keybindings list element + reset button.
+  const keybindingsListEl = modal.querySelector<HTMLDivElement>(
+    '[data-field="keybindings-list"]',
+  );
+  const resetKeybindingsBtn = modal.querySelector<HTMLButtonElement>(
+    '[data-action="reset-keybindings"]',
+  );
   const scanImagesBtn = modal.querySelector<HTMLButtonElement>('[data-action="scan-images"]');
   const scanImagesStatus = modal.querySelector<HTMLDivElement>('[data-field="scan-images-status"]');
   const showDiagnosticsInput = modal.querySelector<HTMLInputElement>('[data-field="showDiagnostics"]');
@@ -183,6 +197,7 @@ export function buildSettingsModal(
     voiceTranscriptionInput.checked = prefs.voiceTranscription;
     if (autoNumberInput) autoNumberInput.checked = prefs.autoNumberDuplicateTokens;
     if (coupleTileWallsInput) coupleTileWallsInput.checked = prefs.coupleTilePaintWalls;
+    renderKeybindingsList();
     // Phase 67 — identity now lives in its own per-role store; the
     // Settings modal reads it from `identityPrefs.get()` instead of
     // peeling out scoped fields from `preferences`.
@@ -333,6 +348,80 @@ export function buildSettingsModal(
       preferences.update({
         coupleTilePaintWalls: coupleTileWallsInput.checked,
       });
+    });
+  }
+
+  // Phase 153 — keybindings list. Re-rendered from `populate()` via
+  // `renderKeybindingsList`. Each row owns its own rebind state
+  // (idle vs "press a key"); rebind commits via setBinding +
+  // preferences.update.
+  function renderKeybindingsList(): void {
+    if (!keybindingsListEl) return;
+    keybindingsListEl.replaceChildren();
+    const bindings = preferences.get().keybindings;
+    for (const action of TOOL_KEYBINDING_ACTIONS) {
+      const row = document.createElement('div');
+      row.className = 'keybinding-row';
+
+      const label = document.createElement('span');
+      label.className = 'keybinding-label';
+      label.textContent = action.label;
+      row.appendChild(label);
+
+      const keyEl = document.createElement('kbd');
+      keyEl.className = 'keybinding-key';
+      const currentKey = getEffectiveKey(action.id, bindings);
+      keyEl.textContent = currentKey.toUpperCase();
+      row.appendChild(keyEl);
+
+      const rebindBtn = document.createElement('button');
+      rebindBtn.type = 'button';
+      rebindBtn.className = 'keybinding-rebind';
+      rebindBtn.textContent = 'Rebind';
+      rebindBtn.addEventListener('click', () => {
+        rebindBtn.textContent = 'Press a key…';
+        rebindBtn.disabled = true;
+        keyEl.classList.add('keybinding-key-recording');
+        const handler = (ev: KeyboardEvent) => {
+          ev.preventDefault();
+          ev.stopPropagation();
+          window.removeEventListener('keydown', handler, true);
+          keyEl.classList.remove('keybinding-key-recording');
+          rebindBtn.disabled = false;
+          rebindBtn.textContent = 'Rebind';
+          if (ev.key === 'Escape') {
+            // Cancel.
+            return;
+          }
+          const candidate = ev.key.toLowerCase();
+          const error = validateKey(action.id, candidate, preferences.get().keybindings);
+          if (error) {
+            errorEl.textContent = error;
+            return;
+          }
+          errorEl.textContent = '';
+          preferences.update({
+            keybindings: setBinding(action.id, candidate, preferences.get().keybindings),
+          });
+          renderKeybindingsList();
+        };
+        window.addEventListener('keydown', handler, true);
+      });
+      row.appendChild(rebindBtn);
+
+      const errorEl = document.createElement('span');
+      errorEl.className = 'keybinding-error';
+      errorEl.setAttribute('role', 'alert');
+      row.appendChild(errorEl);
+
+      keybindingsListEl.appendChild(row);
+    }
+  }
+
+  if (resetKeybindingsBtn) {
+    resetKeybindingsBtn.addEventListener('click', () => {
+      preferences.update({ keybindings: {} });
+      renderKeybindingsList();
     });
   }
 
@@ -524,6 +613,7 @@ function renderModalHTML(viewMode: ViewMode): string {
         ${renderAppearancePane(viewMode)}
         ${renderCameraPane(viewMode)}
         ${renderAccessibilityPane()}
+        ${renderKeybindingsPane()}
         ${renderDiagnosticsPane(viewMode)}
       </div>
     </div>
@@ -785,3 +875,32 @@ function renderDiagnosticsPane(viewMode: ViewMode): string {
     </section>
   `;
 }
+
+/**
+ * Phase 153 — keybindings tab. Lists the 11 tool-activation
+ * shortcuts; each row has the action label + the current key + a
+ * "Rebind" button. Click rebind → row goes into "press a key"
+ * mode; the next keypress on the row's key-record input commits
+ * the new binding (or shows an error for conflicts / invalid
+ * keys).
+ */
+function renderKeybindingsPane(): string {
+  // Note: TOOL_KEYBINDING_ACTIONS is imported lazily at render time
+  // — content already lives in the lazy chunk. The list-row markup
+  // is built in `mountSettingsModalContent`'s sync function so the
+  // initial HTML is just the section shell.
+  return `
+    <section ${paneAttrs('keybindings', false)}>
+      <p class="settings-hint">
+        Phase 153 — rebind any of the 11 tool-activation shortcuts
+        below. Modifier-key shortcuts (Ctrl+Z, Tab, Esc, etc.) are
+        not rebindable. Click "Rebind", then press the new key.
+      </p>
+      <div class="keybindings-list" data-field="keybindings-list"></div>
+      <button type="button" class="danger" data-action="reset-keybindings">
+        Reset all keybindings to defaults
+      </button>
+    </section>
+  `;
+}
+
