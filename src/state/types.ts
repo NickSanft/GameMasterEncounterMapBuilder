@@ -201,6 +201,28 @@ export interface Background {
   offsetY: number;
   scaleX: number;
   scaleY: number;
+  /**
+   * Phase 140 — clockwise rotation in radians applied around the
+   * background's CENTER (after offset + scale). Default `0`. Pre-140
+   * saves don't carry the field; `deserializeState` defaults missing
+   * values to `0`. The Map tool's right-click menu rotates in 90°
+   * (π/2) increments; freeform rotation is allowed in the wire format
+   * but the v140 UI snaps to the cardinal multiples.
+   */
+  rotation?: number;
+  /**
+   * Phase 140 — mirror horizontally around the background's center.
+   * Default `false`. Composed AFTER scale + BEFORE rotation, so
+   * "rotate 90° then flip horizontal" is the same as "flip horizontal
+   * then rotate -90°" (the renderer applies them in `[scale → flip →
+   * rotate]` order).
+   */
+  flipX?: boolean;
+  /**
+   * Phase 140 — mirror vertically around the background's center.
+   * See `flipX` for composition semantics.
+   */
+  flipY?: boolean;
 }
 
 export type AnnotationVisibility = 'gm' | 'shared';
@@ -505,6 +527,9 @@ export const DEFAULT_BACKGROUND: Background = {
   offsetY: 0,
   scaleX: 1,
   scaleY: 1,
+  rotation: 0,
+  flipX: false,
+  flipY: false,
 };
 
 export const DEFAULT_CAMERA: Camera = {

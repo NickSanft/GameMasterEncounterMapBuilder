@@ -131,6 +131,54 @@ gaps so the v1.0 cut is genuinely "stable + remote-play-capable."
 
 ---
 
+## [1.15.0] — 2026-05-04 — Map rotate / flip H/V
+
+Phase 140 — first phase of the **map authoring track**. Adds 90° rotation + horizontal / vertical flip to the background image, accessed via four new entries in the right-click menu when a background is set. Pre-140, fixing a misoriented map required uploading a re-rotated copy.
+
+### Added
+- **`Background.rotation: number`**, **`Background.flipX: boolean`**, **`Background.flipY: boolean`** in `src/state/types.ts`. All optional in the wire format; pre-140 saves default to `0` / `false` / `false` via `deserializeState`. Forward-only over the wire — pre-140 peers drop the fields on receive (same forward-only pattern as Phase 109's `hiddenTokenIds`).
+- **Map-tool right-click menu items** when `state.background.imageId !== null`:
+  - **Rotate map 90°** — increments rotation by π/2 (mod 2π); after 4 clicks back to 0.
+  - **Flip horizontal** — toggles `flipX`. Label flips to "Unflip horizontal" when active.
+  - **Flip vertical** — toggles `flipY`. Same active-label flip pattern.
+  - **Reset orientation** — sets rotation/flipX/flipY back to defaults; disabled when already at defaults.
+- **Renderer transform** in `src/render/layer-background.ts`. Applies `flip → rotate` around the background's center (after `offsetX/Y` + `scaleX/Y` define where the AABB lands). Fast-path no-op when rotation === 0 + both flips false (every pre-140 save lands here).
+- **Cache invalidation** in `src/render/background-cache.ts`. The cache key gains `bgRotation`, `bgFlipX`, `bgFlipY` so any orientation change re-paints the offscreen bitmap.
+
+### Why this matters
+A common authoring bug: GM exports a map from Dungeondraft / Foundry / etc. with the wrong orientation, then realizes it needs rotating once they drop it on the canvas. Pre-140 the only fix was a round-trip through an image editor and a re-upload — now it's a single right-click → menu pick. Same flow for "I uploaded the map mirrored by mistake."
+
+### Architecture
+- **`src/state/types.ts`** — three optional fields on `Background`. `DEFAULT_BACKGROUND` carries the explicit default (0 / false / false) so `createDefaultState()` round-trips through serialize/deserialize without an "explicit vs missing" diff.
+- **`src/sync/messages.ts`** — `deserializeState` reads each field with a defensive default. Rotation: rejects `NaN` / non-finite, falls back to `0`. Flips: strict equality to `true`, so any non-true value (including `'yes'`, `1`, `null`) collapses to `false`. Forward-only — older peers don't see the fields at all because `serializeState` includes them only when set on the model.
+- **`src/render/layer-background.ts`** —
+  - Reads `rotation` / `flipX` / `flipY` from the background object (with defaults).
+  - Fast path: when all three are at defaults, runs the pre-140 `ctx.drawImage(img, offsetX, offsetY, w, h)` unchanged.
+  - Slow path: `save → translate(center) → scale(±1, ±1) → rotate(rad) → drawImage(-w/2, -h/2, w, h) → restore`. Order matters — flip BEFORE rotate so "rotate 90° then flip" matches user expectation (the same as the Photoshop flip / rotate convention).
+- **`src/render/background-cache.ts`** — `BackgroundCacheKey` gains three fields, `backgroundCacheKeyOf` populates them, `cacheKeyEquals` compares them. The cache rebuild logic was already wired off the equals check, so no other changes needed.
+- **`src/entries/gm.ts`** — four new menu items added to the existing Map-actions context-menu list. Each emits a `background-update` patch with the appropriate field change. Active-state labels (`Unflip horizontal` when `flipX === true`) read from the live state at menu-open time. Reset orientation's `disabled` is a one-line check; same pattern as the existing "Fit content to screen" entry.
+
+### UX details
+- **Rotation snaps to 90° in the UI.** The wire format accepts arbitrary radians; the UI just doesn't expose freeform rotation. A future polish could add a slider in Settings; out of scope for v140.
+- **Center-of-image pivot.** Rotating doesn't drift the map relative to the canvas — the background stays anchored at the same world-space center. The grid + tokens overlay stays static; only the image rotates.
+- **No GM-side preview during the click.** The transform is applied immediately on patch; the next render frame paints the new orientation. With the (default) 200ms render budget this is imperceptible.
+- **Spectator sees the same orientation.** The transform is part of the synchronized state — Spectator clients receive the `background-update` patch over the existing wire and re-render.
+- **AoE templates / drawn strokes / annotations don't rotate with the map.** They're authored in world-coordinates relative to the grid, not the image; rotating the image is purely cosmetic. A GM rotating mid-session preserves all their token placements / wall geometry / fog state, just spins the underlying art.
+
+### Tests
+- **+4 unit tests** in `src/sync/messages.test.ts` (under a "Phase 140 — background orientation" describe): legacy saves default to 0 / false / false; valid rotation + flips round-trip; NaN rotation defensively clamps to 0; non-true flip values collapse to false.
+- **+1 unit test** in `src/render/background-cache.test.ts`: cache key copies rotation + flipX + flipY when present (the existing "every field" test bumped from 8 → 11 fields).
+- **+3 Playwright specs** in `e2e/map-rotate-flip.spec.ts` (new): orientation items only appear when a background is set; "Reset orientation" disabled in the default state; clicking "Rotate map 90°" enables "Reset orientation" on the next menu open.
+- **All 1480 unit tests + 355 Playwright specs pass** locally (the same `scenes.spec.ts:56` parallel flake reappeared once on the parallel run; passes in isolation, CI runs serially with retries=2, absorbed).
+
+### Bundle
+- 106.78 / 110 KB initial-load brotli (+0.42 KB for the type fields + the deserializer + the renderer transform branch + the cache key fields + the four menu items). CSS unchanged. Lazy chunks unchanged.
+
+### Pre-push checklist
+Caught zero issues — full unit suite + full e2e + visual-regression specs + size-limit all green before push.
+
+---
+
 ## [1.14.0] — 2026-05-04 — Token aura / emanation rings
 
 Phase 139 — third phase of the **token visual layer track**. Adds a colored ring centered on a token to track persistent area effects ("Bless 10 ft", "Spirit Guardians 15 ft") that follow the caster as they move. Distinct from `AoeTemplate` (Phase 31), which is anchored at a fixed world position.

@@ -36,7 +36,34 @@ describe('backgroundCacheKeyOf', () => {
       bgOffsetY: 20,
       bgScaleX: 1.5,
       bgScaleY: 2,
+      // Phase 140 — orientation fields default to 0 / false / false
+      // when the input Background object doesn't carry them (matches
+      // the optional-field semantics in `state/types.ts`).
+      bgRotation: 0,
+      bgFlipX: false,
+      bgFlipY: false,
     });
+  });
+
+  it('Phase 140 — copies rotation + flipX + flipY when present', () => {
+    const key = backgroundCacheKeyOf(
+      {
+        imageId: 'img-2',
+        offsetX: 0,
+        offsetY: 0,
+        scaleX: 1,
+        scaleY: 1,
+        rotation: Math.PI / 2,
+        flipX: true,
+        flipY: false,
+      },
+      GRID_30x20,
+      'dark',
+      true,
+    );
+    expect(key.bgRotation).toBeCloseTo(Math.PI / 2, 6);
+    expect(key.bgFlipX).toBe(true);
+    expect(key.bgFlipY).toBe(false);
   });
 
   it('treats a null imageId + loaded=false as "no image yet"', () => {

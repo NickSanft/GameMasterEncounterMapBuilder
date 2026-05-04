@@ -516,6 +516,16 @@ export function deserializeState(s: SerializedSessionState): SessionState {
       offsetY: bg.offsetY ?? 0,
       scaleX,
       scaleY,
+      // Phase 140 — rotation in radians (pre-140 saves default to 0);
+      // flipX / flipY booleans (default false). Defensive: clamp
+      // rotation to a finite number so a malformed `rotation: NaN`
+      // can't break the renderer's transform.
+      rotation:
+        typeof bg.rotation === 'number' && Number.isFinite(bg.rotation)
+          ? bg.rotation
+          : 0,
+      flipX: bg.flipX === true,
+      flipY: bg.flipY === true,
     },
     tokens: s.tokens.map((t) => ({
       ...t,

@@ -1965,6 +1965,54 @@ canvas.addEventListener('contextmenu', (e) => {
         onClick: () => resetCamera(renderer),
       },
     );
+    // Phase 140 — background orientation items, only meaningful when
+    // a background image is actually placed.
+    const bg = store.getState().background;
+    if (bg.imageId) {
+      items.push(
+        { kind: 'separator' },
+        {
+          label: 'Rotate map 90°',
+          onClick: () => {
+            const next =
+              ((bg.rotation ?? 0) + Math.PI / 2) % (Math.PI * 2);
+            store.applyPatch({
+              kind: 'background-update',
+              changes: { rotation: next },
+            });
+          },
+        },
+        {
+          label: bg.flipX ? 'Unflip horizontal' : 'Flip horizontal',
+          onClick: () => {
+            store.applyPatch({
+              kind: 'background-update',
+              changes: { flipX: !bg.flipX },
+            });
+          },
+        },
+        {
+          label: bg.flipY ? 'Unflip vertical' : 'Flip vertical',
+          onClick: () => {
+            store.applyPatch({
+              kind: 'background-update',
+              changes: { flipY: !bg.flipY },
+            });
+          },
+        },
+        {
+          label: 'Reset orientation',
+          disabled:
+            (bg.rotation ?? 0) === 0 && !bg.flipX && !bg.flipY,
+          onClick: () => {
+            store.applyPatch({
+              kind: 'background-update',
+              changes: { rotation: 0, flipX: false, flipY: false },
+            });
+          },
+        },
+      );
+    }
   }
 
   const label = aoeHit

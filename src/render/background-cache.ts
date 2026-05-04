@@ -50,6 +50,15 @@ export interface BackgroundCacheKey {
   bgOffsetY: number;
   bgScaleX: number;
   bgScaleY: number;
+  /**
+   * Phase 140 — rotation in radians (default 0) + flipX / flipY
+   * booleans (default false). Cache invalidates whenever any of
+   * these change so the next render re-paints the bitmap with the
+   * new transform.
+   */
+  bgRotation: number;
+  bgFlipX: boolean;
+  bgFlipY: boolean;
 }
 
 /**
@@ -73,6 +82,9 @@ export function backgroundCacheKeyOf(
     bgOffsetY: background.offsetY,
     bgScaleX: background.scaleX,
     bgScaleY: background.scaleY,
+    bgRotation: background.rotation ?? 0,
+    bgFlipX: background.flipX === true,
+    bgFlipY: background.flipY === true,
   };
 }
 
@@ -88,7 +100,10 @@ export function cacheKeyEquals(a: BackgroundCacheKey, b: BackgroundCacheKey): bo
     a.bgOffsetX === b.bgOffsetX &&
     a.bgOffsetY === b.bgOffsetY &&
     a.bgScaleX === b.bgScaleX &&
-    a.bgScaleY === b.bgScaleY
+    a.bgScaleY === b.bgScaleY &&
+    a.bgRotation === b.bgRotation &&
+    a.bgFlipX === b.bgFlipX &&
+    a.bgFlipY === b.bgFlipY
   );
 }
 

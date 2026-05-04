@@ -227,7 +227,57 @@ describe('serializeState / deserializeState', () => {
       expect(restored.tokens[0]!.auras.length).toBe(1);
       expect(restored.tokens[0]!.auras[0]!.id).toBe('good');
     });
+  });
 
+  describe('Phase 140 — background orientation', () => {
+    it('defaults rotation/flipX/flipY for legacy saves (pre-140)', () => {
+      const legacy = {
+        ...serializeState(createDefaultState()),
+        background: {
+          imageId: null,
+          offsetX: 0,
+          offsetY: 0,
+          scaleX: 1,
+          scaleY: 1,
+          // rotation / flipX / flipY missing entirely
+        },
+      } as unknown as SerializedSessionState;
+      const restored = deserializeState(legacy);
+      expect(restored.background.rotation).toBe(0);
+      expect(restored.background.flipX).toBe(false);
+      expect(restored.background.flipY).toBe(false);
+    });
+
+    it('preserves orientation across a round-trip', () => {
+      const state = createDefaultState();
+      state.background.rotation = Math.PI / 2;
+      state.background.flipX = true;
+      state.background.flipY = false;
+      const restored = deserializeState(serializeState(state));
+      expect(restored.background.rotation).toBeCloseTo(Math.PI / 2, 6);
+      expect(restored.background.flipX).toBe(true);
+      expect(restored.background.flipY).toBe(false);
+    });
+
+    it('clamps a NaN rotation back to 0 (defensive)', () => {
+      const state = serializeState(createDefaultState());
+      (state.background as { rotation?: number }).rotation = NaN;
+      const restored = deserializeState(state);
+      expect(restored.background.rotation).toBe(0);
+    });
+
+    it('treats non-true flipX / flipY values as false', () => {
+      const state = serializeState(createDefaultState());
+      (state.background as { flipX?: unknown }).flipX = 'yes';
+      (state.background as { flipY?: unknown }).flipY = 1;
+      const restored = deserializeState(state);
+      expect(restored.background.flipX).toBe(false);
+      expect(restored.background.flipY).toBe(false);
+    });
+
+  });
+
+  describe('Phase 139 — auras (collapse unknown visibility)', () => {
     it("collapses unknown visibility values to 'shared'", () => {
       const state = serializeState(createDefaultState());
       state.tokens.push({
