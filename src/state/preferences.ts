@@ -165,6 +165,19 @@ export interface Preferences {
    */
   coupleTilePaintWalls: boolean;
   /**
+   * Phase 155 — when true, the "next turn" actions (initiative bar's
+   * Next button, the modal's Next button, and the command palette's
+   * "Initiative — next turn") auto-skip past dead tokens
+   * (`token.deathSaves.failures >= 3`). Each skip is recorded in the
+   * combat log as a `'turn-skip'` event so the GM keeps a record of
+   * who didn't get a turn and why.
+   *
+   * Default `true` — most groups want dead bodies to NOT slow down
+   * the round. A GM running a "necromancer raises the fallen" beat
+   * can disable it from Settings → Combat & Initiative.
+   */
+  autoSkipDeadInInitiative: boolean;
+  /**
    * Phase 153 — per-action key overrides for the 11 tool-activation
    * shortcuts (S/T/R/H/M/N/L/Y/K/W/P). Keys are action ids from
    * `TOOL_KEYBINDING_ACTIONS` in `state/keybindings.ts`; values are
@@ -209,6 +222,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   turnTimerSeconds: 0,
   autoNumberDuplicateTokens: true,
   coupleTilePaintWalls: false,
+  autoSkipDeadInInitiative: true,
   keybindings: {},
 };
 

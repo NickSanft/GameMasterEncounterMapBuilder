@@ -131,6 +131,61 @@ gaps so the v1.0 cut is genuinely "stable + remote-play-capable."
 
 ---
 
+## [1.30.0] — 2026-05-05 — Initiative auto-skip on dead tokens
+
+Phase 155 — second of the v1.29 → v1.36 batch. The "Next turn" actions (initiative bar, tracker modal, command palette) auto-skip past dead tokens (`token.deathSaves.failures >= 3`) and emit a `'turn-skip'` combat-log event for each skipped entry. Behavior gated behind a Settings preference (default ON).
+
+### Added
+- **`advanceInitiativeSkippingDead(state, tokens)`** in `src/state/initiative.ts`. Pure helper that wraps `advanceInitiative` with a skip loop:
+  - Repeatedly advances while the next active entry's linked token is dead.
+  - Caps at one full lap to prevent infinite loops in the all-dead degenerate case (returns the original `advanceInitiative` result + empty `skipped` so the GM can manually resolve).
+  - Returns `AdvanceWithSkipResult = AdvanceResult & { skipped: InitiativeEntry[] }` so callers can log each skipped turn in order.
+  - Manual entries (`tokenId: null`) and stale tokenId references are NEVER skipped — they're authored markers / defensive bail points.
+  - Only skips fully-dead tokens (`deathSaves.failures >= 3`). 0-HP-not-yet-dead tokens still get a turn (they roll a death save).
+- **`Preferences.autoSkipDeadInInitiative: boolean`** field. Default `true`. Toggleable in Settings → Camera → Initiative subgroup (GM-only). Pre-155 prefs blobs without the field load with the default via the existing `{ ...defaults, ...parsed }` spread.
+- **`'turn-skip'` combat-log event kind** in `src/state/combat-log.ts`:
+  - Shape: `{ kind: 'turn-skip'; round; tokenId; tokenLabel; reason: 'dead' }`.
+  - `formatLogEvent` renders it as `"Round 3 — Goblin's turn skipped (dead)"`.
+  - Emitted once per skipped entry by the gm-entry's shared `advanceTurnWithSkip` handler before the actual turn-set patch, so the timeline reads chronologically.
+- **Shared `advanceTurnWithSkip()` handler in `src/entries/gm.ts`** routed to all three "next turn" surfaces:
+  - Command palette `Initiative — next turn` action.
+  - Initiative bar Next button (via the new `onAdvanceTurn` callback in `InitiativeBarActions`).
+  - Initiative modal Next button (via the new `onAdvanceTurn` field in `InitiativeModalOptions`).
+  - All three callers funnel to one implementation so the auto-skip behavior is identical no matter which surface the GM uses.
+
+### Why this matters
+Pre-155 the "Next turn" buttons advanced one entry at a time even when the next token was already dead — the GM had to either manually click Next a second time or remove the dead token from the order. The skip is the textbook 5e GM-screen convenience — dead tokens don't get turns. Logging each skip keeps the round audit-trail intact (the GM can see, post-session, "Bandit died in round 4 and was skipped from round 5 onward").
+
+### Architecture
+- **One helper, three surfaces.** Pre-155 each Next button had its own inline `advanceInitiative` + `applyPatch` sequence. Post-155 all three delegate to one shared function so future tweaks (different death conditions, different log shapes) only have to change one place.
+- **Backward-compat callbacks.** Both `InitiativeBarActions.onAdvanceTurn` and `InitiativeModalOptions.onAdvanceTurn` are optional. When omitted (e.g., on a Spectator view, or in a test mount that only needs basic advance), the bar / modal fall back to the pre-155 inline path. The Spectator entry doesn't author skips.
+- **Lap cap is `state.order.length`.** With every linked token dead, we walk the full order once; if we're back at the start without finding a live entry, we bail and return the original advance. This makes the all-dead degenerate case visible (the GM lands on a dead entry and can resolve it) instead of infinite-looping or silently disabling the button.
+- **Cumulative wrap flag.** Multi-skip across the order can wrap the round counter mid-skip (e.g., active=last, advance wraps to first which is dead, skip to second). The helper tracks `cursor.wrapped || next.wrapped` so the final round number reflects the wrap correctly.
+
+### UX details
+- **Default ON.** The 5e gameplay default is "dead bodies don't get turns." A GM running a "raise the fallen" mechanic can disable it from Settings.
+- **Combat log only — no live-region announce.** Skipping is silent in the UI (the bar just shows the next live entry). The combat log entry is the audit trail; spamming the live region for every skip would be noisy in a TPK-adjacent moment.
+- **Setting is GM-only.** The Camera pane's Initiative subgroup wraps the toggle in the same `viewMode === 'gm'` gate as the Phase 93 turn-timer. Spectators don't author initiative, so the preference would never apply on their side.
+
+### Tests
+- **+9 unit tests** in `src/state/initiative.test.ts`: pass-through (no skip), single skip, multi-skip, wrap during skip, manual-entry not-skipped, 0-HP-not-dead not-skipped, all-dead bail, stale-tokenId bail, empty initiative.
+- **+3 Playwright specs** in `e2e/initiative-auto-skip.spec.ts` (new): Settings UI exposes the checkbox (GM-only, default ON), Spectator does NOT show it, toggling persists across reload.
+- **All 1584 unit tests + 389 Playwright specs pass** locally.
+
+### Bundle
+- 113.58 / 120 KB initial-load brotli (+0.42 KB for the helper + the new preference + the call-site wiring + the new combat-log event format branch).
+- Lazy chunks **20.05 / 21 KB** brotli — the Settings modal grew with the Initiative subgroup (+260 B). Bumped the lazy-chunks budget from 20 → 21 KB to give the next 4 phases (157 → 161) headroom; previous budget had been at 19.79 KB after Phase 153 so the pre-155 setting was already close to the wall.
+- CSS 13.20 / 14 KB unchanged (no new rules).
+
+### Pre-push checklist
+- typecheck: clean.
+- unit suite: 1584 passing.
+- e2e suite: 389 passing.
+- visual regression: all baselines green (no new visual elements in default-boot scenes).
+- size-limit: all 5 budgets green after the 1 KB lazy-chunks bump.
+
+---
+
 ## [1.29.0] — 2026-05-05 — Token lock (drag prevention)
 
 Phase 154 — opens the v1.29 → v1.36 batch (8 phases of authoring polish + initiative QoL the user picked from the third suggestion list). Adds an optional `Token.locked` flag, a render badge, a select-tool drag skip, and a "Lock token" checkbox in the editor.

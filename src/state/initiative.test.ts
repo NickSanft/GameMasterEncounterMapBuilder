@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   advanceInitiative,
+  advanceInitiativeSkippingDead,
   retreatInitiative,
   sortByValue,
   findEntryForToken,
@@ -277,5 +278,183 @@ describe('rollInitiativeForUnlinkedTokens', () => {
     );
     expect(fresh).toHaveLength(1);
     expect(fresh[0]?.tokenId).toBe('tok-1');
+  });
+});
+
+describe('advanceInitiativeSkippingDead (Phase 155)', () => {
+  const dead = { successes: 0, failures: 3 };
+  const alive = { successes: 0, failures: 0 };
+
+  it('passes through to advanceInitiative when nothing is dead', () => {
+    const tokens = [
+      token({ id: 'a' }),
+      token({ id: 'b' }),
+      token({ id: 'c' }),
+    ];
+    const init = state({
+      order: [
+        entry({ id: 'ea', tokenId: 'a' }),
+        entry({ id: 'eb', tokenId: 'b' }),
+        entry({ id: 'ec', tokenId: 'c' }),
+      ],
+      activeId: 'ea',
+      round: 1,
+    });
+    const result = advanceInitiativeSkippingDead(init, tokens);
+    expect(result.activeId).toBe('eb');
+    expect(result.round).toBe(1);
+    expect(result.skipped).toEqual([]);
+  });
+
+  it('skips one dead token, lands on the next live entry', () => {
+    const tokens = [
+      token({ id: 'a' }),
+      token({ id: 'b', deathSaves: dead }),
+      token({ id: 'c' }),
+    ];
+    const init = state({
+      order: [
+        entry({ id: 'ea', tokenId: 'a' }),
+        entry({ id: 'eb', tokenId: 'b' }),
+        entry({ id: 'ec', tokenId: 'c' }),
+      ],
+      activeId: 'ea',
+      round: 1,
+    });
+    const result = advanceInitiativeSkippingDead(init, tokens);
+    expect(result.activeId).toBe('ec');
+    expect(result.round).toBe(1);
+    expect(result.skipped.map((e) => e.id)).toEqual(['eb']);
+  });
+
+  it('skips multiple consecutive dead tokens', () => {
+    const tokens = [
+      token({ id: 'a' }),
+      token({ id: 'b', deathSaves: dead }),
+      token({ id: 'c', deathSaves: dead }),
+      token({ id: 'd' }),
+    ];
+    const init = state({
+      order: [
+        entry({ id: 'ea', tokenId: 'a' }),
+        entry({ id: 'eb', tokenId: 'b' }),
+        entry({ id: 'ec', tokenId: 'c' }),
+        entry({ id: 'ed', tokenId: 'd' }),
+      ],
+      activeId: 'ea',
+      round: 1,
+    });
+    const result = advanceInitiativeSkippingDead(init, tokens);
+    expect(result.activeId).toBe('ed');
+    expect(result.skipped.map((e) => e.id)).toEqual(['eb', 'ec']);
+  });
+
+  it('skip across the wrap increments the round counter', () => {
+    const tokens = [
+      token({ id: 'a', deathSaves: dead }),
+      token({ id: 'b' }),
+    ];
+    const init = state({
+      order: [
+        entry({ id: 'ea', tokenId: 'a' }),
+        entry({ id: 'eb', tokenId: 'b' }),
+      ],
+      // Active is the LAST entry, so the next advance wraps round +1.
+      activeId: 'eb',
+      round: 1,
+    });
+    const result = advanceInitiativeSkippingDead(init, tokens);
+    // Wrap to ea (dead), skip, advance to eb. Round bumps once on
+    // the wrap.
+    expect(result.activeId).toBe('eb');
+    expect(result.round).toBe(2);
+    expect(result.wrapped).toBe(true);
+    expect(result.skipped.map((e) => e.id)).toEqual(['ea']);
+  });
+
+  it('does NOT skip manual entries (tokenId: null)', () => {
+    const tokens = [
+      token({ id: 'a', deathSaves: alive }),
+      token({ id: 'b' }),
+    ];
+    const init = state({
+      order: [
+        entry({ id: 'ea', tokenId: 'a' }),
+        // Manual "Lair action" entry the GM wants to keep firing.
+        entry({ id: 'lair', tokenId: null, label: 'Lair' }),
+        entry({ id: 'eb', tokenId: 'b' }),
+      ],
+      activeId: 'ea',
+      round: 1,
+    });
+    const result = advanceInitiativeSkippingDead(init, tokens);
+    expect(result.activeId).toBe('lair');
+    expect(result.skipped).toEqual([]);
+  });
+
+  it('does NOT skip 0-HP-but-not-dead tokens (only fully-dead)', () => {
+    const tokens = [
+      token({ id: 'a' }),
+      // 0-HP, 2 failures → still has a turn (rolling death saves).
+      token({
+        id: 'b',
+        hp: { current: 0, max: 10, visibility: 'shared' },
+        deathSaves: { successes: 0, failures: 2 },
+      }),
+    ];
+    const init = state({
+      order: [
+        entry({ id: 'ea', tokenId: 'a' }),
+        entry({ id: 'eb', tokenId: 'b' }),
+      ],
+      activeId: 'ea',
+      round: 1,
+    });
+    const result = advanceInitiativeSkippingDead(init, tokens);
+    expect(result.activeId).toBe('eb');
+    expect(result.skipped).toEqual([]);
+  });
+
+  it('bails (no skip) when EVERY linked token is dead — degenerate case', () => {
+    const tokens = [
+      token({ id: 'a', deathSaves: dead }),
+      token({ id: 'b', deathSaves: dead }),
+    ];
+    const init = state({
+      order: [
+        entry({ id: 'ea', tokenId: 'a' }),
+        entry({ id: 'eb', tokenId: 'b' }),
+      ],
+      activeId: 'ea',
+      round: 1,
+    });
+    const result = advanceInitiativeSkippingDead(init, tokens);
+    // Bails to the original advance result — eb (the natural next
+    // turn from ea). skipped is empty so the GM can manually resolve.
+    expect(result.activeId).toBe('eb');
+    expect(result.skipped).toEqual([]);
+  });
+
+  it('handles a stale tokenId gracefully (treats as not-skippable)', () => {
+    // Initiative entry references a token that no longer exists.
+    // Defensive: don't loop forever, just stop on the first stale ref.
+    const tokens = [token({ id: 'a' })];
+    const init = state({
+      order: [
+        entry({ id: 'ea', tokenId: 'a' }),
+        entry({ id: 'eb', tokenId: 'ghost' }),
+      ],
+      activeId: 'ea',
+      round: 1,
+    });
+    const result = advanceInitiativeSkippingDead(init, tokens);
+    expect(result.activeId).toBe('eb');
+    expect(result.skipped).toEqual([]);
+  });
+
+  it('returns the empty advance result for empty initiative', () => {
+    const result = advanceInitiativeSkippingDead(state({}), []);
+    expect(result.activeId).toBeNull();
+    expect(result.skipped).toEqual([]);
   });
 });

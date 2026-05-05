@@ -21,6 +21,14 @@ export interface InitiativeModalHandle {
 
 export interface InitiativeModalOptions {
   store: Store;
+  /**
+   * Phase 155 — host-supplied "advance turn" handler. When provided,
+   * the modal's Next button delegates to it (the host wires
+   * auto-skip past dead tokens + combat-log emission). When omitted,
+   * the modal falls back to the pre-155 inline `advanceInitiative`
+   * + patch sequence.
+   */
+  onAdvanceTurn?: () => void;
 }
 
 export function mountInitiativeModal(
@@ -305,6 +313,10 @@ export function mountInitiativeModal(
   });
 
   nextBtn.addEventListener('click', () => {
+    if (opts.onAdvanceTurn) {
+      opts.onAdvanceTurn();
+      return;
+    }
     const next = advanceInitiative(store.getState().initiative);
     store.applyPatch({
       kind: 'initiative-set-active',

@@ -101,6 +101,11 @@ export function buildSettingsModal(
   const coupleTileWallsInput = modal.querySelector<HTMLInputElement>(
     '[data-field="coupleTilePaintWalls"]',
   );
+  // Phase 155 — same GM-only gating; the toggle lives in the Camera
+  // pane's Initiative subgroup, which only renders for GM view.
+  const autoSkipDeadInput = modal.querySelector<HTMLInputElement>(
+    '[data-field="autoSkipDeadInInitiative"]',
+  );
   const playerNameInput = modal.querySelector<HTMLInputElement>('[data-field="playerName"]')!;
   const playerColorInput = modal.querySelector<HTMLInputElement>('[data-field="playerColor"]')!;
   const labelSizeRadios = Array.from(
@@ -197,6 +202,7 @@ export function buildSettingsModal(
     voiceTranscriptionInput.checked = prefs.voiceTranscription;
     if (autoNumberInput) autoNumberInput.checked = prefs.autoNumberDuplicateTokens;
     if (coupleTileWallsInput) coupleTileWallsInput.checked = prefs.coupleTilePaintWalls;
+    if (autoSkipDeadInput) autoSkipDeadInput.checked = prefs.autoSkipDeadInInitiative;
     renderKeybindingsList();
     // Phase 67 — identity now lives in its own per-role store; the
     // Settings modal reads it from `identityPrefs.get()` instead of
@@ -347,6 +353,14 @@ export function buildSettingsModal(
     coupleTileWallsInput.addEventListener('change', () => {
       preferences.update({
         coupleTilePaintWalls: coupleTileWallsInput.checked,
+      });
+    });
+  }
+
+  if (autoSkipDeadInput) {
+    autoSkipDeadInput.addEventListener('change', () => {
+      preferences.update({
+        autoSkipDeadInInitiative: autoSkipDeadInput.checked,
       });
     });
   }
@@ -793,6 +807,14 @@ function renderCameraPane(viewMode: ViewMode): string {
           </select>
         </label>
         <p class="settings-hint">Shows a countdown next to the active token in the initiative bar. Resets every turn. Counts down silently to 30 s, turns amber, then red at 10 s, and pulses + announces "Time" when it hits zero. Spectator doesn't see the clock.</p>
+      </fieldset>
+      <fieldset class="settings-subgroup">
+        <legend>Initiative</legend>
+        <label class="check">
+          <input type="checkbox" data-field="autoSkipDeadInInitiative" />
+          <span>Auto-skip dead tokens on "Next turn"</span>
+        </label>
+        <p class="settings-hint">Phase 155. When ON (default), the Next-turn buttons (initiative bar, tracker modal, command palette) walk past tokens that have died (3 death-save failures) and land on the next live entry. Each skip is recorded in the combat log as a <code>turn-skip</code> event so you have a record of who didn't get a turn. Manual entries (no linked token) are never skipped. Disable this if you're running a "raise the fallen" beat where the GM wants to manually decide.</p>
       </fieldset>`
     : '';
 

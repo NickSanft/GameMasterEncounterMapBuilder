@@ -38,7 +38,7 @@
         "dist/assets/remote-play-modal-content-*.js",
         "dist/assets/dice-animation-*.js"
       ],
-      "limit": "20 KB"
+      "limit": "21 KB"
     },
     {
       "name": "CSS (all chunks, brotli)",

@@ -1,6 +1,7 @@
 import type { ID, InitiativeEntry, InitiativeState, Token } from './types.js';
 import type { Rng } from './dice.js';
 import { nid } from '../util/id.js';
+import { isDead } from './token-hp.js';
 
 /** Stable-sort a list of entries by value descending. */
 export function sortByValue(order: readonly InitiativeEntry[]): InitiativeEntry[] {
@@ -70,6 +71,74 @@ export function retreatInitiative(state: InitiativeState): AdvanceResult {
     round: wrapped ? Math.max(1, state.round - 1) : state.round,
     wrapped,
   };
+}
+
+export interface AdvanceWithSkipResult extends AdvanceResult {
+  /**
+   * Initiative entries skipped on the way to `activeId`. Order
+   * matches the skip sequence — caller can log them in order, in the
+   * combat log or elsewhere. Empty when no skip happened.
+   */
+  skipped: InitiativeEntry[];
+}
+
+/**
+ * Phase 155 — `advanceInitiative` + auto-skip past dead tokens.
+ * Repeatedly advances while the next active entry's token is dead
+ * (`deathSaves.failures >= 3`). Returns the final landing point plus
+ * the list of skipped entries (so the caller can log them).
+ *
+ * Termination: caps at one full lap. If every entry's token is dead
+ * (or every linked token is missing — defensive against a stale
+ * initiative pointing at a removed token), we stop after walking the
+ * full order once and land on the original advance target. This
+ * matches D&D table experience — if literally everyone in the
+ * initiative is dead, the GM probably wants to call the encounter
+ * rather than spin forever.
+ *
+ * Entries with `tokenId: null` (manual entries — "Spell effect ends"
+ * markers) are NEVER skipped. Skipping requires a linked token AND
+ * `isDead(token.deathSaves)`. Sleep / unconscious-but-not-dying are
+ * not auto-skipped — those are 5e "still has a turn" cases.
+ */
+export function advanceInitiativeSkippingDead(
+  state: InitiativeState,
+  tokens: readonly Token[],
+): AdvanceWithSkipResult {
+  const first = advanceInitiative(state);
+  if (state.order.length === 0 || first.activeId === null) {
+    return { ...first, skipped: [] };
+  }
+  const tokenById = new Map(tokens.map((t) => [t.id, t]));
+  const skipped: InitiativeEntry[] = [];
+  let cursor = first;
+  // Cap at order.length iterations — we've walked the whole order
+  // without finding a live target.
+  for (let i = 0; i < state.order.length; i++) {
+    const entry = state.order.find((e) => e.id === cursor.activeId);
+    // Manual entries (no linked token) and stale pointers are never
+    // skipped — they're authored markers the GM put in deliberately.
+    if (!entry || entry.tokenId === null) {
+      return { ...cursor, skipped };
+    }
+    const token = tokenById.get(entry.tokenId);
+    if (!token || !isDead(token.deathSaves)) {
+      return { ...cursor, skipped };
+    }
+    // Cursor's token is dead — record the skip and advance one more
+    // step. Preserve the cumulative wrap flag once we've wrapped.
+    skipped.push(entry);
+    const next = advanceInitiative({
+      ...state,
+      activeId: cursor.activeId,
+      round: cursor.round,
+    });
+    cursor = { ...next, wrapped: cursor.wrapped || next.wrapped };
+  }
+  // Walked the whole order without finding a live target — every
+  // linked token is dead. Bail and return the original advance with
+  // no skips, so the GM can see the result and resolve manually.
+  return { ...first, skipped: [] };
 }
 
 /** Returns the initiative entry whose token matches the given token id, or null. */

@@ -67,7 +67,11 @@ import { createTokenMoveHistory } from '../state/token-move-history.js';
 import { attachCombatLogObserver } from '../state/combat-log-observer.js';
 import { mountCommandPalette } from '../ui/command-palette.js';
 import { createCommandRegistry } from '../state/command-registry.js';
-import { advanceInitiative, retreatInitiative } from '../state/initiative.js';
+import {
+  advanceInitiative,
+  advanceInitiativeSkippingDead,
+  retreatInitiative,
+} from '../state/initiative.js';
 import { createFirstUseHintsStore } from '../state/first-use-hints.js';
 import { mountFirstUseHintToast } from '../ui/first-use-hint.js';
 import {
@@ -1534,9 +1538,47 @@ if (!preferences.get().onboardingComplete) {
   window.setTimeout(() => openOnboardingTour(), 250);
 }
 const shortcutOverlay = mountShortcutOverlay('gm');
-const initiativeModal = mountInitiativeModal({ store });
+
+// Phase 155 — shared "next turn" handler that auto-skips past dead
+// tokens (when the preference is on) and emits a `'turn-skip'`
+// combat-log event for each skipped entry. Used by the initiative
+// bar, the initiative modal, and the command-palette
+// "Initiative — next turn" action — all three share one
+// implementation so the GM gets identical behavior everywhere.
+function advanceTurnWithSkip(): void {
+  const stateNow = store.getState();
+  const useSkip = preferences.get().autoSkipDeadInInitiative;
+  const result = useSkip
+    ? advanceInitiativeSkippingDead(stateNow.initiative, stateNow.tokens)
+    : { ...advanceInitiative(stateNow.initiative), skipped: [] };
+  // Log each skipped entry BEFORE the patch fires, so the timeline
+  // reads "Round 3 — Goblin's turn skipped (dead) → Round 3 —
+  // Cleric's turn." Round number on each skip is the round AT THE
+  // TIME the skip happened — wrap-induced bumps are reflected as
+  // they happen, mirroring the natural turn ordering.
+  for (const entry of result.skipped) {
+    combatLog.add({
+      kind: 'turn-skip',
+      round: result.round,
+      tokenId: entry.tokenId,
+      tokenLabel: entry.label,
+      reason: 'dead',
+    });
+  }
+  store.applyPatch({
+    kind: 'initiative-set-active',
+    activeId: result.activeId,
+    round: result.round,
+  });
+}
+
+const initiativeModal = mountInitiativeModal({
+  store,
+  onAdvanceTurn: advanceTurnWithSkip,
+});
 mountInitiativeBar(store, 'gm', {
   onOpenTracker: () => initiativeModal.open(),
+  onAdvanceTurn: advanceTurnWithSkip,
   // Phase 93 — turn-timer plumbing.
   getTurnTimerSeconds: () => preferences.get().turnTimerSeconds,
   onTimerExpired: (label) => {
@@ -3789,14 +3831,10 @@ function slugForFilename(name: string): string {
     id: 'initiative-next',
     label: 'Initiative — next turn',
     group: 'Initiative',
-    run: () => {
-      const next = advanceInitiative(store.getState().initiative);
-      store.applyPatch({
-        kind: 'initiative-set-active',
-        activeId: next.activeId,
-        round: next.round,
-      });
-    },
+    // Phase 155 — palette also routes through `advanceTurnWithSkip`
+    // so the auto-skip-dead behavior is identical no matter which
+    // surface the GM uses to step the round.
+    run: advanceTurnWithSkip,
   });
   reg.register({
     id: 'initiative-prev',

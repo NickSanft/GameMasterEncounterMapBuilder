@@ -62,6 +62,20 @@ export type CombatLogEvent =
       round: number;
       tokenId: ID | null;
       tokenLabel: string;
+    }
+  | {
+      /**
+       * Phase 155 — initiative auto-skipped a dead token. Emitted
+       * once per skipped entry by the gm-entry's "next turn" handler
+       * before the actual `'turn'` event for the landing token. The
+       * GM gets a chronological record of who got passed over and
+       * why.
+       */
+      kind: 'turn-skip';
+      round: number;
+      tokenId: ID | null;
+      tokenLabel: string;
+      reason: 'dead';
     };
 
 export interface CombatLogEntry {
@@ -189,6 +203,10 @@ export function formatLogEvent(e: CombatLogEvent): string {
     case 'turn': {
       const name = e.tokenLabel || '—';
       return `Round ${e.round} — ${name}'s turn`;
+    }
+    case 'turn-skip': {
+      const name = e.tokenLabel || '—';
+      return `Round ${e.round} — ${name}'s turn skipped (${e.reason})`;
     }
   }
 }

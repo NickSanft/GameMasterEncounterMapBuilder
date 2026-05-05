@@ -23,6 +23,14 @@ export interface InitiativeBarActions {
    * hear "Time" without watching the visual countdown.
    */
   onTimerExpired?: (label: string) => void;
+  /**
+   * Phase 155 — host-supplied "advance turn" handler. When provided,
+   * the bar's Next button delegates to it (the host wires auto-skip
+   * past dead tokens + combat-log emission). When omitted, the bar
+   * falls back to the pre-155 inline `advanceInitiative` + patch
+   * sequence — used by Spectator views which don't author skips.
+   */
+  onAdvanceTurn?: () => void;
 }
 
 export interface InitiativeBarHandle {
@@ -84,12 +92,16 @@ export function mountInitiativeBar(
   nextBtn.title = 'Next turn';
   nextBtn.setAttribute('aria-label', 'Next turn');
   nextBtn.addEventListener('click', () => {
-    const next = advanceInitiative(store.getState().initiative);
-    store.applyPatch({
-      kind: 'initiative-set-active',
-      activeId: next.activeId,
-      round: next.round,
-    });
+    if (actions.onAdvanceTurn) {
+      actions.onAdvanceTurn();
+    } else {
+      const next = advanceInitiative(store.getState().initiative);
+      store.applyPatch({
+        kind: 'initiative-set-active',
+        activeId: next.activeId,
+        round: next.round,
+      });
+    }
     nextBtn.blur();
   });
 

@@ -94,6 +94,13 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW_ENTRIES: readonly WhatsNewEntry[] = [
   {
+    version: '1.30.0',
+    date: '2026-05-05',
+    highlights: [
+      'Initiative auto-skip — "Next turn" now walks past dead tokens (3 death-save failures); each skip is logged.',
+    ],
+  },
+  {
     version: '1.29.0',
     date: '2026-05-05',
     highlights: [
