@@ -94,6 +94,13 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW_ENTRIES: readonly WhatsNewEntry[] = [
   {
+    version: '1.31.0',
+    date: '2026-05-05',
+    highlights: [
+      'Token vehicle / parent-child — set "Carried by" on a token to have it cascade-move with its parent (riders, crew, treasure on a chest).',
+    ],
+  },
+  {
     version: '1.30.0',
     date: '2026-05-05',
     highlights: [

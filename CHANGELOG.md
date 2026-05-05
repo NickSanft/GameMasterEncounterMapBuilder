@@ -131,6 +131,58 @@ gaps so the v1.0 cut is genuinely "stable + remote-play-capable."
 
 ---
 
+## [1.31.0] — 2026-05-05 — Token vehicle / parent-child relationships
+
+Phase 156 — third of the v1.29 → v1.36 batch. Adds an optional `Token.parentId` field that creates a one-way movement cascade: dragging a parent token translates all its descendants by the same delta. Use cases: riders on a horse, crew on a ship, treasure tokens stacked on a chest.
+
+### Added
+- **`Token.parentId?: ID | null`** field. Optional; pre-156 sessions and unparented tokens carry no field. The deserializer collapses null / missing / malformed values to `undefined` so the in-memory shape stays consistent with the Token type's optional.
+- **`src/state/token-relations.ts`** (new, ~75 lines) — pure helper module:
+  - `descendantsOf(tokens, rootId)` — BFS list of all token ids parented (recursively) to root. Visited set prevents infinite-loop on malformed cycles.
+  - `wouldCreateCycle(tokens, tokenId, candidateParentId)` — used by the editor to filter the dropdown.
+  - `expandWithDescendants(tokens, ids)` — used by the select tool to expand the drag overlay with descendants. Preserves input order, de-duplicates.
+- **Drag-overlay expansion in `src/input/tool-select.ts`** — `beginDrag` now calls `expandWithDescendants` against the token list so children are added to `dragOverlay.current.ids` automatically. The renderer's existing `withOverlay` per-token offset path renders the children dragged alongside the parent in real time; the existing commit loop handles each token's wall-clamp + grid-snap independently.
+- **"Carried by" dropdown** in the token editor (between the owner / vehicle / movement sections). Lists every other token EXCEPT the current token's own descendants (cycle filter). Selecting a value patches `parentId`; selecting "— None —" clears it.
+
+### Why this matters
+Pre-156 the GM had to manually multi-select every "passenger" before dragging a vehicle. With 8 crew on a ship, that's 9 clicks every time the ship moves — and one missed click leaves a sailor floating mid-ocean. Post-156 the relationship persists: set "Carried by" once, and every subsequent ship-drag carries everyone correctly.
+
+The pattern also extends to:
+- **Mounts.** Rider parented to mount → both move together when the mount drags. Dragging the rider alone (dismount / saddle shift) only moves the rider.
+- **Group set-pieces.** A chariot with 2 horses + 1 driver + 4 fighters all parented to the chariot token.
+- **Treasure stacks.** Coin / gem tokens stacked on a chest follow the chest when it's looted across the room.
+
+### Architecture
+- **One-way cascade.** Parent → children only. Dragging a child doesn't move the parent (rider can dismount; treasure can be picked up). This matches the natural "the carrying object's frame of reference" mental model.
+- **Drag overlay expansion at `beginDrag` time.** The expansion happens once when the drag starts, not per-frame; the resulting overlay.ids stays stable for the rest of the gesture. The renderer's per-token `withOverlay` lookup runs in O(1) so children render with the offset.
+- **Per-token clamps still apply.** Each carried token gets its own wall-clamp + grid-snap on commit. A horse moving freely but its rider blocked by a wall results in horse moving and rider stopping — defensible (the horse "shrugs off" the rider). A future polish could add a "rigid group" mode where the slowest commit clamps everyone.
+- **Cycle protection at three layers**: editor dropdown filter (`wouldCreateCycle`), runtime visited set in `descendantsOf`, and deserializer's defensive parsing. Any one would prevent infinite loops; all three give defense-in-depth against hand-edited save files.
+- **Locked + parented compose**: a locked child stays put even when its parent moves (the existing Phase 154 commit-loop skip wins). A locked parent can't drag at all (Phase 154 hit-test skip), so the cascade never fires.
+
+### UX details
+- **No visual indicator** in the canvas for the parent relationship in v1. The editor's dropdown is the single source of truth. A future polish could draw a faint connector line from child to parent when one is selected.
+- **Orphans are tolerated.** If the GM deletes a parent, the children's `parentId` becomes a stale string. The descent helpers treat unknown ids as roots (no-op), so orphan tokens just behave as un-parented. No special cleanup is required.
+
+### Tests
+- **+16 unit tests** in `src/state/token-relations.test.ts` (new): `descendantsOf` (no children, immediate, recursive, ancestor exclusion, unknown root, malformed cycle), `wouldCreateCycle` (self / direct child / grandchild / unrelated / leaf), `expandWithDescendants` (empty / single tree / dedup / multi-tree / empty input).
+- **+4 unit tests** in `src/sync/messages.test.ts`: round-trip `parentId`, default for legacy saves, empty-string collapses, non-string defensive.
+- **+2 Playwright specs** in `e2e/token-vehicle.spec.ts` (new): editor dropdown is present (default empty + only "None" option when there's just one token), 2-token scene shows the other as a candidate parent.
+- **All 1604 unit tests + 391 Playwright specs pass** locally.
+
+### Bundle
+- 113.91 / 120 KB initial-load brotli (+0.33 KB for the helper module + drag-overlay expansion + editor dropdown).
+- Lazy chunks 20.05 / 21 KB unchanged (the dropdown change is in the editor, but the editor isn't a lazy chunk).
+- CSS 13.20 / 14 KB unchanged.
+
+### Pre-push checklist
+- typecheck: clean.
+- unit suite: 1604 passing.
+- e2e suite: 391 passing.
+- visual regression: all baselines green (no new visual elements in default-boot scenes).
+- size-limit: all 5 budgets green.
+
+---
+
 ## [1.30.0] — 2026-05-05 — Initiative auto-skip on dead tokens
 
 Phase 155 — second of the v1.29 → v1.36 batch. The "Next turn" actions (initiative bar, tracker modal, command palette) auto-skip past dead tokens (`token.deathSaves.failures >= 3`) and emit a `'turn-skip'` combat-log event for each skipped entry. Behavior gated behind a Settings preference (default ON).

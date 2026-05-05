@@ -32,6 +32,7 @@ import {
   cycleTo,
   tokensInSelectionOrder,
 } from './token-editor-cycle.js';
+import { descendantsOf } from '../state/token-relations.js';
 
 export interface TokenEditorHandle {
   openFor(token: Token): void;
@@ -345,6 +346,19 @@ export function mountTokenEditor(opts: TokenEditorOptions): TokenEditorHandle {
         </select>
       </fieldset>
 
+      <!-- Phase 156 — token vehicle / parent relationship. Picks
+           which other token (if any) carries this one. Dragging the
+           parent moves this token by the same delta. -->
+      <fieldset class="parent-fieldset">
+        <legend>Carried by</legend>
+        <p class="settings-hint">
+          Phase 156 — pick another token to "carry" this one. Dragging the parent translates this token by the same delta (rider on a horse, crew on a ship, treasure on a chest). The cascade is one-way — dragging this token alone moves only this token.
+        </p>
+        <select data-field="parent-select" aria-label="Carried by">
+          <option value="">— None —</option>
+        </select>
+      </fieldset>
+
       <hr />
       <div class="modal-footer">
         <button type="button" data-action="save-library" title="Save this token's appearance to the library for reuse">Save to Library</button>
@@ -392,6 +406,10 @@ export function mountTokenEditor(opts: TokenEditorOptions): TokenEditorHandle {
   )!;
   const ownerSelect = modal.querySelector<HTMLSelectElement>(
     '[data-field="owner-select"]',
+  )!;
+  // Phase 156 — parent ("carried by") dropdown.
+  const parentSelect = modal.querySelector<HTMLSelectElement>(
+    '[data-field="parent-select"]',
   )!;
   const counter = modal.querySelector<HTMLSpanElement>('[data-field="counter"]')!;
   const hasSightInput = modal.querySelector<HTMLInputElement>('[data-field="hasSight"]')!;
@@ -545,7 +563,33 @@ export function mountTokenEditor(opts: TokenEditorOptions): TokenEditorHandle {
     lockedInput.checked = token.locked === true;
     syncVisibilityUI(token.id);
     syncOwnerUI(token.ownerId);
+    syncParentUI(token);
     syncCounter();
+  }
+
+  /**
+   * Phase 156 — populate the "Carried by" dropdown with all other
+   * tokens that wouldn't create a parent-child cycle. The current
+   * token's own descendants are filtered out so the GM can't make
+   * a closed loop. Selected value mirrors `token.parentId`.
+   */
+  function syncParentUI(token: Token): void {
+    const state = store.getState();
+    parentSelect.replaceChildren();
+    const noneOpt = document.createElement('option');
+    noneOpt.value = '';
+    noneOpt.textContent = '— None —';
+    parentSelect.appendChild(noneOpt);
+    const descendants = new Set<string>(descendantsOf(state.tokens, token.id));
+    for (const t of state.tokens) {
+      if (t.id === token.id) continue;
+      if (descendants.has(t.id)) continue;
+      const opt = document.createElement('option');
+      opt.value = t.id;
+      opt.textContent = t.label || t.id;
+      parentSelect.appendChild(opt);
+    }
+    parentSelect.value = token.parentId ?? '';
   }
 
   /**
@@ -1515,6 +1559,20 @@ export function mountTokenEditor(opts: TokenEditorOptions): TokenEditorHandle {
     const next = ownerSelect.value || null;
     if (next === tok.ownerId) return;
     update({ ownerId: next });
+  });
+
+  // Phase 156 — parent ("Carried by") change. Empty collapses to
+  // undefined (no parent — matches the deserializer's in-memory
+  // shape). The dropdown is already filtered to exclude the
+  // token's own descendants, so cycle-creating values can't be
+  // selected.
+  parentSelect.addEventListener('change', () => {
+    const tok = currentToken();
+    if (!tok) return;
+    const next = parentSelect.value || undefined;
+    const current = tok.parentId ?? undefined;
+    if (next === current) return;
+    update({ parentId: next });
   });
 
   rotationInput.addEventListener('change', () => {

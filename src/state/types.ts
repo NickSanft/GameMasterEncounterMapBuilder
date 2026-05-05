@@ -209,6 +209,27 @@ export interface Token {
    */
   speedFt: number;
   /**
+   * Phase 156 — vehicle / mount relationship. When set to another
+   * token's id, this token is "carried" by its parent: dragging the
+   * parent translates this token by the same delta. The cascade is
+   * one-way (parent → children) — dragging a child only moves the
+   * child, not the parent. Use cases: a rider on a horse, crew on
+   * a ship, treasure tokens stacked on a chest.
+   *
+   * Optional + back-compat. Pre-156 sessions don't carry the field;
+   * `deserializeState` defaults missing values to `null` (no parent).
+   * Forward-only over the wire — pre-156 peers will drop the field
+   * on receive (same forward-only pattern as Phase 109's
+   * `hiddenTokenIds`, Phase 154's `locked`).
+   *
+   * Cycles are prevented authoring-side: the token editor's "Carried
+   * by" dropdown filters out the token's own descendants. The
+   * runtime descent helpers (`descendantsOf` in
+   * `state/token-relations.ts`) also use a visited set defensively
+   * so a malformed cycle on the wire can't infinite-loop.
+   */
+  parentId?: ID | null;
+  /**
    * Phase 154 — when `true`, the token is locked against drag. The
    * select-tool drag handler skips locked tokens (selection + the
    * right-click context menu still work — Edit / Unlock / Delete are

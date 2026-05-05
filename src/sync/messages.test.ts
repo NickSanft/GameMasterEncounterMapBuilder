@@ -527,6 +527,114 @@ describe('serializeState / deserializeState', () => {
     });
   });
 
+  describe('Phase 156 — token vehicle (parentId field)', () => {
+    it('treats missing `parentId` as null (legacy saves are unparented)', () => {
+      const legacy = {
+        ...serializeState(createDefaultState()),
+        tokens: [
+          {
+            id: 't1',
+            x: 0,
+            y: 0,
+            label: 'A',
+            color: '#ff0000',
+            imageId: null,
+            size: 1,
+            // parentId missing — pre-156 sessions
+          },
+        ],
+      } as unknown as SerializedSessionState;
+      const restored = deserializeState(legacy);
+      expect(restored.tokens[0]!.parentId).toBeUndefined();
+    });
+
+    it('preserves parentId across a round-trip', () => {
+      const state = createDefaultState();
+      state.tokens.push({
+        id: 't-rider',
+        x: 5,
+        y: 5,
+        label: 'Rider',
+        color: '#fff',
+        imageId: null,
+        size: 1,
+        borderColor: null,
+        hp: null,
+        conditions: [],
+        rotation: 0,
+        losRadius: null,
+        light: null,
+        initiativeMod: 0,
+        conditionExpirations: {},
+        deathSaves: { successes: 0, failures: 0 },
+        ownerId: null,
+        auras: [],
+        speedFt: 30,
+        parentId: 't-horse',
+      });
+      const restored = deserializeState(serializeState(state));
+      expect(restored.tokens[0]!.parentId).toBe('t-horse');
+    });
+
+    it('rejects empty-string parentId (defensive — collapses to null)', () => {
+      const state = serializeState(createDefaultState());
+      (state.tokens as unknown[]).push({
+        id: 't',
+        x: 0,
+        y: 0,
+        label: 'A',
+        color: '#000',
+        imageId: null,
+        size: 1,
+        borderColor: null,
+        hp: null,
+        conditions: [],
+        rotation: 0,
+        losRadius: null,
+        light: null,
+        initiativeMod: 0,
+        conditionExpirations: {},
+        deathSaves: { successes: 0, failures: 0 },
+        ownerId: null,
+        auras: [],
+        speedFt: 30,
+        parentId: '',
+      });
+      const restored = deserializeState(state);
+      expect(restored.tokens[0]!.parentId).toBeUndefined();
+    });
+
+    it('rejects non-string parentId (defensive)', () => {
+      for (const bad of [123, true, {}, []] as unknown[]) {
+        const state = serializeState(createDefaultState());
+        (state.tokens as unknown[]).push({
+          id: 't',
+          x: 0,
+          y: 0,
+          label: 'A',
+          color: '#000',
+          imageId: null,
+          size: 1,
+          borderColor: null,
+          hp: null,
+          conditions: [],
+          rotation: 0,
+          losRadius: null,
+          light: null,
+          initiativeMod: 0,
+          conditionExpirations: {},
+          deathSaves: { successes: 0, failures: 0 },
+          ownerId: null,
+          auras: [],
+          speedFt: 30,
+          parentId: bad,
+        });
+        const restored = deserializeState(state);
+        expect(restored.tokens[0]!.parentId).toBeUndefined();
+      }
+    });
+  });
+
   describe('Phase 140 — background orientation', () => {
     it('defaults rotation/flipX/flipY for legacy saves (pre-140)', () => {
       const legacy = {

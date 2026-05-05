@@ -25,6 +25,7 @@ import {
   clampMoveAgainstWallsHex,
 } from '../state/movement.js';
 import { commitDragToCell } from '../state/grid-coords.js';
+import { expandWithDescendants } from '../state/token-relations.js';
 
 interface LassoInProgress {
   startWorldX: number;
@@ -54,8 +55,17 @@ export function createSelectTool(ctx: InputContext): Tool {
     activePointerId = e.pointerId;
     dragStartWorldX = worldX;
     dragStartWorldY = worldY;
+    // Phase 156 — expand selection with token descendants so a
+    // parent drag picks up its carried children automatically. The
+    // expansion runs only over the canonical token list (annotations
+    // / AoEs / walls don't have a parent relationship), so non-token
+    // selection ids fall through unchanged.
+    const ids = expandWithDescendants(
+      store.getState().tokens,
+      Array.from(selection.ids),
+    );
     dragOverlay.current = {
-      ids: Array.from(selection.ids),
+      ids,
       deltaX: 0,
       deltaY: 0,
     };

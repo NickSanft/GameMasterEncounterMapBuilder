@@ -636,6 +636,20 @@ export function deserializeState(s: SerializedSessionState): SessionState {
       // collapses to undefined → unlocked.
       locked:
         (t as { locked?: unknown }).locked === true ? true : undefined,
+      // Phase 156 — vehicle / parent relationship. Optional; pre-156
+      // sessions and unparented tokens carry no field (the in-memory
+      // shape uses `undefined` for "no parent" so the type matches
+      // existing `Token` instances that don't set the optional). We
+      // accept only non-empty strings on the wire; everything else
+      // (null, missing, malformed) collapses to `undefined`. Cycles
+      // are NOT detected at deserialize time — validation happens
+      // authoring-side; the runtime descent helpers use a visited
+      // set defensively against malformed cycles on the wire.
+      parentId:
+        typeof (t as { parentId?: unknown }).parentId === 'string' &&
+        (t as { parentId: string }).parentId.length > 0
+          ? (t as { parentId: string }).parentId
+          : undefined,
     })),
     fog: Uint8Array.from(s.fog),
     annotations: (s.annotations ?? []).map((a) => ({
