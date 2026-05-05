@@ -1,4 +1,8 @@
-import { NOTES_TEXT_KEY, NOTES_OPEN_KEY } from '../util/constants.js';
+import {
+  NOTES_TEXT_KEY,
+  NOTES_TEXT_KEY_PREFIX,
+  NOTES_OPEN_KEY,
+} from '../util/constants.js';
 import { debounce } from '../util/debounce.js';
 import {
   createVoiceTranscriber,
@@ -12,6 +16,17 @@ export interface NotesPanelHandle {
   open(): void;
   close(): void;
   isOpen(): boolean;
+  /**
+   * Phase 157 — notify the panel that the active scene has changed.
+   * Persists the outgoing scene's textarea content under the OLD
+   * scene's key, then loads the new scene's notes into the textarea
+   * (falling back to the legacy global notes when the new scene
+   * doesn't have a per-scene record yet).
+   *
+   * No-op when `getActiveSceneId` wasn't supplied at mount time
+   * (legacy single-key behavior).
+   */
+  notifySceneSwitched(): void;
 }
 
 export interface NotesPanelOptions {
@@ -23,10 +38,58 @@ export interface NotesPanelOptions {
    * button is hidden, so the textarea-only behaviour is preserved.
    */
   preferences?: PreferencesStore;
+  /**
+   * Phase 157 — when supplied, notes are persisted per-scene under
+   * `${NOTES_TEXT_KEY_PREFIX}${sceneId}`. Returns `null`/`undefined`
+   * → falls back to the legacy global key (`NOTES_TEXT_KEY`),
+   * preserving the pre-157 single-scratchpad behavior for callers
+   * that don't have a scene system. The host calls
+   * `notifySceneSwitched()` after a scene change so the panel can
+   * save the outgoing notes + load the incoming.
+   */
+  getActiveSceneId?: () => string | null;
 }
 
 export function mountNotesPanel(opts: NotesPanelOptions = {}): NotesPanelHandle {
-  const { preferences } = opts;
+  const { preferences, getActiveSceneId } = opts;
+
+  // Phase 157 — derive the localStorage key for the CURRENT scene.
+  // When `getActiveSceneId` is unsupplied OR returns null, we fall
+  // back to the legacy `NOTES_TEXT_KEY` (single scratchpad). This
+  // preserves the pre-157 behavior for callers that don't wire the
+  // scene system in (tests, future entries, etc.).
+  function activeKey(): string {
+    const id = getActiveSceneId?.() ?? null;
+    return id ? `${NOTES_TEXT_KEY_PREFIX}${id}` : NOTES_TEXT_KEY;
+  }
+
+  /**
+   * Phase 157 — read notes for the active scene with legacy
+   * fallback. If the per-scene key has content, use it. Else, fall
+   * back to the legacy global key — so a user upgrading from pre-157
+   * sees their existing notes in the first scene they open.
+   */
+  function readNotes(): string {
+    const key = activeKey();
+    try {
+      const own = localStorage.getItem(key);
+      if (own !== null) return own;
+      // Fallback only when the per-scene key is genuinely missing
+      // (not when it's an empty string the user explicitly saved).
+      if (key !== NOTES_TEXT_KEY) {
+        const legacy = localStorage.getItem(NOTES_TEXT_KEY);
+        if (legacy) return legacy;
+      }
+      return '';
+    } catch {
+      return '';
+    }
+  }
+
+  // Tracks the scene id the textarea is currently bound to. Used by
+  // `notifySceneSwitched` to know which scene's storage key to save
+  // into when the switch fires.
+  let lastSceneId: string | null = getActiveSceneId?.() ?? null;
 
   const panel = document.createElement('aside');
   panel.className = 'notes-panel';
@@ -89,13 +152,13 @@ export function mountNotesPanel(opts: NotesPanelOptions = {}): NotesPanelHandle 
   // disappear on stop.
   let statusIsError = false;
 
-  textarea.value = localStorage.getItem(NOTES_TEXT_KEY) ?? '';
+  textarea.value = readNotes();
   const initiallyOpen = localStorage.getItem(NOTES_OPEN_KEY) === 'true';
   setOpen(initiallyOpen, { persist: false });
 
   const persist = debounce(() => {
     try {
-      localStorage.setItem(NOTES_TEXT_KEY, textarea.value);
+      localStorage.setItem(activeKey(), textarea.value);
     } catch (err) {
       console.warn('[notes-panel] save failed', err);
     }
@@ -219,6 +282,39 @@ export function mountNotesPanel(opts: NotesPanelOptions = {}): NotesPanelHandle 
     transcriber?.destroy();
   });
 
+  /**
+   * Phase 157 — flush the outgoing scene's textarea content to
+   * storage and load the incoming scene's notes. Called by the GM
+   * entry's `switchToScene` after `setActiveSceneId(id)` has
+   * updated the pointer.
+   *
+   * Storage flow:
+   *   - Save outgoing: write `textarea.value` to the OLD scene's
+   *     per-scene key (computed from the cached `lastSceneId`, not
+   *     from `getActiveSceneId()` which now points to the NEW
+   *     scene).
+   *   - Load incoming: replace `textarea.value` with
+   *     `readNotes()` which reads the new scene's per-scene key
+   *     (with legacy global fallback).
+   *
+   * The debounced auto-save is `flush()`-ed first so any in-flight
+   * keystrokes from the outgoing scene aren't lost.
+   */
+  function notifySceneSwitched(): void {
+    if (!getActiveSceneId) return;
+    persist.flush();
+    const outgoingKey = lastSceneId
+      ? `${NOTES_TEXT_KEY_PREFIX}${lastSceneId}`
+      : NOTES_TEXT_KEY;
+    try {
+      localStorage.setItem(outgoingKey, textarea.value);
+    } catch (err) {
+      console.warn('[notes-panel] save outgoing scene failed', err);
+    }
+    lastSceneId = getActiveSceneId();
+    textarea.value = readNotes();
+  }
+
   return {
     toggle() {
       setOpen(panel.hidden);
@@ -232,5 +328,6 @@ export function mountNotesPanel(opts: NotesPanelOptions = {}): NotesPanelHandle 
     isOpen() {
       return !panel.hidden;
     },
+    notifySceneSwitched,
   };
 }

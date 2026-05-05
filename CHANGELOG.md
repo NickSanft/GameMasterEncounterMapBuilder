@@ -131,6 +131,52 @@ gaps so the v1.0 cut is genuinely "stable + remote-play-capable."
 
 ---
 
+## [1.32.0] — 2026-05-05 — Per-scene GM notes
+
+Phase 157 — fourth of the v1.29 → v1.36 batch. The Notes panel was previously a single global scratchpad shared across every scene. Post-157 it's per-scene — switching to a different scene swaps the textarea content. Pre-157 notes are honored as a fallback for fresh scenes that haven't been authored yet, so users upgrading don't lose their existing content.
+
+### Added
+- **`NOTES_TEXT_KEY_PREFIX = 'gm-encounter-maps-notes:'`** in `src/util/constants.ts`. Per-scene notes are stored under `${NOTES_TEXT_KEY_PREFIX}${sceneId}`. Pre-157 notes stay in `NOTES_TEXT_KEY` (`gm-encounter-maps-notes`) and are read as a fallback.
+- **`NotesPanelOptions.getActiveSceneId?: () => string | null`** in `src/ui/notes-panel.ts`. When supplied, the panel reads/writes per-scene. When omitted (older callers / tests), the panel falls back to the legacy single-key behavior.
+- **`NotesPanelHandle.notifySceneSwitched()` method** — called by the GM entry's `switchToScene` after `setActiveSceneId(id)` flips the pointer. The panel:
+  - Flushes the autosave debounce so any in-flight keystrokes from the outgoing scene aren't lost.
+  - Saves the current textarea content under the OUTGOING scene's per-scene key (computed from a cached `lastSceneId`, since `getActiveSceneId()` now returns the new scene's id).
+  - Reads the INCOMING scene's notes (with legacy fallback) and replaces the textarea content.
+- **Initial-hydrate notify** — the GM entry calls `notesPanel.notifySceneSwitched()` after `loadPersistedState` resolves so the panel picks up the post-hydrate scene id (the panel mounts before the async IDB hydrate completes; without the post-hydrate notify the textarea would be stuck on the legacy fallback).
+
+### Why this matters
+GMs running multiple encounters in one session keep different prep notes per scene — boss tactics for the cave, NPC dialog for the inn, treasure ledger for the dungeon. Pre-157 those all collapsed into one textarea, forcing the GM to either keep the notes scrolled to the right section (fragile) or maintain the per-scene split externally (Notion / Obsidian / paper). Post-157 the Notes panel mirrors the rest of the app's per-scene model: scene-scoped state lives with the scene.
+
+### Architecture
+- **localStorage, not IDB.** Notes are scratchpad text; the existing pattern uses localStorage with a 250 ms debounce. Per-scene keys preserve that pattern — a scene's notes occupy ~few KB max in storage. IDB scene records (the canonical scene state) stay strictly for canvas-state; notes-as-localStorage means switching scenes doesn't have to wait on an async read.
+- **Legacy fallback, not migration.** When a scene's per-scene key is missing, we read the legacy global key. This means pre-157 users see their existing notes in the FIRST scene they open (with the option to author distinct notes for other scenes). The legacy key stays put — never auto-cleared — so a user re-opening a scene that's never had per-scene notes still sees the global content. Once they author per-scene content (even an empty string), the per-scene key wins.
+- **The empty-string distinction matters.** An explicitly-empty per-scene record (`localStorage.setItem(key, '')`) means "the user cleared this scene's notes." We DO NOT fall back to legacy in that case — it would resurrect deleted content. The fallback only kicks in when the per-scene key is genuinely absent (`getItem` returns `null`).
+- **Outgoing-save uses the cached `lastSceneId`.** When `notifySceneSwitched()` runs, the active scene pointer has ALREADY been flipped to the new scene by the GM entry. To save the outgoing notes correctly, the panel caches the previous scene id internally — `lastSceneId` is initialized at mount time and updated each time `notifySceneSwitched()` fires. This is the same pattern the Phase 75 recent-scenes hook uses.
+- **No-op for legacy callers.** `notifySceneSwitched()` short-circuits when `getActiveSceneId` wasn't supplied — older callers (tests, future Spectator-side mounts) get the pre-157 single-key behavior.
+
+### UX details
+- **No visible change at boot.** The legacy fallback means a returning user sees their existing notes exactly where they were. The first scene switch is when the per-scene split becomes visible.
+- **Autosave still 250 ms.** No change to the debounce — every keystroke kicks a timer; the 250 ms-after-last-keystroke save flush writes to the per-scene key.
+- **Cross-tab sync unchanged.** The `storage` event listener pattern in `preferences.ts` is per-key, not per-prefix, so a Spectator tab won't cross-pollinate scene notes (the Spectator never mounts the notes panel anyway — GM-only).
+
+### Tests
+- **+9 unit tests** in `src/ui/notes-panel.test.ts` (new): legacy mode (no callback), per-scene read, legacy fallback, empty fallback, per-scene wins over legacy, empty-string-not-fallback, scene-switch save+load, no-op-for-legacy-callers, post-hydrate transition.
+- **+1 Playwright spec** in `e2e/scene-notes.spec.ts` (new): full author → switch → swap → switch-back → restore flow across 2 scenes.
+- **All 1613 unit tests + 392 Playwright specs pass** locally.
+
+### Bundle
+- 114.26 / 120 KB initial-load brotli (+0.35 KB for the new key constant + scene-aware read/write logic + handle method).
+- Lazy chunks 20.07 / 21 KB (+0.02 KB — negligible). CSS unchanged.
+
+### Pre-push checklist
+- typecheck: clean.
+- unit suite: 1613 passing.
+- e2e suite: 392 passing.
+- visual regression: all baselines green (no canvas-visible changes).
+- size-limit: all 5 budgets green.
+
+---
+
 ## [1.31.0] — 2026-05-05 — Token vehicle / parent-child relationships
 
 Phase 156 — third of the v1.29 → v1.36 batch. Adds an optional `Token.parentId` field that creates a one-way movement cascade: dragging a parent token translates all its descendants by the same delta. Use cases: riders on a horse, crew on a ship, treasure tokens stacked on a chest.

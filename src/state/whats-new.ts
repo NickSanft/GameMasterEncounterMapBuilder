@@ -94,6 +94,13 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW_ENTRIES: readonly WhatsNewEntry[] = [
   {
+    version: '1.32.0',
+    date: '2026-05-05',
+    highlights: [
+      'Per-scene GM notes — the Notes panel now stores notes per scene, not as one global blob. Switching scenes swaps the textarea content.',
+    ],
+  },
+  {
     version: '1.31.0',
     date: '2026-05-05',
     highlights: [

@@ -1504,7 +1504,14 @@ const damageHealDialog = mountDamageHealDialog({
   },
 });
 
-const notesPanel = mountNotesPanel({ preferences });
+// Phase 157 — pass the active-scene-id source so notes are
+// persisted per-scene under `gm-encounter-maps-notes:<sceneId>`.
+// `switchToScene` calls `notesPanel.notifySceneSwitched()` after
+// the pointer flip so the panel saves outgoing + loads incoming.
+const notesPanel = mountNotesPanel({
+  preferences,
+  getActiveSceneId,
+});
 
 // Phase 123 — bulk-edit modal. Opens via the command palette
 // (group "Tokens"). Operates on the current selection at open time;
@@ -1647,6 +1654,12 @@ async function switchToScene(id: string): Promise<void> {
   }
 
   setActiveSceneId(id);
+  // Phase 157 — flush the outgoing scene's notes textarea to its
+  // per-scene key + load the incoming scene's notes. Called AFTER
+  // `setActiveSceneId(id)` so the panel reads the new pointer for
+  // the incoming load. The panel also reads `lastSceneId` from its
+  // own internal cache for the outgoing save target.
+  notesPanel.notifySceneSwitched();
   // Phase 75 — record the activation timestamp so the Ctrl+N
   // quick-switch hotkey can rank scenes by recency. Done BEFORE the
   // async getSceneState so the Nth-recent ordering is correct even
@@ -1752,6 +1765,11 @@ void loadPersistedState().then(async (persisted) => {
     store.clearHistory();
   }
   await refreshSceneIndicator();
+  // Phase 157 — at mount time the notes panel may have read with a
+  // null active scene id (the IDB hydrate is async). Now that the
+  // scene pointer is settled, notify the panel so it loads notes
+  // for the actually-active scene (with legacy fallback).
+  notesPanel.notifySceneSwitched();
   initialLoadComplete = true;
   broadcastInitial();
 });

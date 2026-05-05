@@ -7,12 +7,21 @@ export const APP_NAME = 'GM Encounter Maps';
  * release commit (no auto-injection from package.json — keeps the
  * value visible in source so version drift is reviewable).
  */
-export const APP_VERSION = '1.31.0';
+export const APP_VERSION = '1.32.0';
 export const WHATS_NEW_LAST_SEEN_KEY = 'gm-encounter-maps-last-seen-version';
 
 export const STORAGE_KEY = 'gm-encounter-maps-state';
 export const PREFERENCES_KEY = 'gm-encounter-maps-prefs';
 export const NOTES_TEXT_KEY = 'gm-encounter-maps-notes';
+/**
+ * Phase 157 — per-scene notes key prefix. Notes are persisted under
+ * `${NOTES_TEXT_KEY_PREFIX}${sceneId}` so each scene gets its own
+ * GM scratchpad. Pre-157 sessions kept all notes in `NOTES_TEXT_KEY`;
+ * the notes panel uses that as a fallback when a scene's per-key is
+ * empty (so legacy notes appear as the "default" until the user
+ * authors per-scene content).
+ */
+export const NOTES_TEXT_KEY_PREFIX = 'gm-encounter-maps-notes:';
 export const NOTES_OPEN_KEY = 'gm-encounter-maps-notes-open';
 export const BROADCAST_CHANNEL_NAME = 'gm-encounter-maps-session';
 export const IDB_DB_NAME = 'gm-encounter-maps';
