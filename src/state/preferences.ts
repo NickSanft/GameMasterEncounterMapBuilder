@@ -165,6 +165,16 @@ export interface Preferences {
    */
   coupleTilePaintWalls: boolean;
   /**
+   * Phase 165 — when true, the GM entry's active-initiative
+   * subscriber tweens the camera to keep the active token roughly
+   * centered. Default `false` so existing scenes don't suddenly
+   * pan-around on first boot of v1.40. Opt-in from Settings →
+   * Camera. Honored by both GM and Spectator views; the actual
+   * Spectator follow-camera logic is gated separately by
+   * `followGmCamera` so a non-following Spectator stays put.
+   */
+  autoPanToActiveTurn: boolean;
+  /**
    * Phase 160 — when true, token aura rings are clipped by
    * sight-blocking walls using the same Phase 55 LoS pipeline that
    * powers fog visibility. A Spirit Guardians caster behind a
@@ -244,6 +254,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   coupleTilePaintWalls: false,
   autoSkipDeadInInitiative: true,
   clipAurasByWalls: false,
+  autoPanToActiveTurn: false,
   keybindings: {},
 };
 

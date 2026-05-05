@@ -106,6 +106,10 @@ export function buildSettingsModal(
   const autoSkipDeadInput = modal.querySelector<HTMLInputElement>(
     '[data-field="autoSkipDeadInInitiative"]',
   );
+  // Phase 165 — same Initiative subgroup gating.
+  const autoPanInput = modal.querySelector<HTMLInputElement>(
+    '[data-field="autoPanToActiveTurn"]',
+  );
   // Phase 160 — auras clip-by-walls; renders on both GM + Spectator
   // (the rendering pref applies to both views, so the setting is
   // exposed in either mode's Settings modal).
@@ -209,6 +213,7 @@ export function buildSettingsModal(
     if (autoNumberInput) autoNumberInput.checked = prefs.autoNumberDuplicateTokens;
     if (coupleTileWallsInput) coupleTileWallsInput.checked = prefs.coupleTilePaintWalls;
     if (autoSkipDeadInput) autoSkipDeadInput.checked = prefs.autoSkipDeadInInitiative;
+    if (autoPanInput) autoPanInput.checked = prefs.autoPanToActiveTurn;
     if (clipAurasInput) clipAurasInput.checked = prefs.clipAurasByWalls;
     renderKeybindingsList();
     // Phase 67 — identity now lives in its own per-role store; the
@@ -368,6 +373,14 @@ export function buildSettingsModal(
     autoSkipDeadInput.addEventListener('change', () => {
       preferences.update({
         autoSkipDeadInInitiative: autoSkipDeadInput.checked,
+      });
+    });
+  }
+
+  if (autoPanInput) {
+    autoPanInput.addEventListener('change', () => {
+      preferences.update({
+        autoPanToActiveTurn: autoPanInput.checked,
       });
     });
   }
@@ -833,6 +846,11 @@ function renderCameraPane(viewMode: ViewMode): string {
       </fieldset>
       <fieldset class="settings-subgroup">
         <legend>Initiative</legend>
+        <label class="check">
+          <input type="checkbox" data-field="autoPanToActiveTurn" />
+          <span>Auto-pan camera to the active token</span>
+        </label>
+        <p class="settings-hint">Phase 165. When ON, the camera tweens (250 ms ease-out cubic) to center the active initiative token whenever the turn advances. Helps players who lose track of "whose turn is it on the map." Off by default. Reduced-motion users get an instant snap instead of the tween.</p>
         <label class="check">
           <input type="checkbox" data-field="autoSkipDeadInInitiative" />
           <span>Auto-skip dead tokens on "Next turn"</span>

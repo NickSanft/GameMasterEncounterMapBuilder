@@ -212,8 +212,11 @@ import {
   zoomBy,
   fitToContent,
   resetCamera,
+  tweenCamera,
+  cameraFocusedOn,
   ZOOM_BUTTON_STEP,
 } from '../render/camera-controls.js';
+import { tokenCenterWorld } from '../state/grid-coords.js';
 import type { PanZoomHandle } from '../input/pan-zoom.js';
 import { EXPORT_FILENAME_PREFIX } from '../util/constants.js';
 import { isEditableFocus } from '../util/focus.js';
@@ -2629,6 +2632,44 @@ store.subscribe((patch) => {
 // recent-tokens via its own subscribe; the GM-side store-subscribe
 // above feeds it via `recordTokenUse` from every token-add patch.
 mountRecentTokensStrip(document.body, lastPlacedRef);
+
+// Phase 165 — auto-pan camera to the active initiative token. We
+// subscribe specifically to `initiative-set-active` patches (and
+// `session-reset`, which can flip activeId implicitly via the
+// loaded state). The pref is read each tick so toggling Settings
+// applies on the next turn-set without a re-subscribe. Tween
+// duration is 250 ms with ease-out cubic; reduced-motion users
+// get an instant snap (no animation).
+let lastAutoPannedToTokenId: string | null = null;
+store.subscribe((patch) => {
+  if (!preferences.get().autoPanToActiveTurn) return;
+  if (
+    patch?.kind !== 'initiative-set-active' &&
+    patch?.kind !== 'session-reset'
+  ) {
+    return;
+  }
+  const s = store.getState();
+  const activeEntry = s.initiative.order.find(
+    (e) => e.id === s.initiative.activeId,
+  );
+  if (!activeEntry || !activeEntry.tokenId) {
+    lastAutoPannedToTokenId = null;
+    return;
+  }
+  const token = s.tokens.find((t) => t.id === activeEntry.tokenId);
+  if (!token) return;
+  // Don't re-tween when the active token id didn't actually change
+  // (e.g. a session-reset that re-loads the same active id).
+  if (token.id === lastAutoPannedToTokenId) return;
+  lastAutoPannedToTokenId = token.id;
+  const center = tokenCenterWorld(token, s.grid);
+  const target = cameraFocusedOn(renderer, center.x, center.y);
+  tweenCamera(renderer, target, {
+    durationMs: 250,
+    reducedMotion: preferences.get().reducedMotion,
+  });
+});
 
 function sendCameraIfBroadcasting() {
   if (channel && preferences.get().broadcastCamera) {

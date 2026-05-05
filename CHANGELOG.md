@@ -131,6 +131,48 @@ gaps so the v1.0 cut is genuinely "stable + remote-play-capable."
 
 ---
 
+## [1.40.0] — 2026-05-05 — Auto-pan camera to the active initiative token
+
+Phase 165 — fourth of the v1.37 → v1.55 batch. New opt-in Settings → Camera → Initiative toggle. When ON, the camera tweens (250 ms ease-out cubic) to center the active initiative token whenever the turn advances. Introduces a shared `tweenCamera` helper that Phases 166 (bookmarks) and 167 (fit-to-selection) will reuse.
+
+### Added
+- **`tweenCamera(renderer, target, options)`** in `src/render/camera-controls.ts` — animates from the current camera to `target` over `durationMs` (default 250 ms) using ease-out cubic. Single in-flight tween at a time (an in-flight tween's `requestAnimationFrame` loop checks a token counter; if a newer tween started, the old loop bails). `reducedMotion: true` in options skips the animation and snaps directly. Same accessibility pattern as Phase 144's active-turn pulse.
+- **`cameraFocusedOn(renderer, worldX, worldY, zoom?)`** companion helper that returns the `Camera` shape needed to center a world point in the canvas without changing zoom. Pure — caller passes the result to `tweenCamera`.
+- **`Preferences.autoPanToActiveTurn: boolean`** field, default `false`. Pre-165 prefs blobs without the field load with the default via the existing `{ ...defaults, ...parsed }` spread.
+- **GM-entry subscriber** in `src/entries/gm.ts` listening to `initiative-set-active` + `session-reset` patches. When the pref is on AND the active token id actually changed, computes the target camera via `cameraFocusedOn(token center)` and dispatches `tweenCamera`.
+- **Settings → Camera → Initiative subgroup** entry. Sits above the existing Phase 155 auto-skip-dead checkbox.
+
+### Why this matters
+Pre-165 players could lose track of the active turn on big maps — the active-turn pulse (Phase 144) helps but doesn't move the viewport. Post-165 the camera follows along. Especially valuable for:
+- Long combats where the camera has drifted to inspect a distant area between turns.
+- Spectators with `followGmCamera` on — they pan along with the GM's auto-pan.
+- New players who haven't built the spatial mental model yet.
+
+### Architecture
+- **Subscribe over poll.** The pan only fires on `initiative-set-active`, not every store tick.
+- **De-duped re-tween.** Tracks `lastAutoPannedToTokenId`; a session-reset that loads the same active id doesn't re-tween. Prevents a stutter when a peer sends a redundant turn-set patch.
+- **Reused tween infrastructure.** Future phases (166 / 167) call `tweenCamera` directly.
+- **Reduced-motion respected.** The pref reads the same `preferences.reducedMotion` value the active-turn pulse does. OS-level "reduce motion" propagates via Phase 50's `prefers-reduced-motion` mapping.
+
+### Tests
+- **+2 Playwright specs** in `e2e/auto-pan-active-turn.spec.ts` (new): toggle is present + default OFF, toggling persists across reload.
+- The render-side tween math reuses `requestAnimationFrame`; visual regression baselines stay green (the pref is OFF by default and the auto-pan only activates when initiative changes).
+- **All 1648 unit tests + 405 Playwright specs pass** locally.
+
+### Bundle
+- 116.75 / 120 KB initial-load brotli (+0.27 KB for the `tweenCamera` + `cameraFocusedOn` helpers + the GM-entry subscriber).
+- Lazy chunks 20.37 / 21 KB (+0.15 KB for the new Settings checkbox + listener wire).
+- CSS unchanged.
+
+### Pre-push checklist
+- typecheck: clean.
+- unit suite: 1648 passing.
+- e2e suite: 405 passing.
+- visual regression: all baselines green.
+- size-limit: all 5 budgets green.
+
+---
+
 ## [1.39.0] — 2026-05-05 — Hover popover on the active initiative entry
 
 Phase 164 — third of the v1.37 → v1.55 batch. The initiative bar's active-turn label now shows a hover popover with the token's portrait, HP bar, and condition chips. Replaces the browser-native `title=` tooltip with a styled card that's faster to scan during combat.

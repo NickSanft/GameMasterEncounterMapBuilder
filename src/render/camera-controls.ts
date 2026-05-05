@@ -1,5 +1,5 @@
 import type { Renderer } from './renderer.js';
-import type { ID, SessionState } from '../state/types.js';
+import type { Camera, ID, SessionState } from '../state/types.js';
 import { DEFAULT_CAMERA } from '../state/types.js';
 import { screenToWorld } from './coords.js';
 
@@ -80,6 +80,77 @@ export function computeContentBounds(
   }
 
   return { x: minX, y: minY, w: maxX - minX, h: maxY - minY };
+}
+
+/**
+ * Phase 165 — smooth camera tween. Animates from the current
+ * camera to `target` over `durationMs` using ease-out cubic. The
+ * tween cancels itself when a new one starts (single in-flight at
+ * a time) and respects `prefers-reduced-motion` by snapping
+ * instantly when `reducedMotion === true`.
+ *
+ * Reused by:
+ *   - Phase 165 — auto-pan to the active initiative token.
+ *   - Phase 166 — camera-bookmark jumps + Ctrl+1..9 quick-switch.
+ *   - Phase 167 — fit-to-selection (`F`).
+ *
+ * Implementation: requestAnimationFrame loop. The ref token (an
+ * incremented counter) lets us early-abort when a new tween
+ * starts mid-animation — the in-flight loop sees its ref no
+ * longer matches the latest and bails.
+ */
+let tweenToken = 0;
+
+export function tweenCamera(
+  renderer: Renderer,
+  target: Camera,
+  options: { durationMs?: number; reducedMotion?: boolean } = {},
+): void {
+  const { durationMs = 250, reducedMotion = false } = options;
+  if (reducedMotion || durationMs <= 0) {
+    renderer.camera = { ...target };
+    return;
+  }
+  const myToken = ++tweenToken;
+  const start = { ...renderer.camera };
+  const startTime = performance.now();
+
+  function step(now: number): void {
+    if (myToken !== tweenToken) return; // superseded by a newer tween
+    const elapsed = now - startTime;
+    const t = Math.min(1, elapsed / durationMs);
+    // Ease-out cubic: starts fast, decelerates into target.
+    const k = 1 - Math.pow(1 - t, 3);
+    renderer.camera = {
+      x: start.x + (target.x - start.x) * k,
+      y: start.y + (target.y - start.y) * k,
+      zoom: start.zoom + (target.zoom - start.zoom) * k,
+    };
+    if (t < 1) requestAnimationFrame(step);
+  }
+
+  requestAnimationFrame(step);
+}
+
+/**
+ * Phase 165 — compute the camera (x, y, zoom) needed to center
+ * the given world point in the canvas without changing zoom. Used
+ * by the auto-pan-to-active-turn subscriber. Caller passes the
+ * current zoom; we just shift the origin to put `(worldX, worldY)`
+ * at the canvas center.
+ */
+export function cameraFocusedOn(
+  renderer: Renderer,
+  worldX: number,
+  worldY: number,
+  zoom: number = renderer.camera.zoom,
+): Camera {
+  const rect = renderer.canvas.getBoundingClientRect();
+  return {
+    x: worldX - rect.width / (2 * zoom),
+    y: worldY - rect.height / (2 * zoom),
+    zoom,
+  };
 }
 
 export function fitToContent(
