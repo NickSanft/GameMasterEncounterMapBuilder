@@ -15,6 +15,11 @@ import type { WhatsNewEntry } from './whats-new.js';
 
 export const GENERATED_WHATS_NEW_ENTRIES: readonly WhatsNewEntry[] = [
   {
+    version: '1.38.0',
+    date: '2026-05-05',
+    highlights: ['Token thumbnail in initiative-bar pip'],
+  },
+  {
     version: '1.37.0',
     date: '2026-05-05',
     highlights: ['Per-token GM notes scratchpad'],
@@ -128,10 +133,5 @@ export const GENERATED_WHATS_NEW_ENTRIES: readonly WhatsNewEntry[] = [
     version: '1.15.0',
     date: '2026-05-04',
     highlights: ['Map rotate / flip H/V'],
-  },
-  {
-    version: '1.14.0',
-    date: '2026-05-04',
-    highlights: ['Token aura / emanation rings'],
   },
 ];

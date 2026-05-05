@@ -131,6 +131,40 @@ gaps so the v1.0 cut is genuinely "stable + remote-play-capable."
 
 ---
 
+## [1.38.0] — 2026-05-05 — Token thumbnail in initiative-bar pip
+
+Phase 163 — second of the v1.37 → v1.55 batch. The Phase 147 colored pip in the initiative bar now renders a circular crop of the active token's portrait when one is set, falling back to the solid color for image-less tokens. Quicker visual match between the bar's "whose turn" indicator and the canvas token.
+
+### Added
+- **Image-aware pip rendering** in `src/ui/initiative-bar.ts`. When the active initiative entry's linked token has an `imageId`, the pip's `background-image` is set to a circular crop of the IDB blob (via the existing `getImageURL` async resolver). The fallback color paints behind the loading image so the pip never goes fully blank during the IDB fetch.
+- **Image-fetch dedupe** — a `pipImageId` / `pipImageTokenId` cache prevents re-fetching the URL on every store-driven re-render. The fetch only fires when either the active token id or its imageId changes.
+- **Race guard** — when the active token / image changes before the URL promise resolves, the stale URL is dropped on the floor instead of overwriting the now-correct pip.
+
+### Why this matters
+Pre-163 the pip was a solid colored circle. With 6+ NPCs in initiative, the colors blur together — every goblin is some shade of green. Post-163 a token with a uploaded portrait shows that portrait in the pip, matching the canvas at a glance. Image-less tokens (default-colored stamps without an upload) stay on the colored fallback so nothing regresses for the no-image case.
+
+### Architecture
+- **CSS-only render path.** The pip is still a `<span>` element; the image is applied as a `background-image` URL (`background-size: cover; background-position: center`) which gives a clean centered crop without canvas drawing. Browser handles the resize.
+- **Reuses Phase 32's image-store resolver.** `getImageURL(imageId)` is the same Promise-based helper the token editor's preview uses; image data is fetched from IDB once and cached as a URL.
+- **Stable across image-less tokens.** The fallback path retains Phase 147's exact color + border behavior — no visual change for the existing baseline.
+
+### Tests
+- The existing Phase 147 `e2e/initiative-bar-pip.spec.ts` covers the pip element's presence + ARIA. Phase 163's image-vs-color logic is purely a CSS-property switch when an `imageId` is set; testing it end-to-end requires uploading an image which is mostly covered by the existing token-flow specs. Visual-regression baselines remain green (default scenes have no image-portrait tokens active in initiative).
+- **All 1648 unit tests + 403 Playwright specs pass** locally.
+
+### Bundle
+- 116.03 / 120 KB initial-load brotli (+0.14 KB for the cache state + `applyTokenImagePip` helper).
+- Lazy chunks 20.22 / 21 KB unchanged. CSS unchanged.
+
+### Pre-push checklist
+- typecheck: clean.
+- unit suite: 1648 passing.
+- e2e suite: 403 passing.
+- visual regression: all baselines green.
+- size-limit: all 5 budgets green.
+
+---
+
 ## [1.37.0] — 2026-05-05 — Per-token GM notes scratchpad
 
 Phase 162 — first of the v1.37 → v1.55 batch. Adds an optional `Token.notes` field with a "Notes (GM-only)" textarea in the token editor's footer. Lets the GM jot AC / saves / spell DCs / attack reminders right on the token instead of burying them in the global Notes panel.

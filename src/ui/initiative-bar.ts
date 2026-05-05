@@ -1,6 +1,7 @@
 import type { Store } from '../state/store.js';
-import type { ViewMode } from '../state/types.js';
+import type { ID, ViewMode } from '../state/types.js';
 import { advanceInitiative, retreatInitiative } from '../state/initiative.js';
+import { getImageURL } from '../images/store.js';
 import {
   activeTurnKey,
   computeTimerView,
@@ -131,6 +132,42 @@ export function mountInitiativeBar(
   let lastUrgency: TurnTimerUrgency | 'none' = 'none';
   let expiredAnnouncedFor: string | null = null;
 
+  // Phase 163 — track the imageId currently displayed in the pip
+  // so we don't re-fetch the URL on every render tick (the
+  // re-render fires on every store change). When the active
+  // token's imageId changes, we re-fetch + apply.
+  let pipImageId: ID | null = null;
+  let pipImageTokenId: ID | null = null;
+
+  function clearImagePip(fallbackColor: string): void {
+    pipEl.style.backgroundImage = '';
+    pipEl.style.backgroundColor = fallbackColor;
+    pipImageId = null;
+    pipImageTokenId = null;
+  }
+
+  function applyTokenImagePip(
+    tokenId: ID,
+    imageId: ID,
+    fallbackColor: string,
+  ): void {
+    // Same token + same image as last paint → nothing to do.
+    if (pipImageTokenId === tokenId && pipImageId === imageId) return;
+    pipImageTokenId = tokenId;
+    pipImageId = imageId;
+    // Fallback color shows behind a transparent / loading image
+    // so the pip never goes fully blank during the IDB fetch.
+    pipEl.style.backgroundColor = fallbackColor;
+    void getImageURL(imageId).then((url) => {
+      // Race guard: if the active token / image changed before
+      // the promise resolved, drop this URL on the floor.
+      if (pipImageTokenId !== tokenId || pipImageId !== imageId) return;
+      pipEl.style.backgroundImage = url ? `url(${CSS.escape(url)})` : '';
+      pipEl.style.backgroundSize = 'cover';
+      pipEl.style.backgroundPosition = 'center';
+    });
+  }
+
   function syncTimerOnly() {
     if (!timerState || viewMode !== 'gm') return;
     const seconds = actions.getTurnTimerSeconds?.() ?? 0;
@@ -219,12 +256,21 @@ export function mountInitiativeBar(
     // color + border. When the entry isn't linked to a token (a
     // free-form initiative entry without a token id), the pip
     // shows a neutral gray.
+    //
+    // Phase 163 — when the active token has an `imageId`, prefer
+    // a circular crop of the image over the solid color so the
+    // pip visually matches the canvas token at a glance. The
+    // fallback color path stays for unlinked / image-less tokens.
     if (linkedToken) {
-      pipEl.style.background = linkedToken.color;
       pipEl.style.borderColor = linkedToken.borderColor || 'transparent';
       pipEl.hidden = false;
+      if (linkedToken.imageId) {
+        applyTokenImagePip(linkedToken.id, linkedToken.imageId, linkedToken.color);
+      } else {
+        clearImagePip(linkedToken.color);
+      }
     } else {
-      pipEl.style.background = '#888';
+      clearImagePip('#888');
       pipEl.style.borderColor = 'transparent';
       pipEl.hidden = false;
     }
