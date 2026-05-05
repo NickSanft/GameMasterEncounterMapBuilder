@@ -15,7 +15,20 @@ test.describe('Phase 148 — recently-used tokens strip', () => {
     // Wipe localStorage between tests so the strip's persisted
     // recent-tokens map starts fresh.
     await page.goto('./gm.html');
-    await page.evaluate(() => localStorage.clear());
+    await page.evaluate(() => {
+      localStorage.clear();
+      // Phase 161 — pre-set `onboardingComplete: true` so the
+      // Phase 96 onboarding-tour backdrop doesn't intercept the
+      // right-click in CI's slower headless chromium. Without this
+      // the tour opens 250 ms after the reload below and races with
+      // the test's pointer events. (Pre-Phase-161 this test was
+      // intermittently failing in CI; the fix is local to the
+      // setup so the assertion targets stay focused on the strip.)
+      localStorage.setItem(
+        'gm-encounter-maps-prefs',
+        JSON.stringify({ onboardingComplete: true }),
+      );
+    });
     await page.reload();
     await page.waitForSelector('#canvas');
   });
