@@ -33,6 +33,10 @@ import {
   tokensInSelectionOrder,
 } from './token-editor-cycle.js';
 import { descendantsOf } from '../state/token-relations.js';
+import {
+  AURA_PRESETS,
+  instantiateAuraPreset,
+} from '../state/aura-presets.js';
 
 export interface TokenEditorHandle {
   openFor(token: Token): void;
@@ -211,15 +215,25 @@ export function mountTokenEditor(opts: TokenEditorOptions): TokenEditorHandle {
       <fieldset class="aura-block">
         <legend>Auras</legend>
         <div class="aura-list" data-field="aura-list"></div>
-        <button type="button" class="aura-add" data-action="add-aura">
-          + Add aura
-        </button>
+        <div class="aura-buttons">
+          <button type="button" class="aura-add" data-action="add-aura">
+            + Add aura
+          </button>
+          <!-- Phase 159 — preset picker. Selecting an option stamps a
+               new aura with the preset's defaults; the dropdown
+               immediately resets to the placeholder so the GM can
+               pick the same preset twice in a row. -->
+          <select class="aura-preset-select" data-field="aura-preset-select" aria-label="Add from preset">
+            <option value="">+ From preset…</option>
+          </select>
+        </div>
         <p class="settings-hint">
-          Phase 139 / 151 — colored emanation rings centered on this
-          token. Multiple auras stack visually (e.g. Bless 10 ft +
-          Spirit Guardians 15 ft on the same caster). Each ring
-          follows the token as it moves. GM-only auras are hidden
-          from the Spectator canvas.
+          Phase 139 / 151 / 159 — colored emanation rings centered on
+          this token. Multiple auras stack visually (Bless +
+          Spirit Guardians on the same caster). Each ring follows the
+          token as it moves. GM-only auras are hidden from the
+          Spectator canvas. The "From preset…" picker stamps common
+          5e auras with the right radius + color in one click.
         </p>
       </fieldset>
 
@@ -432,6 +446,19 @@ export function mountTokenEditor(opts: TokenEditorOptions): TokenEditorHandle {
   const auraAddBtn = modal.querySelector<HTMLButtonElement>(
     '[data-action="add-aura"]',
   )!;
+  // Phase 159 — preset picker. Populated once at mount with the
+  // canonical AURA_PRESETS list; selection immediately stamps a
+  // fresh aura via `instantiateAuraPreset` and resets the select
+  // to the placeholder option.
+  const auraPresetSelect = modal.querySelector<HTMLSelectElement>(
+    '[data-field="aura-preset-select"]',
+  )!;
+  for (const preset of AURA_PRESETS) {
+    const opt = document.createElement('option');
+    opt.value = preset.id;
+    opt.textContent = `${preset.label} (${preset.radiusFeet} ft)`;
+    auraPresetSelect.appendChild(opt);
+  }
   const trackHpInput = modal.querySelector<HTMLInputElement>('[data-field="trackHp"]')!;
   const hpFields = modal.querySelector<HTMLDivElement>('[data-field="hp-fields"]')!;
   const hpCurrentInput = modal.querySelector<HTMLInputElement>('[data-field="hpCurrent"]')!;
@@ -1372,6 +1399,28 @@ export function mountTokenEditor(opts: TokenEditorOptions): TokenEditorHandle {
       color: '#7e57c2',
       visibility: 'shared',
     };
+    const auras = [...tok.auras, aura];
+    update({ auras });
+    syncAuraUI(auras);
+  });
+
+  // Phase 159 — preset picker. Selecting an option stamps a fresh
+  // aura with the preset's defaults (radius / color / label /
+  // visibility) and immediately resets the select to the
+  // placeholder so the GM can stamp the same preset twice in a row.
+  auraPresetSelect.addEventListener('change', () => {
+    const tok = currentToken();
+    if (!tok) return;
+    const presetId = auraPresetSelect.value;
+    auraPresetSelect.value = '';
+    if (!presetId) return;
+    const preset = AURA_PRESETS.find((p) => p.id === presetId);
+    if (!preset) return;
+    const aura = instantiateAuraPreset(
+      preset,
+      currentFeetPerSquare(),
+      currentCellSize(),
+    );
     const auras = [...tok.auras, aura];
     update({ auras });
     syncAuraUI(auras);

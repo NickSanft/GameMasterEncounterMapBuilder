@@ -94,6 +94,13 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW_ENTRIES: readonly WhatsNewEntry[] = [
   {
+    version: '1.34.0',
+    date: '2026-05-05',
+    highlights: [
+      'Aura presets — token editor "From preset…" picker stamps Bless / Spirit Guardians / Aura of Protection / Daylight / etc. with the right radius + color in one click.',
+    ],
+  },
+  {
     version: '1.33.0',
     date: '2026-05-05',
     highlights: [

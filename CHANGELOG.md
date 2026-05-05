@@ -131,6 +131,58 @@ gaps so the v1.0 cut is genuinely "stable + remote-play-capable."
 
 ---
 
+## [1.34.0] — 2026-05-05 — Aura presets
+
+Phase 159 — sixth of the v1.29 → v1.36 batch. Adds a "From preset…" picker to the token editor's aura section. One click stamps a fresh aura with the canonical radius + color + label for common 5e auras (Bless, Spirit Guardians, Aura of Protection, etc.) instead of typing each value by hand.
+
+### Added
+- **`src/state/aura-presets.ts`** (new, ~110 lines) — pure module:
+  - `AURA_PRESETS: readonly AuraPreset[]` — 8 canonical 5e auras (Bless 30 ft, Bane 30 ft, Spirit Guardians 15 ft, Aura of Protection 10 ft, Aura of Courage 10 ft, Spirit Shroud 10 ft, Darkness 15 ft, Daylight 60 ft). Each entry has a stable id + label + radiusFeet + color + visibility.
+  - `instantiateAuraPreset(preset, feetPerSquare, cellSize)` — builds a fresh `Aura` instance with a freshly-minted nid, radius converted from feet → world pixels using the active grid. Each call returns a new id so consecutive stamps don't collide.
+- **Token editor preset dropdown** — between "+ Add aura" and the settings hint. Populated at mount time with `AURA_PRESETS`. Selecting an option stamps a fresh aura via `instantiateAuraPreset` and immediately resets the select to the placeholder so the GM can stamp the same preset twice in a row (e.g. doubling Bless on two adjacent allies in different sessions).
+- **`.aura-buttons` flexbox row** wrapping the existing "+ Add aura" button + the new preset select. Existing free-form authoring path unchanged.
+
+### Why this matters
+A 5e Cleric drops Bless on multiple targets per encounter. Pre-159 the GM clicks "+ Add aura", types "Bless" as the label, sets radius to 30 ft, picks a blue color, sets visibility — every time. Post-159 it's a single dropdown selection. Compounding savings for high-aura combats (a 7th-level Cleric concentrating on Spirit Guardians on a Paladin radiating Aura of Protection on a party covered by Bless = 3 stamps × 5 fields = 15 inputs → 3 dropdown picks).
+
+The 8 presets cover the mechanically-distinct auras that show up most often at a 5e table:
+- **Bless / Bane** — the classic concentration-buff pair.
+- **Spirit Guardians** — Cleric's primary AoE concentration.
+- **Aura of Protection / Courage** — Paladin's signature radii.
+- **Spirit Shroud** — close-range damage aura.
+- **Darkness / Daylight** — opposing-pair area effects.
+
+GMs running other systems (PF2e, Lancer, etc.) can still author free-form auras via "+ Add aura" — the preset list is opinionated for 5e, not enforced.
+
+### Architecture
+- **Pure data + factory.** `AURA_PRESETS` is a `readonly` array; `instantiateAuraPreset` is a pure function (no side effects, mints a fresh id per call). Test surface is small and exhaustively covered.
+- **Radius converted at stamp time, not stored.** The preset says "30 ft"; the resulting `Aura.radius` is world pixels. If the GM later changes feetPerSquare in Settings, EXISTING auras keep their pixel radius (their displayed feet value updates via the editor's px→ft conversion). New stamps respect the current setting. This matches the existing aura authoring behavior — feet is just the editor's input/display unit.
+- **Visibility default `'shared'`.** Most table-relevant auras are visible to everyone. The GM can flip an individual instance to `'gm'` after stamping (the existing per-row "GM-only" checkbox still works).
+- **No serialization changes.** Presets are pure UI affordance; the `Aura` interface is unchanged. Wire format compatibility is unaffected.
+
+### UX details
+- **Dropdown over button row.** A button-per-preset row would be ~8 buttons wide; the dropdown is one row regardless of preset count. Future polish could add color-swatch pills on hover.
+- **Placeholder reset on each pick.** Without the reset, picking the same preset twice in a row would require re-clicking elsewhere first (browsers don't fire "change" when the value doesn't change). The reset makes the picker feel like a "stamp" gesture.
+- **Label includes the radius.** Each option reads "Bless (30 ft)" rather than just "Bless" — disambiguates similar-named auras and shows the GM what they're getting before clicking.
+
+### Tests
+- **+11 unit tests** in `src/state/aura-presets.test.ts` (new): list non-empty, unique ids, unique labels, valid hex colors, positive radii, valid visibility; `instantiateAuraPreset` (default conversion, custom feetPerSquare, custom cellSize, fresh ids per call, copies preset fields).
+- **+3 Playwright specs** in `e2e/aura-presets.spec.ts` (new): dropdown is present with multiple options, selecting Bless stamps a row, the dropdown resets to placeholder so consecutive stamps work.
+- **All 1641 unit tests + 399 Playwright specs pass** locally.
+
+### Bundle
+- 115.77 / 120 KB initial-load brotli (+0.55 KB for the preset list + factory + dropdown wiring).
+- Lazy chunks 20.05 / 21 KB unchanged. CSS unchanged (no new rules — the preset select reuses the existing `<select>` styles; the `.aura-buttons` flex wrapper is a single inline class with default flex layout).
+
+### Pre-push checklist
+- typecheck: clean.
+- unit suite: 1641 passing.
+- e2e suite: 399 passing.
+- visual regression: all baselines green (no canvas-visible changes; the dropdown only renders inside the editor).
+- size-limit: all 5 budgets green.
+
+---
+
 ## [1.33.0] — 2026-05-05 — Travel route polylines
 
 Phase 158 — fifth of the v1.29 → v1.36 batch. Adds a new `TravelRoute` entity and a Travel tool (`G`) for dropping persistent multi-point routes on the map. Each route renders as a colored polyline with waypoint pips and a total-distance label, and survives scene loads / sync to the Spectator.
