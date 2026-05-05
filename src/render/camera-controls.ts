@@ -177,3 +177,67 @@ export function fitToContent(
     zoom,
   };
 }
+
+/**
+ * Phase 167 — compute the camera (x, y, zoom) needed to fit a
+ * given world-space bounding box in the viewport with `padding`
+ * pixels of margin. Pure helper — caller passes the result to
+ * `tweenCamera` for the smooth pan/zoom.
+ *
+ * Returns `null` when the bbox is degenerate (width or height
+ * <= 0) so the caller can no-op cleanly.
+ */
+export function cameraToFitBounds(
+  renderer: Renderer,
+  bounds: ContentBounds,
+  padding: number = 40,
+): Camera | null {
+  if (bounds.w <= 0 || bounds.h <= 0) return null;
+  const rect = renderer.canvas.getBoundingClientRect();
+  const availW = Math.max(1, rect.width - padding * 2);
+  const availH = Math.max(1, rect.height - padding * 2);
+  const zoom = clamp(
+    Math.min(availW / bounds.w, availH / bounds.h),
+    MIN_CAMERA_ZOOM,
+    MAX_CAMERA_ZOOM,
+  );
+  const centerX = bounds.x + bounds.w / 2;
+  const centerY = bounds.y + bounds.h / 2;
+  return {
+    x: centerX - rect.width / (2 * zoom),
+    y: centerY - rect.height / (2 * zoom),
+    zoom,
+  };
+}
+
+/**
+ * Phase 167 — bounding box of every token whose id is in `ids`.
+ * Returns `null` when the selection has no tokens (the caller
+ * may show a "select something first" hint instead of no-op).
+ */
+export function tokenSelectionBounds(
+  state: SessionState,
+  ids: ReadonlySet<ID>,
+): ContentBounds | null {
+  if (ids.size === 0) return null;
+  const cellSize = state.grid.cellSize;
+  let minX = Number.POSITIVE_INFINITY;
+  let minY = Number.POSITIVE_INFINITY;
+  let maxX = Number.NEGATIVE_INFINITY;
+  let maxY = Number.NEGATIVE_INFINITY;
+  let count = 0;
+  for (const t of state.tokens) {
+    if (!ids.has(t.id)) continue;
+    const tx = t.x * cellSize;
+    const ty = t.y * cellSize;
+    const tw = t.size * cellSize;
+    const th = t.size * cellSize;
+    minX = Math.min(minX, tx);
+    minY = Math.min(minY, ty);
+    maxX = Math.max(maxX, tx + tw);
+    maxY = Math.max(maxY, ty + th);
+    count++;
+  }
+  if (count === 0) return null;
+  return { x: minX, y: minY, w: maxX - minX, h: maxY - minY };
+}

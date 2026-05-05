@@ -131,6 +131,44 @@ gaps so the v1.0 cut is genuinely "stable + remote-play-capable."
 
 ---
 
+## [1.42.0] — 2026-05-05 — Fit-to-selection (`F`) + contextual fit
+
+Phase 167 — sixth of the v1.37 → v1.55 batch. The existing `F` keyboard shortcut + "Fit content to screen" palette command are now contextual: with tokens selected, they tween-fit to the selection's bounding box; with empty selection, they fall through to the pre-167 fit-to-content (whole-map fit). Same key, smarter behavior.
+
+### Added
+- **`tokenSelectionBounds(state, ids)`** in `src/render/camera-controls.ts` — pure helper. Returns the world-space bbox containing every token whose id is in `ids`, or `null` for an empty selection. Ignores ids that don't match a token (so passing a selection set that mixes token + annotation ids works cleanly).
+- **`cameraToFitBounds(renderer, bounds, padding)`** companion helper. Returns the `Camera` shape needed to fit the bounding box in the viewport. Pure — caller passes the result to `tweenCamera` for smooth pan/zoom.
+- **`fitSelectionOrContent()` helper** in `src/entries/gm.ts`. Decides between selection-fit and content-fit based on the active selection. With selection: 60 px padding (vs `fitToContent`'s 40) gives breathing room — selecting a single 1×1 token shouldn't fill the whole viewport.
+- **Palette command** `camera-fit-selection` ("Fit selection to screen") added alongside the existing `camera-fit`. Both route through `fitSelectionOrContent` so the behavior is identical regardless of entry point.
+
+### Why this matters
+Pre-167 `F` always fit the entire map. Mid-combat the GM might want to zoom into the 4 active fighters. Pre-167 they'd manually pan + zoom; post-167 they Lasso the 4 → press `F` → camera tweens to fit. Use cases:
+- **Crowd encounter**: 12 enemies on a map; select the 5 the active turn cares about, `F`, tween-fit.
+- **Single-token close-up**: select one boss + `F` to zoom in for an inspection beat.
+- **Whole-map reset**: deselect (Esc) + `F` to zoom out to the full map (pre-167 behavior preserved).
+
+### Architecture
+- **Same `F` key, new behavior.** Keeps the muscle memory; the contextual fork is invisible until you have a selection.
+- **`tweenCamera` reuse.** Same 250 ms ease-out cubic + reduced-motion handling as Phases 165 (auto-pan) and 166 (bookmarks). Three call sites, one tween implementation.
+- **Fall-through preserved.** When selection has no tokens (e.g., a pure annotation/wall selection), `fitSelectionOrContent` falls through to the existing `fitToContent` path. Pre-167 behavior unchanged for users who never select tokens.
+
+### Tests
+- **+6 unit tests** in `src/render/camera-controls.test.ts`: empty selection returns null, ghost ids return null, single 1×1 bbox, multi-token bbox, token size respected, mixed-ids ignore non-tokens.
+- **All 1654 unit tests + 405 Playwright specs pass** locally.
+
+### Bundle
+- 117.03 / 120 KB initial-load brotli (+0.28 KB for `tokenSelectionBounds` + `cameraToFitBounds` + `fitSelectionOrContent`).
+- Lazy chunks 20.38 / 21 KB (+0.01 KB for the new palette entry). CSS unchanged.
+
+### Pre-push checklist
+- typecheck: clean.
+- unit suite: 1654 passing.
+- e2e suite: 405 passing.
+- visual regression: all baselines green.
+- size-limit: all 5 budgets green.
+
+---
+
 ## [1.41.0] — 2026-05-05 — Smooth camera tween on bookmark jumps
 
 Phase 166 — fifth of the v1.37 → v1.55 batch. The Phase 102 camera bookmarks (modal Jump button + Alt+N quick-jump) now tween via the Phase 165 `tweenCamera` helper instead of snapping instantly. Less jarring, especially for Spectators with `followGmCamera` on.

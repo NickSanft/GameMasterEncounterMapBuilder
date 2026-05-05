@@ -214,6 +214,8 @@ import {
   resetCamera,
   tweenCamera,
   cameraFocusedOn,
+  cameraToFitBounds,
+  tokenSelectionBounds,
   ZOOM_BUTTON_STEP,
 } from '../render/camera-controls.js';
 import { tokenCenterWorld } from '../state/grid-coords.js';
@@ -1470,6 +1472,34 @@ const cameraBookmarksModal = mountCameraBookmarksModal({
  * snaps the camera to it. Silently no-ops when the slot is empty
  * (e.g. user presses Alt+5 on a scene with two bookmarks).
  */
+/**
+ * Phase 167 — contextual fit. When the user has selected tokens,
+ * tween-fit the camera to that selection's bounding box. Empty
+ * selection falls through to the pre-167 `fitToContent` (whole-
+ * map fit). Same `F` key, smarter behavior.
+ *
+ * 60 px padding (vs `fitToContent`'s 40) gives selection-fit a
+ * bit more breathing room — selecting a single token shouldn't
+ * fill the entire viewport with just that one token.
+ */
+function fitSelectionOrContent(): void {
+  const state = store.getState();
+  const bounds = tokenSelectionBounds(state, selection.ids);
+  if (bounds) {
+    const target = cameraToFitBounds(renderer, bounds, 60);
+    if (target) {
+      tweenCamera(renderer, target, {
+        durationMs: 250,
+        reducedMotion: preferences.get().reducedMotion,
+      });
+      sendCameraIfBroadcasting();
+      renderer.requestRender();
+      return;
+    }
+  }
+  fitToContent(renderer, state, (id) => imageLoader.get(id));
+}
+
 function jumpToBookmarkSlot(slot: number): void {
   const sceneId = getActiveSceneId();
   if (!sceneId) return;
@@ -3904,7 +3934,17 @@ function slugForFilename(name: string): string {
     label: 'Fit content to screen',
     group: 'Camera',
     shortcut: 'F',
-    run: () => fitToContent(renderer, store.getState(), (id) => imageLoader.get(id)),
+    // Phase 167 — palette command also routes through the
+    // contextual helper. With selection: fit to selection. Empty
+    // selection: fit to whole content.
+    run: () => fitSelectionOrContent(),
+  });
+  reg.register({
+    id: 'camera-fit-selection',
+    label: 'Fit selection to screen',
+    group: 'Camera',
+    hint: 'F (with tokens selected)',
+    run: () => fitSelectionOrContent(),
   });
   reg.register({
     id: 'camera-reset',
@@ -4276,7 +4316,11 @@ window.addEventListener('keydown', (e) => {
     return;
   }
   if (e.key.toLowerCase() === 'f') {
-    fitToContent(renderer, store.getState(), (id) => imageLoader.get(id));
+    // Phase 167 — contextual `F`: when the user has selected
+    // tokens, tween-fit to those tokens. Empty selection falls
+    // through to the existing fit-to-content (whole map). Same
+    // key, smarter behavior.
+    fitSelectionOrContent();
     e.preventDefault();
     return;
   }

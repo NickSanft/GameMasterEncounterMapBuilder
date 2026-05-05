@@ -15,6 +15,11 @@ import type { WhatsNewEntry } from './whats-new.js';
 
 export const GENERATED_WHATS_NEW_ENTRIES: readonly WhatsNewEntry[] = [
   {
+    version: '1.42.0',
+    date: '2026-05-05',
+    highlights: ['Fit-to-selection (`F`) + contextual fit'],
+  },
+  {
     version: '1.41.0',
     date: '2026-05-05',
     highlights: ['Smooth camera tween on bookmark jumps'],
@@ -128,10 +133,5 @@ export const GENERATED_WHATS_NEW_ENTRIES: readonly WhatsNewEntry[] = [
     version: '1.19.0',
     date: '2026-05-04',
     highlights: ['Active-turn ring pulse'],
-  },
-  {
-    version: '1.18.0',
-    date: '2026-05-04',
-    highlights: ['Selected-token z-order fix'],
   },
 ];

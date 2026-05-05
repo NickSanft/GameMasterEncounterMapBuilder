@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { computeContentBounds } from './camera-controls.js';
+import {
+  computeContentBounds,
+  tokenSelectionBounds,
+} from './camera-controls.js';
 import { createDefaultState, type Token } from '../state/types.js';
 
 function token(overrides: Partial<Token>): Token {
@@ -91,5 +94,54 @@ describe('computeContentBounds', () => {
     const bounds = computeContentBounds(state, () => null);
     // Token's right edge should extend bounds by 2 * cellSize beyond grid
     expect(bounds.x + bounds.w).toBe((state.grid.cols + 2) * state.grid.cellSize);
+  });
+});
+
+describe('tokenSelectionBounds (Phase 167)', () => {
+  it('returns null for an empty selection set', () => {
+    const state = createDefaultState();
+    state.tokens.push(token({ id: 'a' }));
+    expect(tokenSelectionBounds(state, new Set())).toBeNull();
+  });
+
+  it('returns null when selection ids do not match any token', () => {
+    const state = createDefaultState();
+    state.tokens.push(token({ id: 'a' }));
+    expect(tokenSelectionBounds(state, new Set(['ghost']))).toBeNull();
+  });
+
+  it('returns the bbox of a single 1x1 token', () => {
+    const state = createDefaultState();
+    state.tokens.push(token({ id: 'a', x: 5, y: 7, size: 1 }));
+    const bounds = tokenSelectionBounds(state, new Set(['a']));
+    const cs = state.grid.cellSize;
+    expect(bounds).toEqual({ x: 5 * cs, y: 7 * cs, w: cs, h: cs });
+  });
+
+  it('returns the bbox containing multiple tokens', () => {
+    const state = createDefaultState();
+    state.tokens.push(token({ id: 'a', x: 0, y: 0, size: 1 }));
+    state.tokens.push(token({ id: 'b', x: 10, y: 5, size: 1 }));
+    const bounds = tokenSelectionBounds(state, new Set(['a', 'b']));
+    const cs = state.grid.cellSize;
+    expect(bounds).toEqual({ x: 0, y: 0, w: 11 * cs, h: 6 * cs });
+  });
+
+  it('respects token size', () => {
+    const state = createDefaultState();
+    state.tokens.push(token({ id: 'a', x: 0, y: 0, size: 3 }));
+    const bounds = tokenSelectionBounds(state, new Set(['a']));
+    const cs = state.grid.cellSize;
+    expect(bounds).toEqual({ x: 0, y: 0, w: 3 * cs, h: 3 * cs });
+  });
+
+  it('ignores selection ids that point at non-token entities', () => {
+    const state = createDefaultState();
+    state.tokens.push(token({ id: 'a', x: 1, y: 1 }));
+    // Add an annotation id to selection alongside the token id —
+    // the helper should only consider the token.
+    const bounds = tokenSelectionBounds(state, new Set(['a', 'ann-1']));
+    const cs = state.grid.cellSize;
+    expect(bounds).toEqual({ x: cs, y: cs, w: cs, h: cs });
   });
 });
