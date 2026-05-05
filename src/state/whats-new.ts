@@ -94,6 +94,13 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW_ENTRIES: readonly WhatsNewEntry[] = [
   {
+    version: '1.35.0',
+    date: '2026-05-05',
+    highlights: [
+      'Wall-clipping for auras — opt-in (Settings → Appearance → Auras). Aura rings stop at sight-blocking walls, matching the 5e RAW "sphere blocked by total cover" feel.',
+    ],
+  },
+  {
     version: '1.34.0',
     date: '2026-05-05',
     highlights: [

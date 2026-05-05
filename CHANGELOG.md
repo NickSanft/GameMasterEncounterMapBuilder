@@ -131,6 +131,50 @@ gaps so the v1.0 cut is genuinely "stable + remote-play-capable."
 
 ---
 
+## [1.35.0] — 2026-05-05 — Wall-clipping for auras
+
+Phase 160 — seventh of the v1.29 → v1.36 batch. Adds an opt-in "clip auras by walls" rendering preference. When ON, token aura rings stop at sight-blocking walls — visually matches the 5e RAW "sphere blocked by total cover" interpretation. Powered by the same `computeVisibilityPolygon` helper that drives the Phase 55 fog-visibility pipeline, so no new geometry code.
+
+### Added
+- **`Preferences.clipAurasByWalls: boolean`** field, default `false`. Pre-160 prefs blobs without the field load with the default via the existing `{ ...defaults, ...parsed }` spread.
+- **Settings → Appearance → Auras subgroup** (GM-only, gated alongside the existing Tile-paint subgroup) — single checkbox "Clip auras by sight-blocking walls" with a hint line explaining the LoS reuse.
+- **`buildAuraClipSegments(walls, cellSize)` helper** in `src/render/layer-tokens.ts` — filters walls by `wallBlocksSightEffective` (so open doors don't clip; non-sight walls don't clip) and flattens block walls into perimeter edges via `wallToSegments`. Computed once per render frame (not per aura) since segments don't depend on aura origin.
+- **Per-aura clip path** in `drawTokenAuras` — when clip segments are non-empty, the aura's visibility polygon is computed via `computeVisibilityPolygon({x, y}, radius, segments)` and applied as a canvas `clip()` before the disk + label paint. Empty polygons (no walls in range) skip the clip cleanly.
+
+### Why this matters
+Spirit Guardians, Aura of Protection, and similar 5e mechanics technically pass through walls (the aura is centered on the caster regardless of cover). But at the table, GMs commonly rule that a partial wall *does* block the area-effect — both for fairness ("the goblin behind the closed door isn't being damaged by the cleric on the other side") and because the visual aura looking like it goes through walls is jarring. Phase 160's opt-in clip matches the most common house-rule + matches what fog already shows for sight, giving GMs a single visual model for "what's reachable here."
+
+### Architecture
+- **Reuses the LoS engine.** `state/los.ts` already exposes `computeVisibilityPolygon(viewer, radius, segments)` with O(walls × angle samples) cost. Auras are conceptually viewers from the same origin, so the polygon is a perfect fit. No new geometry code.
+- **Walls cached per frame, not per aura.** The pass collects sight-blocking segments once before the per-token aura loop. Per-aura cost is just one `computeVisibilityPolygon` call + the polygon's clip apply. For a typical scene (≤ 50 walls, ≤ 5 visible auras) the per-frame cost is comparable to a single fog raster pass — i.e., negligible.
+- **Default OFF.** Existing v1.29 → v1.34 saves render unchanged on first boot of v1.35. The setting is opt-in for GMs who actively want the clipping; everyone else gets the pre-160 full-disk look.
+- **Renderer reads the pref each frame.** Toggling Settings takes effect on the next paint cycle without a re-mount.
+- **Spectator-side independence.** The pref is per-tab (localStorage). A GM who enables clipping on their tab doesn't affect what a connected Spectator's renderer does — the Spectator can have its own setting (or default OFF). This is consistent with how Phase 89's high-contrast and other rendering prefs work.
+
+### UX details
+- **GM-only toggle for now.** The Settings subgroup is inside the existing GM-only block. The Spectator's Settings doesn't expose the toggle — most setups have the GM author the visual presentation. Future polish: expose on Spectator if a player wants their own.
+- **Sight-blocking walls clip; movement-blocking-only walls don't.** Matches the visual fog model. A `blocksSight: false` wall drawn as a movement barrier doesn't clip auras even when the toggle is on.
+- **Open doors don't clip.** `wallBlocksSightEffective` falls through `door.open` so an open doorway lets the aura pass — same semantics as Phase 113's door behavior.
+
+### Tests
+- **+2 Playwright specs** in `e2e/aura-wall-clipping.spec.ts` (new): toggle is present + default OFF, toggling persists across reload.
+- The render-side polygon math is exhaustively covered by the existing Phase 55 LoS tests (`src/state/los.test.ts`); Phase 160 reuses that machinery without introducing new geometry code, so no new unit tests for the clip path itself.
+- **All 1641 unit tests + 401 Playwright specs pass** locally.
+
+### Bundle
+- 116.11 / 120 KB initial-load brotli (+0.34 KB for the helper + the per-aura clip path + the renderer pref pull-through).
+- Lazy chunks 20.23 / 21 KB (+0.18 KB for the new Settings subgroup HTML + listener wire).
+- CSS 13.20 / 14 KB unchanged.
+
+### Pre-push checklist
+- typecheck: clean.
+- unit suite: 1641 passing.
+- e2e suite: 401 passing.
+- visual regression: all baselines green (default OFF means no visible change on the existing baseline scenes; the clipping path activates only with both the pref ON AND walls present in the scene, which the baseline scenes don't have).
+- size-limit: all 5 budgets green.
+
+---
+
 ## [1.34.0] — 2026-05-05 — Aura presets
 
 Phase 159 — sixth of the v1.29 → v1.36 batch. Adds a "From preset…" picker to the token editor's aura section. One click stamps a fresh aura with the canonical radius + color + label for common 5e auras (Bless, Spirit Guardians, Aura of Protection, etc.) instead of typing each value by hand.

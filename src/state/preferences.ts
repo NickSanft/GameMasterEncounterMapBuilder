@@ -165,6 +165,26 @@ export interface Preferences {
    */
   coupleTilePaintWalls: boolean;
   /**
+   * Phase 160 — when true, token aura rings are clipped by
+   * sight-blocking walls using the same Phase 55 LoS pipeline that
+   * powers fog visibility. A Spirit Guardians caster behind a
+   * partial wall will show its emanation only on the side of the
+   * wall the caster can see — visually matching the 5e RAW
+   * "sphere blocked by total cover" rule.
+   *
+   * Default `false` so existing scenes don't suddenly look
+   * different on first boot of v1.35. Opt-in from
+   * Settings → Appearance → Auras.
+   *
+   * Performance: clipping is O(walls × angle samples) per visible
+   * aura per frame, same cost class as a viewer LoS polygon. The
+   * `computeVisibilityPolygon` helper filters walls by range first
+   * so distant walls don't contribute. For typical scenes
+   * (<= 50 walls, <= 5 visible auras) the per-frame cost is
+   * negligible compared to the existing fog raster.
+   */
+  clipAurasByWalls: boolean;
+  /**
    * Phase 155 — when true, the "next turn" actions (initiative bar's
    * Next button, the modal's Next button, and the command palette's
    * "Initiative — next turn") auto-skip past dead tokens
@@ -223,6 +243,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   autoNumberDuplicateTokens: true,
   coupleTilePaintWalls: false,
   autoSkipDeadInInitiative: true,
+  clipAurasByWalls: false,
   keybindings: {},
 };
 

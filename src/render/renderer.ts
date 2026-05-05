@@ -333,6 +333,12 @@ export function createRenderer(opts: CreateRendererOptions): Renderer {
       // sin-driven alpha. Captured at the per-frame top so all
       // animations on this frame share a clock.
       now: frameStart,
+      // Phase 160 — wall-clipping for auras. Pulled from the user
+      // preference each frame so toggling the setting takes effect
+      // on the next paint cycle.
+      clipAurasByWalls: getPreferences
+        ? getPreferences().clipAurasByWalls
+        : false,
     });
     drawAoeTemplates(ctx, state, {
       mode,

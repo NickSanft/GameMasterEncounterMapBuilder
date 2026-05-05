@@ -106,6 +106,12 @@ export function buildSettingsModal(
   const autoSkipDeadInput = modal.querySelector<HTMLInputElement>(
     '[data-field="autoSkipDeadInInitiative"]',
   );
+  // Phase 160 — auras clip-by-walls; renders on both GM + Spectator
+  // (the rendering pref applies to both views, so the setting is
+  // exposed in either mode's Settings modal).
+  const clipAurasInput = modal.querySelector<HTMLInputElement>(
+    '[data-field="clipAurasByWalls"]',
+  );
   const playerNameInput = modal.querySelector<HTMLInputElement>('[data-field="playerName"]')!;
   const playerColorInput = modal.querySelector<HTMLInputElement>('[data-field="playerColor"]')!;
   const labelSizeRadios = Array.from(
@@ -203,6 +209,7 @@ export function buildSettingsModal(
     if (autoNumberInput) autoNumberInput.checked = prefs.autoNumberDuplicateTokens;
     if (coupleTileWallsInput) coupleTileWallsInput.checked = prefs.coupleTilePaintWalls;
     if (autoSkipDeadInput) autoSkipDeadInput.checked = prefs.autoSkipDeadInInitiative;
+    if (clipAurasInput) clipAurasInput.checked = prefs.clipAurasByWalls;
     renderKeybindingsList();
     // Phase 67 — identity now lives in its own per-role store; the
     // Settings modal reads it from `identityPrefs.get()` instead of
@@ -361,6 +368,14 @@ export function buildSettingsModal(
     autoSkipDeadInput.addEventListener('change', () => {
       preferences.update({
         autoSkipDeadInInitiative: autoSkipDeadInput.checked,
+      });
+    });
+  }
+
+  if (clipAurasInput) {
+    clipAurasInput.addEventListener('change', () => {
+      preferences.update({
+        clipAurasByWalls: clipAurasInput.checked,
       });
     });
   }
@@ -715,6 +730,14 @@ function renderAppearancePane(viewMode: ViewMode): string {
             <span>Painting a "wall" tile also creates a block wall</span>
           </label>
           <p class="settings-hint">Phase 150. When ON, painting a tile of kind "wall" with the Phase 142 tile-paint tool also drops a 1×1 block wall on the same cell (sight-blocking + movement-blocking). Erasing the tile removes the matching wall. Other tile kinds (floor / water / rough / pit) are unaffected. Off by default — keeps the cosmetic-only behavior.</p>
+        </fieldset>
+        <fieldset class="settings-subgroup">
+          <legend>Auras</legend>
+          <label class="check">
+            <input type="checkbox" data-field="clipAurasByWalls" />
+            <span>Clip auras by sight-blocking walls</span>
+          </label>
+          <p class="settings-hint">Phase 160. When ON, token aura rings stop at sight-blocking walls — visually matches the 5e RAW "sphere blocked by total cover" interpretation. Same LoS engine that powers the fog-visibility pipeline; cost scales with the number of visible auras × walls. Off by default so existing scenes don't suddenly look different.</p>
         </fieldset>`
     : '';
 

@@ -4,6 +4,7 @@ import type {
   SessionState,
   Token,
   ViewMode,
+  Wall,
 } from '../state/types.js';
 import type { ImageProvider } from './layer-background.js';
 import type { LabelSize } from '../state/preferences.js';
@@ -15,6 +16,11 @@ import { getConditionPreset } from '../state/conditions.js';
 import { drawConditionIcon } from './condition-icons.js';
 import { groupTokensByStack } from '../state/token-stack.js';
 import { tokenCenterWorld } from '../state/grid-coords.js';
+import {
+  computeVisibilityPolygon,
+  type LosSegment,
+} from '../state/los.js';
+import { wallToSegments, wallBlocksSightEffective } from '../state/walls.js';
 
 const NO_IMAGE: ImageProvider = () => null;
 
@@ -51,6 +57,13 @@ export interface TokenRenderOptions {
    * `reducedMotion: true`).
    */
   now?: number;
+  /**
+   * Phase 160 — when true, token aura rings are clipped by
+   * sight-blocking walls using the same visibility-polygon pipeline
+   * as the fog renderer. Default `false` (opt-in via Settings →
+   * Appearance → Auras).
+   */
+  clipAurasByWalls?: boolean;
 }
 
 const DEFAULT_OPTIONS: TokenRenderOptions = {
@@ -124,11 +137,22 @@ export function drawTokens(
   // sits cleanly on top of its own emanation. GM-only auras are
   // hidden on the Spectator canvas (mirrors `visibility: 'gm'` for
   // walls + annotations).
+  //
+  // Phase 160 — when `clipAurasByWalls` is on, compute the LoS
+  // segments once for the whole pass (sight-blocking walls →
+  // wallToSegments → flatten). The per-aura visibility polygon is
+  // then computed inside `drawTokenAuras` from the aura's own
+  // origin + radius, using these segments. We cache the segments
+  // outside the loop because they're independent of the per-aura
+  // origin — re-computing them per-aura would duplicate work.
+  const auraClipSegments = options.clipAurasByWalls
+    ? buildAuraClipSegments(state.walls, cellSize)
+    : null;
   for (const t of state.tokens) {
     if (options.mode === 'spectator' && isTokenFullyHidden(t, state)) continue;
     if (t.auras.length === 0) continue;
     const display = withOverlay(t, overlay, cellSize);
-    drawTokenAuras(ctx, display, state.grid, options.mode);
+    drawTokenAuras(ctx, display, state.grid, options.mode, auraClipSegments);
   }
 
   // Pass 1: bodies. unselected → selected → dragged.
@@ -306,16 +330,45 @@ function drawOwnerDot(
 const DRAG_GHOST_ALPHA = 0.6;
 
 /**
+ * Phase 160 — collect sight-blocking wall segments for the aura
+ * clipping pass. Filters walls by `wallBlocksSightEffective` (open
+ * doors don't clip; non-sight walls don't clip) and flattens block
+ * walls into their perimeter edges. Computed once per render frame
+ * outside the per-aura loop since the segments don't depend on the
+ * aura origin.
+ */
+function buildAuraClipSegments(
+  walls: readonly Wall[],
+  cellSize: number,
+): LosSegment[] {
+  const out: LosSegment[] = [];
+  for (const w of walls) {
+    if (!wallBlocksSightEffective(w)) continue;
+    for (const seg of wallToSegments(w, cellSize)) {
+      out.push(seg);
+    }
+  }
+  return out;
+}
+
+/**
  * Phase 139 — draw the colored emanation rings centered on a token.
  * Auras render below token bodies so the token icon sits on top.
  * Each aura paints a translucent disk + a solid outline + an
  * optional label tag at the top edge of the disk.
+ *
+ * Phase 160 — `clipSegments` (when non-null) enables wall-clipping:
+ * the disk is intersected with the visibility polygon of the aura's
+ * origin + radius against sight-blocking walls. The polygon is
+ * applied as a canvas `clip()` so the disk and the label both
+ * respect the LoS boundary.
  */
 function drawTokenAuras(
   ctx: CanvasRenderingContext2D,
   t: Token,
   grid: GridConfig,
   mode: ViewMode,
+  clipSegments: readonly LosSegment[] | null,
 ): void {
   const center = tokenCenterWorld(t, grid);
   const cx = center.x;
@@ -324,6 +377,29 @@ function drawTokenAuras(
     if (mode === 'spectator' && aura.visibility === 'gm') continue;
     if (!Number.isFinite(aura.radius) || aura.radius <= 0) continue;
     ctx.save();
+
+    // Phase 160 — apply the wall-clipped visibility polygon as a
+    // canvas clip path. The polygon is computed from the aura's
+    // origin + radius against the cached sight-blocking-wall
+    // segments. Empty polygons (no walls in range or radius <= 0
+    // — already filtered above) skip the clip entirely.
+    if (clipSegments && clipSegments.length > 0) {
+      const poly = computeVisibilityPolygon(
+        { x: cx, y: cy },
+        aura.radius,
+        clipSegments,
+      );
+      if (poly.length >= 3) {
+        ctx.beginPath();
+        ctx.moveTo(poly[0]!.x, poly[0]!.y);
+        for (let i = 1; i < poly.length; i++) {
+          ctx.lineTo(poly[i]!.x, poly[i]!.y);
+        }
+        ctx.closePath();
+        ctx.clip();
+      }
+    }
+
     // Translucent fill + solid stroke for visibility against any
     // background; same opacity / line-width recipe used by the
     // Phase 31 AoE templates so auras + AoEs share visual language.
