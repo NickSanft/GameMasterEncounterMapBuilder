@@ -131,6 +131,44 @@ gaps so the v1.0 cut is genuinely "stable + remote-play-capable."
 
 ---
 
+## [1.39.0] — 2026-05-05 — Hover popover on the active initiative entry
+
+Phase 164 — third of the v1.37 → v1.55 batch. The initiative bar's active-turn label now shows a hover popover with the token's portrait, HP bar, and condition chips. Replaces the browser-native `title=` tooltip with a styled card that's faster to scan during combat.
+
+### Added
+- **`<div class="initiative-bar-popover">`** mounted to `document.body`, fixed-positioned, hidden by default. Shown on `mouseenter` / `focus` of the label; hidden on `mouseleave` / `blur`. Position is computed via `getBoundingClientRect()` at show-time so layout shifts don't strand it.
+- **Portrait** — circular crop of the token's image (when `imageId` is set), or a colored dot otherwise. Same `getImageURL` resolver as Phase 163.
+- **HP bar** — only rendered when `token.hp` is set AND `visibility === 'shared'` (the popover lives in both GM + Spectator views; GM-only HPs stay hidden so the Spectator side doesn't leak).
+- **Condition chips** — one styled pill per active condition, colored from the existing `getConditionPreset(id)` palette.
+- **CSS rules** — `.initiative-bar-popover` + child classes (head / portrait / dot / name / hp-row / hp-bar / hp-fill / hp-text / conditions / condition-chip) added to `src/ui/styles.css`. Uses existing CSS variables (`--surface`, `--fg`, `--border`) so it adapts to all 5 themes.
+
+### Why this matters
+Pre-164 the bar showed `Goblin (15)` — name + initiative value, nothing else. Mid-combat, the GM (and any player using the bar) had to either remember the active token's HP / conditions or scroll to find it on the canvas. Post-164 hovering the name pops a card with everything at-a-glance: portrait, HP bar with current/max, every active condition. Mirrors what Foundry / Roll20 character-sheet tokens give for free; this is the lightweight equivalent that fits the existing data model.
+
+### Architecture
+- **`pointer-events: none` on the popover.** The card is purely informational — clicking it shouldn't do anything. The `none` pointer rule means the popover can't capture mouse events that should land on the canvas / label, and the hover state on the label stays clean (mousing onto the popover doesn't trigger `mouseleave` because the label's bounding box stays under the cursor).
+- **Show / hide on label events, not on document hover.** Avoids a `mousemove`-everywhere listener; the popover only listens on the label element.
+- **Re-renders on every show.** The label only fires a few `mouseenter` events per minute; rebuilding the popover content on each is cheaper than wiring a continuous subscription.
+- **HP visibility honored.** GM-only HP is hidden in the popover even on the GM view, matching the canvas-render's per-token GM-only-tag rule. Avoids leaks when the GM streams their screen.
+
+### Tests
+- The popover is a CSS-positioned hover affordance; visual regression baselines remain green (no change to the default-state baseline scenes — the popover only appears on hover).
+- Existing `initiative-bar-pip.spec.ts` still asserts pip presence — the popover is additive, doesn't change existing assertions.
+- **All 1648 unit tests + 403 Playwright specs pass** locally.
+
+### Bundle
+- 116.48 / 120 KB initial-load brotli (+0.45 KB for the popover render + helpers).
+- Lazy chunks 20.22 / 21 KB unchanged. CSS 13.38 / 14 KB (+0.18 KB for the popover styles).
+
+### Pre-push checklist
+- typecheck: clean.
+- unit suite: 1648 passing.
+- e2e suite: 403 passing.
+- visual regression: all baselines green.
+- size-limit: all 5 budgets green.
+
+---
+
 ## [1.38.0] — 2026-05-05 — Token thumbnail in initiative-bar pip
 
 Phase 163 — second of the v1.37 → v1.55 batch. The Phase 147 colored pip in the initiative bar now renders a circular crop of the active token's portrait when one is set, falling back to the solid color for image-less tokens. Quicker visual match between the bar's "whose turn" indicator and the canvas token.

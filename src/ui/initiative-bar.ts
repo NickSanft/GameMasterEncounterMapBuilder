@@ -1,7 +1,9 @@
 import type { Store } from '../state/store.js';
-import type { ID, ViewMode } from '../state/types.js';
+import type { ID, Token, ViewMode } from '../state/types.js';
 import { advanceInitiative, retreatInitiative } from '../state/initiative.js';
 import { getImageURL } from '../images/store.js';
+import { hpFraction, hpBarColor } from '../state/token-hp.js';
+import { getConditionPreset } from '../state/conditions.js';
 import {
   activeTurnKey,
   computeTimerView,
@@ -68,6 +70,110 @@ export function mountInitiativeBar(
     actions.onOpenTracker?.();
     labelEl.blur();
   });
+
+  // Phase 164 — hover popover with portrait + HP bar + condition
+  // chips. Shown on `mouseenter` / `focus` of the label; hidden
+  // on `mouseleave` / `blur`. Anchored near the label using
+  // `getBoundingClientRect()` at show-time so the position is
+  // always current even if the bar layout shifts.
+  const popover = document.createElement('div');
+  popover.className = 'initiative-bar-popover';
+  popover.setAttribute('role', 'tooltip');
+  popover.hidden = true;
+  document.body.appendChild(popover);
+
+  function renderPopoverFor(token: Token | null): void {
+    popover.replaceChildren();
+    if (!token) return;
+    // Portrait row.
+    const head = document.createElement('div');
+    head.className = 'initiative-bar-popover-head';
+    if (token.imageId) {
+      const portrait = document.createElement('div');
+      portrait.className = 'initiative-bar-popover-portrait';
+      portrait.style.backgroundColor = token.color;
+      head.appendChild(portrait);
+      void getImageURL(token.imageId).then((url) => {
+        if (url) {
+          portrait.style.backgroundImage = `url(${CSS.escape(url)})`;
+          portrait.style.backgroundSize = 'cover';
+          portrait.style.backgroundPosition = 'center';
+        }
+      });
+    } else {
+      const dot = document.createElement('div');
+      dot.className = 'initiative-bar-popover-dot';
+      dot.style.backgroundColor = token.color;
+      head.appendChild(dot);
+    }
+    const name = document.createElement('span');
+    name.className = 'initiative-bar-popover-name';
+    name.textContent = token.label || '—';
+    head.appendChild(name);
+    popover.appendChild(head);
+
+    // HP bar (shared HPs only — GM-only HPs hide here too because
+    // the popover may be visible to a Spectator running their bar).
+    if (token.hp && token.hp.visibility === 'shared') {
+      const hpRow = document.createElement('div');
+      hpRow.className = 'initiative-bar-popover-hp-row';
+      const bar = document.createElement('div');
+      bar.className = 'initiative-bar-popover-hp-bar';
+      const fill = document.createElement('div');
+      fill.className = 'initiative-bar-popover-hp-fill';
+      const frac = hpFraction(token.hp);
+      fill.style.width = `${Math.round(frac * 100)}%`;
+      fill.style.backgroundColor = hpBarColor(frac);
+      bar.appendChild(fill);
+      hpRow.appendChild(bar);
+      const text = document.createElement('span');
+      text.className = 'initiative-bar-popover-hp-text';
+      text.textContent = `${token.hp.current} / ${token.hp.max} HP`;
+      hpRow.appendChild(text);
+      popover.appendChild(hpRow);
+    }
+
+    // Conditions row.
+    if (token.conditions.length > 0) {
+      const condRow = document.createElement('div');
+      condRow.className = 'initiative-bar-popover-conditions';
+      for (const id of token.conditions) {
+        const preset = getConditionPreset(id);
+        const chip = document.createElement('span');
+        chip.className = 'initiative-bar-popover-condition-chip';
+        chip.textContent = preset?.label ?? id;
+        chip.style.backgroundColor = preset?.color ?? '#888';
+        condRow.appendChild(chip);
+      }
+      popover.appendChild(condRow);
+    }
+  }
+
+  function positionPopover(): void {
+    const r = labelEl.getBoundingClientRect();
+    // Anchor below the label, centered. The CSS uses
+    // `position: fixed` so we can use viewport coords directly.
+    popover.style.left = `${r.left + r.width / 2}px`;
+    popover.style.top = `${r.bottom + 6}px`;
+    popover.style.transform = 'translateX(-50%)';
+  }
+
+  function showPopover(): void {
+    const tok = activeTokenFor(store.getState());
+    if (!tok) return;
+    renderPopoverFor(tok);
+    popover.hidden = false;
+    positionPopover();
+  }
+
+  function hidePopover(): void {
+    popover.hidden = true;
+  }
+
+  labelEl.addEventListener('mouseenter', showPopover);
+  labelEl.addEventListener('mouseleave', hidePopover);
+  labelEl.addEventListener('focus', showPopover);
+  labelEl.addEventListener('blur', hidePopover);
 
   const controls = document.createElement('div');
   controls.className = 'initiative-bar-controls';

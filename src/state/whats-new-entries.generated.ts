@@ -15,6 +15,11 @@ import type { WhatsNewEntry } from './whats-new.js';
 
 export const GENERATED_WHATS_NEW_ENTRIES: readonly WhatsNewEntry[] = [
   {
+    version: '1.39.0',
+    date: '2026-05-05',
+    highlights: ['Hover popover on the active initiative entry'],
+  },
+  {
     version: '1.38.0',
     date: '2026-05-05',
     highlights: ['Token thumbnail in initiative-bar pip'],
@@ -128,10 +133,5 @@ export const GENERATED_WHATS_NEW_ENTRIES: readonly WhatsNewEntry[] = [
     version: '1.16.0',
     date: '2026-05-04',
     highlights: ['Universal VTT (.dd2vtt / .uvtt) import'],
-  },
-  {
-    version: '1.15.0',
-    date: '2026-05-04',
-    highlights: ['Map rotate / flip H/V'],
   },
 ];

@@ -7,7 +7,7 @@ export const APP_NAME = 'GM Encounter Maps';
  * release commit (no auto-injection from package.json — keeps the
  * value visible in source so version drift is reviewable).
  */
-export const APP_VERSION = '1.38.0';
+export const APP_VERSION = '1.39.0';
 export const WHATS_NEW_LAST_SEEN_KEY = 'gm-encounter-maps-last-seen-version';
 
 export const STORAGE_KEY = 'gm-encounter-maps-state';
