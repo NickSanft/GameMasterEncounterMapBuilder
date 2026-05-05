@@ -102,6 +102,18 @@ export function mergeImportState(
     tilePaints: takeGrid
       ? imported.tilePaints.map((t) => ({ ...t }))
       : base.tilePaints.map((t) => ({ ...t })),
+    // Phase 158 — travel routes ride with annotations: both are
+    // overlay polylines/pins the GM authors on the map. Imported
+    // when the user opts in to `annotations`; otherwise left alone.
+    travelRoutes: selection.annotations
+      ? imported.travelRoutes.map((r) => ({
+          ...r,
+          points: r.points.map((p) => ({ ...p })),
+        }))
+      : base.travelRoutes.map((r) => ({
+          ...r,
+          points: r.points.map((p) => ({ ...p })),
+        })),
   };
 }
 

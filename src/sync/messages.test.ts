@@ -527,6 +527,94 @@ describe('serializeState / deserializeState', () => {
     });
   });
 
+  describe('Phase 158 — travel routes', () => {
+    it('defaults travelRoutes to [] for legacy saves (pre-158)', () => {
+      const legacy = serializeState(createDefaultState());
+      delete (legacy as Partial<typeof legacy>).travelRoutes;
+      const restored = deserializeState(legacy);
+      expect(restored.travelRoutes).toEqual([]);
+    });
+
+    it('round-trips a 3-point GM-only route', () => {
+      const state = createDefaultState();
+      state.travelRoutes.push({
+        id: 'r1',
+        color: '#ff8800',
+        visibility: 'gm',
+        points: [
+          { x: 100, y: 200 },
+          { x: 300, y: 250 },
+          { x: 500, y: 100 },
+        ],
+      });
+      const restored = deserializeState(serializeState(state));
+      expect(restored.travelRoutes).toHaveLength(1);
+      expect(restored.travelRoutes[0]!.points).toHaveLength(3);
+      expect(restored.travelRoutes[0]!.color).toBe('#ff8800');
+      expect(restored.travelRoutes[0]!.visibility).toBe('gm');
+    });
+
+    it('drops routes with fewer than 2 points (defensive)', () => {
+      const state = serializeState(createDefaultState());
+      (state as { travelRoutes?: unknown[] }).travelRoutes = [
+        { id: 'short', color: '#ff0000', points: [{ x: 0, y: 0 }] },
+      ];
+      const restored = deserializeState(state);
+      expect(restored.travelRoutes).toEqual([]);
+    });
+
+    it('drops routes with non-finite coords (defensive)', () => {
+      const state = serializeState(createDefaultState());
+      (state as { travelRoutes?: unknown[] }).travelRoutes = [
+        {
+          id: 'bad',
+          color: '#000',
+          points: [
+            { x: 0, y: NaN },
+            { x: 100, y: 100 },
+          ],
+        },
+      ];
+      const restored = deserializeState(state);
+      // The NaN point is dropped; only one valid point remains —
+      // route fails the >=2 threshold and is itself dropped.
+      expect(restored.travelRoutes).toEqual([]);
+    });
+
+    it('collapses unknown visibility to "gm" (defensive)', () => {
+      const state = serializeState(createDefaultState());
+      (state as { travelRoutes?: unknown[] }).travelRoutes = [
+        {
+          id: 'r',
+          color: '#ff0',
+          visibility: 'public',
+          points: [
+            { x: 0, y: 0 },
+            { x: 100, y: 100 },
+          ],
+        },
+      ];
+      const restored = deserializeState(state);
+      expect(restored.travelRoutes).toHaveLength(1);
+      expect(restored.travelRoutes[0]!.visibility).toBe('gm');
+    });
+
+    it('preserves "shared" visibility', () => {
+      const state = createDefaultState();
+      state.travelRoutes.push({
+        id: 'r',
+        color: '#0f0',
+        visibility: 'shared',
+        points: [
+          { x: 0, y: 0 },
+          { x: 100, y: 0 },
+        ],
+      });
+      const restored = deserializeState(serializeState(state));
+      expect(restored.travelRoutes[0]!.visibility).toBe('shared');
+    });
+  });
+
   describe('Phase 156 — token vehicle (parentId field)', () => {
     it('treats missing `parentId` as null (legacy saves are unparented)', () => {
       const legacy = {

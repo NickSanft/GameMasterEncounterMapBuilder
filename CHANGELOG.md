@@ -131,6 +131,65 @@ gaps so the v1.0 cut is genuinely "stable + remote-play-capable."
 
 ---
 
+## [1.33.0] — 2026-05-05 — Travel route polylines
+
+Phase 158 — fifth of the v1.29 → v1.36 batch. Adds a new `TravelRoute` entity and a Travel tool (`G`) for dropping persistent multi-point routes on the map. Each route renders as a colored polyline with waypoint pips and a total-distance label, and survives scene loads / sync to the Spectator.
+
+### Added
+- **`TravelRoute` type** in `src/state/types.ts`: `{ id, points: Array<{x,y}>, color, visibility }`. Visibility is `'gm' | 'shared'` (mirrors `DrawStroke.visibility`); GM-only routes hide on the Spectator canvas.
+- **`SessionState.travelRoutes: TravelRoute[]`** field with defensive deserialize. Pre-158 sessions default to `[]`. The serializer emits the field only when non-empty (forward-only minimal-emit pattern from Phase 142 / 156).
+- **New StatePatch kinds** — `'travel-route-add' | 'travel-route-update' | 'travel-route-remove' | 'travel-routes-clear'`. Store handlers + snapshot inclusion + coalesceKey for `travel-route-update` so consecutive updates collapse in undo history.
+- **`src/state/travel-routes.ts`** (new) — pure helpers: `routeTotalWorldPx(route)` (Euclidean polyline length), `formatRouteDistance(worldPx, cellSize, feetPerSquare, unit)` (renders `"42 ft"` or `"8 sq"` based on the active distance unit). 11 unit tests.
+- **`src/render/layer-travel.ts`** (new) — renders all routes above the annotation layer: thick colored polyline + waypoint pips (5 px white-outlined) + a total-distance label box anchored at the last point. GM-only routes get a dashed white halo so the GM sees at a glance which routes are hidden from players (mirrors the Phase 56 wall + Phase 56 stroke GM-only halo).
+- **`src/input/tool-travel.ts`** (new) — Travel tool. Click points to extend the polyline; double-click / Enter commits; Esc / right-click / tool-deactivate cancels. Single-click without follow-up leaves a 1-point route that's silently abandoned (the commit threshold is 2+ points).
+- **Toolbar entry** — "Travel (G)" button between Paint and the divider. Same `data-tool="travel"` attribute as the other tool buttons.
+- **Keybinding** — added `tool-travel` to `TOOL_KEYBINDING_ACTIONS` (default key `g`). The Phase 153 keybindings tab + tests bumped from 11 → 12 actions.
+- **Command palette entries** — "Switch to Travel tool" and "Clear all travel routes" (group: Tools). Per-route delete is deferred to a future polish (no canvas hit-test for routes in v158).
+- **Import/merge integration** — travel routes ride with `selection.annotations` in `mergeImportState`. Importing annotations from another scene also imports its travel routes.
+
+### Why this matters
+The Phase 31 ruler is transient — releasing the pointer wipes the measurement. Pre-158 the GM had no way to KEEP a measurement on the map (e.g., "the party walks 600 ft from town to dungeon"). Post-158 the Travel tool drops a persistent polyline that:
+- Survives scene loads + sync (it's part of `SessionState`).
+- Shows the total distance in feet or squares (whichever unit the GM has set).
+- Can be GM-private (route planning) or `shared` (give players the journey path).
+
+Use cases:
+- **Overland travel**: mark the route from one location to another with the total distance label so the GM doesn't have to remeasure on every session resume.
+- **Patrol paths**: drop a closed polyline showing a guard's beat.
+- **NPC movement plan**: the GM authors a route the NPC will follow; clicking it during play gives a quick reminder of where they're going.
+
+### Architecture
+- **Pure helpers under `state/travel-routes.ts`** — `routeTotalWorldPx` is just the sum of segment lengths; `formatRouteDistance` is unit-aware. No DOM, no I/O. Same pattern as `state/aura.ts` / `state/conditions.ts`.
+- **Render layer paints above annotations** — annotations are pin-style markers; travel routes are journey overlays. Painting routes on top of annotations means the distance label isn't covered by stroke / pin labels at the same anchor point.
+- **The `getTravelPreview` renderer hook** mirrors the Phase 56 `getDrawPreview` pattern: an in-flight polyline lives in a ref the tool updates each click; the renderer reads it for the dashed-with-lower-opacity preview rendering. Pre-commit, the route never touches the store — undo doesn't see partial routes.
+- **Forward-only over the wire** — pre-158 peers will drop the field on receive (same forward-only pattern as Phase 109's `hiddenTokenIds`, Phase 154's `locked`, Phase 156's `parentId`).
+
+### UX details
+- **Single click to add points; double-click to commit.** A single-click without a follow-up (the user just clicked once and walked away) leaves a 1-point overlay that's silently dropped on tool-switch.
+- **Right-click / Esc cancels.** Both gestures discard the in-flight polyline. `contextmenu` is suppressed while the tool is active so right-click reads as "cancel" not "open native menu."
+- **No rubber-band preview between clicks for v158.** The next-segment guidance is deferred — the tool ships lean. Future polish: dashed segment from last-committed point to the cursor, similar to the Walls tool's chain preview.
+- **No per-route delete affordance in v158.** Right-click hit-testing on routes is a future polish (the existing Select tool's hit-test only knows about tokens / annotations / AoEs / walls). The "Clear all travel routes" palette command is the v1 escape hatch + Ctrl+Z always reverts the most recent commit.
+- **Default visibility is GM-only.** Same default as the Phase 56 Draw tool's strokes — routes are usually GM prep notes, not player-shared content.
+
+### Tests
+- **+11 unit tests** in `src/state/travel-routes.test.ts` (new): `routeTotalWorldPx` (empty / 1-point / horizontal / Pythagorean / multi-segment / closed loop), `formatRouteDistance` (squares / feet / non-integer / zero cellSize / custom feetPerSquare).
+- **+6 unit tests** in `src/sync/messages.test.ts`: pre-158 default, round-trip, drop short routes, drop NaN coords, collapse unknown visibility, preserve "shared".
+- **+4 Playwright specs** in `e2e/travel-routes.spec.ts` (new): toolbar button, keyboard `g` activates the tool, palette "Clear all travel routes" entry, Settings → Keybindings shows the new row.
+- **All 1630 unit tests + 396 Playwright specs pass** locally.
+
+### Bundle
+- 115.22 / 120 KB initial-load brotli (+0.96 KB for the new tool + render layer + helpers + entity wiring + command palette entries).
+- Lazy chunks 20.05 / 21 KB unchanged. CSS unchanged.
+
+### Pre-push checklist
+- typecheck: clean.
+- unit suite: 1630 passing.
+- e2e suite: 396 passing.
+- visual regression: all baselines green (no canvas-visible default-state changes).
+- size-limit: all 5 budgets green.
+
+---
+
 ## [1.32.0] — 2026-05-05 — Per-scene GM notes
 
 Phase 157 — fourth of the v1.29 → v1.36 batch. The Notes panel was previously a single global scratchpad shared across every scene. Post-157 it's per-scene — switching to a different scene swaps the textarea content. Pre-157 notes are honored as a fallback for fresh scenes that haven't been authored yet, so users upgrading don't lose their existing content.

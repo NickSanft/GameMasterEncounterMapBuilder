@@ -11,8 +11,10 @@ import {
 } from './keybindings.js';
 
 describe('TOOL_KEYBINDING_ACTIONS (Phase 153)', () => {
-  it('lists 11 tool-activation actions', () => {
-    expect(TOOL_KEYBINDING_ACTIONS.length).toBe(11);
+  it('lists 12 tool-activation actions', () => {
+    // Phase 158 added `tool-travel` (default 'g') to the original
+    // 11 tool-activation actions.
+    expect(TOOL_KEYBINDING_ACTIONS.length).toBe(12);
   });
 
   it('every action has a unique id', () => {

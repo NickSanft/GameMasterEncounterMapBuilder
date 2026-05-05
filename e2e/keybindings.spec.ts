@@ -4,7 +4,7 @@
 import { test, expect } from '@playwright/test';
 
 test.describe('Phase 153 — keybindings tab', () => {
-  test('Keybindings tab is present in the Settings modal with 11 rows', async ({
+  test('Keybindings tab is present in the Settings modal with 12 rows', async ({
     page,
   }) => {
     await page.goto('./gm.html');
@@ -13,7 +13,8 @@ test.describe('Phase 153 — keybindings tab', () => {
     const dialog = page.getByRole('dialog', { name: 'Settings' });
     await expect(dialog).toBeVisible();
     await dialog.getByRole('tab', { name: 'Keybindings' }).click();
-    await expect(dialog.locator('.keybinding-row')).toHaveCount(11);
+    // Phase 158 added `tool-travel` to the original 11.
+    await expect(dialog.locator('.keybinding-row')).toHaveCount(12);
     // Every row has a label + key + Rebind button.
     await expect(dialog.locator('.keybinding-key').first()).toBeVisible();
     await expect(dialog.locator('.keybinding-rebind').first()).toBeVisible();

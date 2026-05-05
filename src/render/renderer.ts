@@ -33,6 +33,7 @@ import {
   type MovementIndicatorStyle,
 } from './layer-movement-indicator.js';
 import { drawStrokes } from './layer-strokes.js';
+import { drawTravelRoutes } from './layer-travel.js';
 import { drawWalls } from './layer-walls.js';
 import { drawLosPolygons } from './layer-los.js';
 import { drawLighting } from './layer-lighting.js';
@@ -120,6 +121,14 @@ interface CreateRendererOptions {
   getRulerTargetFeet?(): number | null;
   /** Optional in-progress stroke (pre-commit) for the Draw tool. */
   getDrawPreview?(): DrawStroke | null;
+  /**
+   * Phase 158 — in-progress travel route preview from the Travel
+   * tool. Returns the polyline-so-far (with at least 1 point)
+   * while the GM is dropping waypoints; the route layer paints it
+   * dashed-with-lower-opacity until the GM finishes via dblclick /
+   * Enter / Esc.
+   */
+  getTravelPreview?(): import('../state/types.js').TravelRoute | null;
   /**
    * Optional precomputed run-length-compacted fog rectangles. Set by
    * the entry when the fog WebWorker pipeline is available — saves an
@@ -235,6 +244,7 @@ export function createRenderer(opts: CreateRendererOptions): Renderer {
     getSpectatorViewport,
     getRulerTargetFeet,
     getDrawPreview,
+    getTravelPreview,
     getFogRects,
     getWallsOverlay,
     getBlockPreview,
@@ -384,6 +394,17 @@ export function createRenderer(opts: CreateRendererOptions): Renderer {
       mode,
       highlightIds: highlights,
       dragOverlay,
+    });
+    // Phase 158 — travel routes paint above annotations so the
+    // total-distance label isn't covered by stroke / pin labels at
+    // the same anchor point. GM-only routes are skipped on the
+    // Spectator canvas inside `drawTravelRoutes`.
+    drawTravelRoutes(ctx, state.travelRoutes, {
+      mode,
+      cellSize: state.grid.cellSize,
+      feetPerSquare: getPreferences ? getPreferences().feetPerSquare : 5,
+      distanceUnit: getPreferences ? getPreferences().distanceUnit : 'squares',
+      preview: getTravelPreview ? getTravelPreview() : null,
     });
     // GM walls render above annotations but below the live interaction
     // overlays (fog preview, measurement, pings). The 0.84.1 reorder

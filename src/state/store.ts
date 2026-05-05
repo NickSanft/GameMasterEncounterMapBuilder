@@ -55,6 +55,12 @@ function snapshot(s: SessionState): SessionState {
     // record (id + cellX + cellY + kind), so a shallow clone per
     // entry is sufficient.
     tilePaints: s.tilePaints.map((t) => ({ ...t })),
+    // Phase 158 — clone travel-route polylines + their points so
+    // undo/redo doesn't share point arrays across snapshots.
+    travelRoutes: s.travelRoutes.map((r) => ({
+      ...r,
+      points: r.points.map((p) => ({ ...p })),
+    })),
   };
 }
 
@@ -74,6 +80,8 @@ function coalesceKey(patch: StatePatch): string | null {
       return `initiative-update:${patch.id}`;
     case 'stroke-update':
       return `stroke-update:${patch.id}`;
+    case 'travel-route-update':
+      return `travel-route-update:${patch.id}`;
     default:
       return null;
   }
@@ -370,6 +378,32 @@ export function createStore(initial?: SessionState): Store {
       case 'tile-paint-clear':
         if (state.tilePaints.length === 0) return;
         state = { ...state, tilePaints: [] };
+        break;
+      case 'travel-route-add':
+        state = {
+          ...state,
+          travelRoutes: [...state.travelRoutes, patch.route],
+        };
+        break;
+      case 'travel-route-update': {
+        const idx = state.travelRoutes.findIndex((r) => r.id === patch.id);
+        if (idx === -1) return;
+        const existing = state.travelRoutes[idx]!;
+        const next = { ...existing, ...patch.changes };
+        const routes = state.travelRoutes.slice();
+        routes[idx] = next;
+        state = { ...state, travelRoutes: routes };
+        break;
+      }
+      case 'travel-route-remove': {
+        const filtered = state.travelRoutes.filter((r) => r.id !== patch.id);
+        if (filtered.length === state.travelRoutes.length) return;
+        state = { ...state, travelRoutes: filtered };
+        break;
+      }
+      case 'travel-routes-clear':
+        if (state.travelRoutes.length === 0) return;
+        state = { ...state, travelRoutes: [] };
         break;
       case 'session-reset':
         state = patch.state;

@@ -94,6 +94,13 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW_ENTRIES: readonly WhatsNewEntry[] = [
   {
+    version: '1.33.0',
+    date: '2026-05-05',
+    highlights: [
+      'Travel routes — new Travel tool (G) drops persistent waypoints with a total-distance label. Routes survive scene reloads.',
+    ],
+  },
+  {
     version: '1.32.0',
     date: '2026-05-05',
     highlights: [

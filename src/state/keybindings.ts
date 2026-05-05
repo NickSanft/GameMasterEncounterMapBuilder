@@ -46,6 +46,7 @@ export const TOOL_KEYBINDING_ACTIONS: readonly KeybindingAction[] = [
   { id: 'tool-draw', defaultKey: 'k', label: 'Draw / ink tool', toolId: 'draw' },
   { id: 'tool-walls', defaultKey: 'w', label: 'Walls tool', toolId: 'walls' },
   { id: 'tool-tile-paint', defaultKey: 'p', label: 'Tile-paint tool', toolId: 'tile-paint' },
+  { id: 'tool-travel', defaultKey: 'g', label: 'Travel route tool', toolId: 'travel' },
 ];
 
 /**

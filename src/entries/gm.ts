@@ -39,6 +39,11 @@ import { RULER_PRESETS } from '../state/ruler.js';
 import { createAoeTool, createAoeToolOptionsRef } from '../input/tool-aoe.js';
 import { createDrawTool, createDrawToolOptionsRef } from '../input/tool-draw.js';
 import {
+  createTravelTool,
+  createTravelToolOptionsRef,
+  createTravelOverlayRef,
+} from '../input/tool-travel.js';
+import {
   createWallsTool,
   createWallsToolOptionsRef,
   createBlockPreviewRef,
@@ -301,6 +306,9 @@ const drawToolOptionsRef = createDrawToolOptionsRef({
   width: DEFAULT_STROKE_WIDTH,
   visibility: 'shared',
 });
+// Phase 158 — travel-tool overlay + options.
+const travelOverlayRef = createTravelOverlayRef();
+const travelToolOptionsRef = createTravelToolOptionsRef();
 const rulerToolOptionsRef = createRulerToolOptionsRef();
 const aoeToolOptionsRef = createAoeToolOptionsRef({
   kind: 'sphere',
@@ -378,6 +386,8 @@ const renderer = createRenderer({
   getSpectatorViewport,
   getRulerTargetFeet: () => rulerToolOptionsRef.current.targetFeet,
   getDrawPreview: () => drawOverlayRef.current,
+  // Phase 158 — travel-route in-flight preview from the Travel tool.
+  getTravelPreview: () => travelOverlayRef.current,
   getFogRects: () => fogWorkerClient.getLatest(),
   getWallsOverlay: () => wallsOverlayRef.current,
   // Phase 112 — block-mode drag preview (Walls tool, GM only).
@@ -617,6 +627,13 @@ toolManager.register(
     drawOptions: drawToolOptionsRef,
   }),
 );
+toolManager.register(
+  createTravelTool({
+    ...inputContext,
+    travelOverlay: travelOverlayRef,
+    travelOptions: travelToolOptionsRef,
+  }),
+);
 // Phase 112 — Walls tool options (line vs block mode) + the
 // drag-time block preview ref. Both passed into the tool + the
 // settings panel so the GM can flip between modes mid-session.
@@ -646,6 +663,7 @@ const toolbarHandle = mountToolbar(
     { id: 'draw', label: 'Draw (K)', title: 'Freehand ink on the map. Right-click a stroke to delete or toggle visibility.' },
     { id: 'walls', label: 'Walls (W)', title: 'Click to drop wall vertices; Escape / right-click / double-click ends the chain. Walls are GM-only — sight-blocking walls occlude both viewer line-of-sight and token light sources.' },
     { id: 'tile-paint', label: 'Paint (P)', title: 'Phase 142 — paint colored tiles (floor / wall / water / rough / pit) on the grid. Cosmetic visual layer; doesn\'t affect LoS or movement.' },
+    { id: 'travel', label: 'Travel (G)', title: 'Phase 158 — drop waypoints to mark a travel route. Double-click or Enter finishes; Escape / right-click cancels. Routes persist with the scene; right-click an existing route on the canvas to delete it.' },
   ],
   [
     {
@@ -3641,6 +3659,7 @@ function slugForFilename(name: string): string {
     { id: 'tool-aoe', label: 'Switch to AoE tool', tool: 'aoe' },
     { id: 'tool-draw', label: 'Switch to Draw tool', tool: 'draw' },
     { id: 'tool-walls', label: 'Switch to Walls tool', tool: 'walls' },
+    { id: 'tool-travel', label: 'Switch to Travel tool', tool: 'travel' },
   ];
   for (const t of tools) {
     reg.register({
@@ -3880,6 +3899,28 @@ function slugForFilename(name: string): string {
       if (ok) {
         store.resetSession();
         announcer.announce('New session started.');
+      }
+    },
+  });
+
+  // Phase 158 — clear-all-routes palette command. Per-route delete
+  // is deferred (no canvas hit-test for routes in v158); clearing
+  // everything is the v1 escape hatch.
+  reg.register({
+    id: 'clear-travel-routes',
+    label: 'Clear all travel routes',
+    group: 'Tools',
+    run: () => {
+      const count = store.getState().travelRoutes.length;
+      if (count === 0) return;
+      const ok = window.confirm(
+        `Erase all ${count} travel route${count === 1 ? '' : 's'}? This can be undone.`,
+      );
+      if (ok) {
+        store.applyPatch({ kind: 'travel-routes-clear' });
+        announcer.announce(
+          `${count} travel route${count === 1 ? '' : 's'} cleared.`,
+        );
       }
     },
   });

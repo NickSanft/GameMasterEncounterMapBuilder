@@ -15,6 +15,8 @@ import type {
   TokenHp,
   TokenLight,
   TimeOfDay,
+  TravelRoute,
+  TravelRouteVisibility,
   Wall,
   WeatherKind,
 } from '../state/types.js';
@@ -140,6 +142,37 @@ function normalizeTilePaints(raw: unknown): TilePaint[] {
   return out;
 }
 
+/**
+ * Phase 158 — defensive parser for `travelRoutes: TravelRoute[]`.
+ * Drops malformed entries (non-string id, missing/short points
+ * array, non-finite coords, unknown visibility). Returns `[]` for
+ * non-array input.
+ */
+function normalizeTravelRoutes(raw: unknown): TravelRoute[] {
+  if (!Array.isArray(raw)) return [];
+  const out: TravelRoute[] = [];
+  for (const v of raw) {
+    if (!v || typeof v !== 'object') continue;
+    const r = v as Partial<TravelRoute>;
+    if (typeof r.id !== 'string' || r.id.length === 0) continue;
+    if (!Array.isArray(r.points)) continue;
+    const points: Array<{ x: number; y: number }> = [];
+    for (const p of r.points) {
+      if (!p || typeof p !== 'object') continue;
+      const pt = p as { x?: unknown; y?: unknown };
+      if (typeof pt.x !== 'number' || !Number.isFinite(pt.x)) continue;
+      if (typeof pt.y !== 'number' || !Number.isFinite(pt.y)) continue;
+      points.push({ x: pt.x, y: pt.y });
+    }
+    if (points.length < 2) continue;
+    const color = typeof r.color === 'string' && r.color ? r.color : '#5eaaff';
+    const visibility: TravelRouteVisibility =
+      r.visibility === 'shared' ? 'shared' : 'gm';
+    out.push({ id: r.id, points, color, visibility });
+  }
+  return out;
+}
+
 function normalizeLight(light: unknown): TokenLight | null {
   if (!light || typeof light !== 'object') return null;
   const l = light as Partial<TokenLight>;
@@ -185,6 +218,11 @@ export interface SerializedSessionState {
    * pre-142 saves load with `[]` defaulted by `deserializeState`.
    */
   tilePaints?: TilePaint[];
+  /**
+   * Phase 158 — travel-route polylines. Optional + back-compat the
+   * same way as `tilePaints`.
+   */
+  travelRoutes?: TravelRoute[];
 }
 
 export type SerializablePatch =
@@ -541,6 +579,15 @@ export function serializeState(s: SessionState): SerializedSessionState {
     ...(s.tilePaints.length > 0
       ? { tilePaints: s.tilePaints.map((t) => ({ ...t })) }
       : {}),
+    // Phase 158 — same minimal-emit pattern for travel-routes.
+    ...(s.travelRoutes.length > 0
+      ? {
+          travelRoutes: s.travelRoutes.map((r) => ({
+            ...r,
+            points: r.points.map((p) => ({ ...p })),
+          })),
+        }
+      : {}),
   };
 }
 
@@ -810,6 +857,11 @@ export function deserializeState(s: SerializedSessionState): SessionState {
     // to []. Each entry defensively validated via `normalizeTilePaints`.
     tilePaints: normalizeTilePaints(
       (s as { tilePaints?: unknown }).tilePaints,
+    ),
+    // Phase 158 — pre-158 saves don't carry `travelRoutes`;
+    // default to []. Validated via `normalizeTravelRoutes`.
+    travelRoutes: normalizeTravelRoutes(
+      (s as { travelRoutes?: unknown }).travelRoutes,
     ),
   };
 }

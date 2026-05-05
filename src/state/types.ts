@@ -517,6 +517,32 @@ export interface TilePaint {
   kind: TilePaintKind;
 }
 
+/**
+ * Phase 158 — a multi-point travel route. Persists between session
+ * loads (unlike the Phase 31 ruler, which is a transient
+ * measurement). Used for marking journeys, patrol paths, "the party
+ * walks from town to dungeon" overlays. Each segment between
+ * adjacent points contributes to the total distance label rendered
+ * at the route's last point.
+ *
+ * `points` are world coordinates with at least 2 entries (a route
+ * with one point is uninteresting; the tool only commits with 2+).
+ *
+ * Visibility:
+ *   - `'gm'` — drawn only on the GM canvas (private route planning).
+ *   - `'shared'` — drawn on both GM + Spectator canvases (the GM
+ *     wants the players to see the route). Default `'gm'` so GMs
+ *     don't accidentally leak prep notes.
+ */
+export type TravelRouteVisibility = 'gm' | 'shared';
+
+export interface TravelRoute {
+  id: ID;
+  points: Array<{ x: number; y: number }>;
+  color: string;
+  visibility: TravelRouteVisibility;
+}
+
 export interface SessionState {
   version: 1;
   grid: GridConfig;
@@ -547,6 +573,12 @@ export interface SessionState {
    * Phase 109's `hiddenTokenIds`, Phase 139's `auras`).
    */
   tilePaints: TilePaint[];
+  /**
+   * Phase 158 — persistent travel-route polylines. Default `[]`.
+   * Pre-158 sessions don't carry the field; `deserializeState`
+   * defaults missing values to `[]`. Forward-only over the wire.
+   */
+  travelRoutes: TravelRoute[];
 }
 
 export interface Camera {
@@ -606,6 +638,14 @@ export type StatePatch =
   | { kind: 'tile-paint-add'; tile: TilePaint }
   | { kind: 'tile-paint-remove'; id: ID }
   | { kind: 'tile-paint-clear' }
+  | { kind: 'travel-route-add'; route: TravelRoute }
+  | {
+      kind: 'travel-route-update';
+      id: ID;
+      changes: Partial<Omit<TravelRoute, 'id'>>;
+    }
+  | { kind: 'travel-route-remove'; id: ID }
+  | { kind: 'travel-routes-clear' }
   | { kind: 'session-reset'; state: SessionState };
 
 export const DEFAULT_GRID: GridConfig = {
@@ -651,5 +691,6 @@ export function createDefaultState(): SessionState {
     weather: 'none',
     timeOfDay: 'none',
     tilePaints: [],
+    travelRoutes: [],
   };
 }
