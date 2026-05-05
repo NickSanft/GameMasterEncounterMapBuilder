@@ -219,6 +219,7 @@ import {
   ZOOM_BUTTON_STEP,
 } from '../render/camera-controls.js';
 import { tokenCenterWorld } from '../state/grid-coords.js';
+import { gridDistance, formatDistance } from '../state/distance.js';
 import type { PanZoomHandle } from '../input/pan-zoom.js';
 import { EXPORT_FILENAME_PREFIX } from '../util/constants.js';
 import { isEditableFocus } from '../util/focus.js';
@@ -1473,6 +1474,84 @@ const cameraBookmarksModal = mountCameraBookmarksModal({
  * (e.g. user presses Alt+5 on a scene with two bookmarks).
  */
 /**
+ * Phase 168 — right-click "Distance to…" measurement. The GM
+ * right-clicks token A, picks "Distance to…", then clicks any
+ * token B; the distance from A to B is computed and announced.
+ * Single-shot: the next pointer-down on the canvas fires the
+ * computation regardless of whether a token is hit (a miss
+ * cancels). Esc also cancels.
+ *
+ * Uses the existing `gridDistance` helper + the active
+ * `diagonalRule` + `distanceUnit` preference so the readout
+ * matches the ruler's units.
+ */
+function startDistanceFromToken(source: Token): void {
+  // Read source data NOW since the user could move/edit the token
+  // before clicking the target. We snapshot label + cell coords.
+  const sourceLabel = source.label || 'Token';
+  const sourceX = source.x;
+  const sourceY = source.y;
+  announcer.announce(
+    `Click another token to measure distance from ${sourceLabel}. Esc to cancel.`,
+  );
+  canvas.style.cursor = 'crosshair';
+
+  function cleanup(): void {
+    canvas.removeEventListener('pointerdown', onPick, true);
+    window.removeEventListener('keydown', onCancel, true);
+    canvas.style.cursor = '';
+  }
+
+  function onCancel(e: KeyboardEvent): void {
+    if (e.key === 'Escape') {
+      cleanup();
+      announcer.announce('Distance measurement cancelled.');
+      e.preventDefault();
+    }
+  }
+
+  function onPick(e: PointerEvent): void {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    cleanup();
+    const rect = canvas.getBoundingClientRect();
+    const sx = e.clientX - rect.left;
+    const sy = e.clientY - rect.top;
+    const camera = renderer.camera;
+    const wx = sx / camera.zoom + camera.x;
+    const wy = sy / camera.zoom + camera.y;
+    const state = store.getState();
+    const cellSize = state.grid.cellSize;
+    // Hit-test: which token contains the world point?
+    const target = state.tokens.find((t) => {
+      const cx = (t.x + t.size / 2) * cellSize;
+      const cy = (t.y + t.size / 2) * cellSize;
+      const r = (t.size * cellSize) / 2;
+      const ddx = wx - cx;
+      const ddy = wy - cy;
+      return ddx * ddx + ddy * ddy <= r * r;
+    });
+    if (!target || target.id === source.id) {
+      announcer.announce('No target token at that point.');
+      return;
+    }
+    // Cell-distance via the active diagonal rule.
+    const dxCells = target.x - sourceX;
+    const dyCells = target.y - sourceY;
+    const prefs = preferences.get();
+    const cells = gridDistance(dxCells, dyCells, prefs.diagonalRule);
+    const text = formatDistance(cells, prefs.distanceUnit, prefs.feetPerSquare);
+    announcer.announce(
+      `${sourceLabel} → ${target.label || 'Token'}: ${text}`,
+    );
+  }
+
+  canvas.addEventListener('pointerdown', onPick, true);
+  window.addEventListener('keydown', onCancel, true);
+}
+
+/**
  * Phase 167 — contextual fit. When the user has selected tokens,
  * tween-fit the camera to that selection's bounding box. Empty
  * selection falls through to the pre-167 `fitToContent` (whole-
@@ -2155,6 +2234,10 @@ canvas.addEventListener('contextmenu', (e) => {
 
     items.push(
       { label: 'Edit token…', onClick: () => tokenEditor.openFor(hit) },
+      {
+        label: 'Distance to…',
+        onClick: () => startDistanceFromToken(hit),
+      },
       {
         label: `Damage / Heal${hpTargets.length > 1 ? ` (${hpTargets.length})` : ''}…`,
         disabled: hpTargets.length === 0,

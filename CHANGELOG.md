@@ -131,6 +131,48 @@ gaps so the v1.0 cut is genuinely "stable + remote-play-capable."
 
 ---
 
+## [1.43.0] — 2026-05-05 — Right-click "Distance to…"
+
+Phase 168 — seventh of the v1.37 → v1.55 batch. Right-click any token → "Distance to…" → click another token → the distance from A to B is announced via the live region using the active diagonal rule + distance unit.
+
+### Added
+- **"Distance to…" menu item** in the canvas context-menu's token-hit branch (`src/entries/gm.ts`). Sits between "Edit token…" and "Damage / Heal…" so it's a one-click reach for combat readouts.
+- **`startDistanceFromToken(source: Token)` helper** that:
+  - Snapshots the source token's label + cell coords (so a mid-flow token edit doesn't change the result).
+  - Announces "Click another token to measure distance from {label}. Esc to cancel." via the existing announcer.
+  - Sets the canvas cursor to `crosshair` for the duration.
+  - Listens once for a `pointerdown` on the canvas (capture phase, so it preempts the active tool's handler) — hit-tests the click against tokens, computes `gridDistance(dx, dy, diagonalRule)`, formats via `formatDistance(cells, unit, feetPerSquare)`, announces the result.
+  - Cleans up on Escape (window-level keydown, capture phase) or after the one-shot pick fires.
+
+### Why this matters
+Pre-168: GMs activated the Ruler tool (`L`), dragged from token A to token B, read the distance, hit Esc to clear. 4 actions for one measurement. Post-168: right-click → 1 menu pick → 1 click. The flow is targeted at "what's the distance from the wizard to the goblin for spell range?" — the ruler is still better for measuring arbitrary world points.
+
+Mirrors how Foundry's "Distance" right-click action and Roll20's `!distance` macro work; this is the lightweight built-in equivalent.
+
+### Architecture
+- **One-shot pointer hook in capture phase.** The canvas's active tool stays unchanged — the distance pick listens at the window/canvas top before the tool sees the event, consumes it, and uninstalls itself. No tool-mode swapping required.
+- **Source snapshot.** The source token's coords are captured at menu-pick time, not pick-target time. If the GM edits / moves the source between right-click and target-click, the readout still reflects the source's position when "Distance to…" was activated. Eliminates a class of confusing "wait, where was the wizard?" results.
+- **Diagonal rule + distance unit honored.** Same `gridDistance` + `formatDistance` helpers the ruler uses. A GM running 5e-alt diagonals + feet sees feet; a GM running chebyshev + squares sees squares.
+- **Self-distance is rejected.** If the second click hits the source token itself, the helper announces "No target token at that point." instead of producing a 0 readout that would confuse "did this work?"
+
+### Tests
+- **+1 Playwright spec** in `e2e/distance-to-token.spec.ts` (new): right-clicking a token shows the "Distance to…" menu item.
+- The actual measurement flow is announced via `aria-live`; the announcement isn't a stable assertion target across timing / themes, so the e2e focuses on the menu wiring.
+- **All 1654 unit tests + 406 Playwright specs pass** locally.
+
+### Bundle
+- 117.3 / 120 KB initial-load brotli (+0.27 KB for `startDistanceFromToken` helper + menu wire).
+- Lazy chunks 20.38 / 21 KB unchanged. CSS unchanged.
+
+### Pre-push checklist
+- typecheck: clean.
+- unit suite: 1654 passing.
+- e2e suite: 406 passing.
+- visual regression: all baselines green.
+- size-limit: all 5 budgets green.
+
+---
+
 ## [1.42.0] — 2026-05-05 — Fit-to-selection (`F`) + contextual fit
 
 Phase 167 — sixth of the v1.37 → v1.55 batch. The existing `F` keyboard shortcut + "Fit content to screen" palette command are now contextual: with tokens selected, they tween-fit to the selection's bounding box; with empty selection, they fall through to the pre-167 fit-to-content (whole-map fit). Same key, smarter behavior.
