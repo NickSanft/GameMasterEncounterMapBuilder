@@ -1449,7 +1449,13 @@ const cameraBookmarksModal = mountCameraBookmarksModal({
     if (!sceneId) return;
     const entry = listBookmarks(sceneId).find((b) => b.id === id);
     if (!entry) return;
-    renderer.camera = { ...entry.camera };
+    // Phase 166 — tween instead of snap. Reduced-motion users get
+    // an instant snap (the helper short-circuits on durationMs <= 0
+    // OR `reducedMotion: true`).
+    tweenCamera(renderer, entry.camera, {
+      durationMs: 250,
+      reducedMotion: preferences.get().reducedMotion,
+    });
     sendCameraIfBroadcasting();
     renderer.requestRender();
     announcer.announce(`Jumped to bookmark: ${entry.name}.`);
@@ -1472,7 +1478,11 @@ function jumpToBookmarkSlot(slot: number): void {
     announcer.announce(`No camera bookmark in slot ${slot}.`);
     return;
   }
-  renderer.camera = { ...entry.camera };
+  // Phase 166 — same tween treatment as the modal's Jump button.
+  tweenCamera(renderer, entry.camera, {
+    durationMs: 250,
+    reducedMotion: preferences.get().reducedMotion,
+  });
   sendCameraIfBroadcasting();
   renderer.requestRender();
   announcer.announce(`Jumped to bookmark: ${entry.name}.`);

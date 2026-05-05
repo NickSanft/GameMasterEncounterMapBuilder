@@ -131,6 +131,38 @@ gaps so the v1.0 cut is genuinely "stable + remote-play-capable."
 
 ---
 
+## [1.41.0] — 2026-05-05 — Smooth camera tween on bookmark jumps
+
+Phase 166 — fifth of the v1.37 → v1.55 batch. The Phase 102 camera bookmarks (modal Jump button + Alt+N quick-jump) now tween via the Phase 165 `tweenCamera` helper instead of snapping instantly. Less jarring, especially for Spectators with `followGmCamera` on.
+
+### Changed
+- **`onJump` handler** in the camera-bookmarks modal mount (`src/entries/gm.ts`) replaced the `renderer.camera = { ...entry.camera }` snap with a `tweenCamera` call. 250 ms ease-out cubic; reduced-motion users keep the instant snap behavior.
+- **`jumpToBookmarkSlot(slot)`** (Alt+N quick-jump) — same change. Both code paths now share the tween.
+
+### Why this matters
+Pre-166 hitting Alt+1 to jump to the "throne room" bookmark instantly teleported the viewport. Players watching the GM share their screen had no continuity cue. Post-166 the 250 ms tween provides a smooth pan that keeps spatial context intact. Same accessibility-respecting reduced-motion handling as Phase 165's auto-pan.
+
+### Architecture
+- **No new code, just reused infrastructure.** The `tweenCamera` helper from Phase 165 is doing all the work; this phase is two `renderer.camera = X` → `tweenCamera(renderer, X, ...)` swaps.
+- **Reduced-motion still works.** The tween helper short-circuits to an instant snap when `reducedMotion: true` so nothing regresses for users with the OS-level pref on.
+
+### Tests
+- Existing camera-bookmark e2e specs continue to pass (the assertions check the *final* camera position, not the path; tween → final is the same).
+- **All 1648 unit tests + 405 Playwright specs pass** locally.
+
+### Bundle
+- 116.75 / 120 KB initial-load brotli (unchanged — the change is just call-site swaps).
+- Lazy chunks 20.37 / 21 KB unchanged. CSS unchanged.
+
+### Pre-push checklist
+- typecheck: clean.
+- unit suite: 1648 passing.
+- e2e suite: 405 passing.
+- visual regression: all baselines green.
+- size-limit: all 5 budgets green.
+
+---
+
 ## [1.40.0] — 2026-05-05 — Auto-pan camera to the active initiative token
 
 Phase 165 — fourth of the v1.37 → v1.55 batch. New opt-in Settings → Camera → Initiative toggle. When ON, the camera tweens (250 ms ease-out cubic) to center the active initiative token whenever the turn advances. Introduces a shared `tweenCamera` helper that Phases 166 (bookmarks) and 167 (fit-to-selection) will reuse.
