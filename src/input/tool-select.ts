@@ -175,6 +175,20 @@ export function createSelectTool(ctx: InputContext): Tool {
         }
       }
       handleHitSelect(tokenHit.id, e.shiftKey);
+      // Phase 154 — when the click anchors on a locked token, the
+      // GM gets selection (so they can right-click → Edit /
+      // Unlock / Delete) but no drag starts. This mirrors CAD-app
+      // semantics: you grab where you grab; grabbing a pinned piece
+      // moves nothing. Locked tokens in a multi-selection are
+      // additionally filtered at commit time, so an unlocked-anchor
+      // drag of a mixed selection moves the unlocked members and
+      // leaves locked members in place.
+      const hitToken = state.tokens.find((x) => x.id === tokenHit.id);
+      if (hitToken?.locked === true) {
+        renderer.requestRender();
+        e.preventDefault();
+        return;
+      }
       beginDrag(e, world.x, world.y);
       return;
     }
@@ -375,6 +389,10 @@ export function createSelectTool(ctx: InputContext): Tool {
           for (const id of overlay.ids) {
             const t = state.tokens.find((x) => x.id === id);
             if (t) {
+              // Phase 154 — locked tokens are pinned: skip the
+              // commit so a mixed multi-select drag (locked +
+              // unlocked) only moves the unlocked members.
+              if (t.locked === true) continue;
               // Phase 130 — hex-aware target cell. Hex commits use
               // cube-rounded `commitDragToCell` (token center +
               // delta → nearest hex); square commits keep the

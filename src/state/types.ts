@@ -208,6 +208,26 @@ export interface Token {
    * the token editor's "Movement" section.
    */
   speedFt: number;
+  /**
+   * Phase 154 — when `true`, the token is locked against drag. The
+   * select-tool drag handler skips locked tokens (selection + the
+   * right-click context menu still work — Edit / Unlock / Delete are
+   * authoring escape hatches). A small lock-glyph badge renders at
+   * the token's bottom-left corner so the GM can see at a glance
+   * which pieces are pinned.
+   *
+   * Optional + back-compat. Pre-154 sessions don't carry the field;
+   * `deserializeState` treats missing values as `false` (unlocked).
+   * Forward-only over the wire — pre-154 peers will drop the field
+   * on receive (same forward-only pattern as Phase 109's
+   * `hiddenTokenIds`, Phase 139's `auras`, Phase 142's `tilePaints`).
+   *
+   * Multi-select drag: the per-token check runs on each token in the
+   * selection independently — a mixed selection (one locked, one
+   * unlocked) drags the unlocked one and leaves the locked one in
+   * place. This matches Phase 114's per-token wall clamp pattern.
+   */
+  locked?: boolean;
 }
 
 export interface Background {

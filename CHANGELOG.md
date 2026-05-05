@@ -131,6 +131,53 @@ gaps so the v1.0 cut is genuinely "stable + remote-play-capable."
 
 ---
 
+## [1.29.0] — 2026-05-05 — Token lock (drag prevention)
+
+Phase 154 — opens the v1.29 → v1.36 batch (8 phases of authoring polish + initiative QoL the user picked from the third suggestion list). Adds an optional `Token.locked` flag, a render badge, a select-tool drag skip, and a "Lock token" checkbox in the editor.
+
+### Added
+- **`Token.locked?: boolean`** field. Optional in both the type and the wire format. `undefined` and `false` both mean "not locked"; only the literal value `true` enables the lock.
+- **Select-tool drag skip** in `src/input/tool-select.ts`:
+  - On `pointerdown` over a locked token: selection still happens (so the GM can right-click → Edit / Delete) but `beginDrag` is skipped — no drag overlay, no commit.
+  - In the multi-select drag commit loop: locked tokens are filtered with `if (t.locked === true) continue;` so a mixed-selection drag (locked + unlocked) moves only the unlocked members. Mirrors Phase 114's per-token wall-clamp pattern.
+- **Lock badge in `src/render/layer-tokens.ts`** — small padlock glyph (rectangle body + arc shackle) painted at the token's bottom-LEFT corner. Bottom-right is reserved for the Phase 126 owner dot, so a token that's both owned + locked shows both indicators side-by-side.
+- **"Lock token" checkbox** in the token editor's Movement section. Unchecking patches `{ locked: undefined }` (the deserializer also collapses `false` → `undefined`, keeping the wire format minimal — only `true` ever travels).
+- **Defensive deserialize** in `src/sync/messages.ts`: accepts ONLY `locked === true`. Any other shape (string `"true"`, `1`, `"yes"`, objects, arrays) collapses to `undefined`.
+
+### Why this matters
+Pre-154 the GM had no way to pin a token against an accidental drag. The "I just nudged the dragon while panning the camera" mistake is the textbook case — locks are the standard CAD/whiteboard escape hatch for it. Useful for:
+- **Furniture / scenery tokens** (stools, banners, statues) where the GM wants the token to render but never to be moved by a stray click.
+- **Spectator-shared encounters** where a player owns a token and the GM wants to pin it during a paused beat without taking ownership away.
+- **Multi-select drags through a complex set-piece** — drag the whole party while leaving the locked boss in place.
+
+### Architecture
+- **`locked?: boolean`** is OPTIONAL on the Token type, so existing test fixtures across the codebase don't need updates (the previous Phase 139 / 149 sed-mass-update pattern is avoided). An unlocked token has no `locked` field at all; we only ever serialize `locked: true`.
+- **Drag-skip uses two checkpoints.** The pointerdown check prevents the drag overlay from starting when the click anchors on a locked token; the commit-loop skip handles the multi-select case where the drag is anchored on an unlocked token but the selection includes locked ones. Either alone would leave a hole.
+- **Forward-only over the wire.** Pre-154 peers receiving a `locked: true` field will drop it (their deserializer doesn't know it). Post-154 peers receiving a pre-154 payload default to unlocked. Same forward-only pattern as Phase 109's `hiddenTokenIds`, Phase 139's `auras`, Phase 142's `tilePaints`.
+- **Right-click menu unchanged.** Edit / Delete / Set HP / etc. all still work on locked tokens — the lock specifically targets drag, not all authoring.
+
+### UX details
+- **The badge is small (~7–11 px depending on cellSize)** and sits in the bottom-left so it doesn't overlap with the bottom-right owner dot or the top conditions row.
+- **No tool-bar mode for "lock all"** — that would invite "I locked everything by accident, how do I undo" pain. The editor checkbox is the only authoring path; multi-select bulk lock can land in a future phase if asked.
+- **Spectators don't author locks.** The field is GM-set only via the editor (which is GM-side). Spectator-side drag (Phase 127's owned-token drag wiring) reads the same field; a locked owned token cannot be dragged by its owner — the lock is authoritative.
+
+### Tests
+- **+6 unit tests** in `src/sync/messages.test.ts`: pre-154 missing-field default, round-trip `true`, collapse `false`, reject malformed `"true"`, reject truthy non-boolean (1 / "yes" / {} / []), persistence through clone.
+- **+3 Playwright specs** in `e2e/token-lock.spec.ts` (new): editor checkbox visible + default off, locking prevents drag, lock state round-trips through editor close/re-open.
+- **All 1575 unit tests + 386 Playwright specs pass** locally.
+
+### Bundle
+- 113.16 / 120 KB initial-load brotli (+0.35 KB for the badge render + drag-skip + checkbox UI + deserializer). Lazy chunks 19.78 / 20 KB unchanged. CSS 13.20 / 14 KB unchanged (no new rules — the checkbox uses the existing `.check` class).
+
+### Pre-push checklist
+- typecheck: clean.
+- unit suite: 1575 passing.
+- e2e suite: 386 passing.
+- visual regression: all baselines green (the lock badge only renders on locked tokens, and no pre-154 baseline scene contains one).
+- size-limit: all 5 budgets green.
+
+---
+
 ## [1.28.0] — 2026-05-04 — Customizable tool-activation keybindings
 
 Phase 153 — final phase of the v1.18 → v1.28 batch. Closes the **discovery track** (Track E) and the entire 11-phase polish backlog. Adds a Keybindings tab to Settings; users can rebind the 11 tool-activation shortcuts (S/T/R/H/M/N/L/Y/K/W/P) to any letter or digit.

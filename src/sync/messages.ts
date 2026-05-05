@@ -629,6 +629,13 @@ export function deserializeState(s: SerializedSessionState): SessionState {
         (t as { speedFt: number }).speedFt >= 0
           ? (t as { speedFt: number }).speedFt
           : 30,
+      // Phase 154 — drag-lock flag. Optional in wire format; pre-154
+      // sessions and freshly-created tokens have no value (treated as
+      // unlocked). We accept ONLY a literal `true` to enable the lock,
+      // so a malformed `"true"` string (or any other truthy non-bool)
+      // collapses to undefined → unlocked.
+      locked:
+        (t as { locked?: unknown }).locked === true ? true : undefined,
     })),
     fog: Uint8Array.from(s.fog),
     annotations: (s.annotations ?? []).map((a) => ({

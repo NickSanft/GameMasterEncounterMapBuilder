@@ -193,9 +193,78 @@ export function drawTokens(
     drawOwnerDot(ctx, t, state.grid, t.ownerId, options.getOwnerColor);
   }
 
+  // Pass 5: lock badge. Phase 154 — small lock glyph at the
+  // token's bottom-LEFT corner (the bottom-RIGHT slot is taken by
+  // the Phase 126 owner dot, so painting opposite avoids overlap
+  // when a token is both owned + locked).
+  for (const t of unselected) {
+    if (t.locked !== true) continue;
+    drawLockBadge(ctx, t, state.grid);
+  }
+  for (const t of selectedNonDragged) {
+    if (t.locked !== true) continue;
+    drawLockBadge(ctx, t, state.grid);
+  }
+  for (const t of dragged) {
+    if (t.locked !== true) continue;
+    drawLockBadge(ctx, t, state.grid);
+  }
+
   // Stack-count badge — one per cell that contains ≥2 tokens. Drawn after
   // every other token pass so it always sits on top of the stack.
   drawStackBadges(ctx, state, cellSize, options.mode, overlay);
+}
+
+/**
+ * Phase 154 — small lock-glyph badge anchored at the token's
+ * bottom-left corner. Indicates the token is pinned against drag
+ * (the select tool's drag handler skips locked tokens at hit-test
+ * + commit time). The bottom-right corner is reserved for the
+ * Phase 126 owner dot, so a token that's both owned + locked shows
+ * both indicators side-by-side.
+ *
+ * The glyph is two paths: a rectangular body + an arc shackle
+ * above it. Drawn in white-on-dark for contrast against any token
+ * color (matches the existing stack-count badge's recipe).
+ */
+function drawLockBadge(
+  ctx: CanvasRenderingContext2D,
+  t: Token,
+  grid: GridConfig,
+): void {
+  const center = tokenCenterWorld(t, grid);
+  const cx = center.x;
+  const cy = center.y;
+  const cellSize = grid.cellSize;
+  const r = (t.size * cellSize) / 2 - 4;
+  const badgeR = Math.max(7, r * 0.22);
+  const offset = r * 0.72;
+  const bx = cx - offset;
+  const by = cy + offset;
+  ctx.save();
+  // Dark backing disc with thin outline so the white glyph stays
+  // visible against any token color.
+  ctx.beginPath();
+  ctx.arc(bx, by, badgeR, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(20, 20, 20, 0.88)';
+  ctx.fill();
+  ctx.lineWidth = 1.2;
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.55)';
+  ctx.stroke();
+  // Glyph: padlock body (rectangle) + shackle (arc).
+  const bodyW = badgeR * 1.0;
+  const bodyH = badgeR * 0.85;
+  const shackleR = badgeR * 0.35;
+  const bodyX = bx - bodyW / 2;
+  const bodyY = by + badgeR * 0.05 - bodyH / 2;
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(bodyX, bodyY, bodyW, bodyH);
+  ctx.beginPath();
+  ctx.lineWidth = Math.max(1, badgeR * 0.18);
+  ctx.strokeStyle = '#ffffff';
+  ctx.arc(bx, bodyY, shackleR, Math.PI, 0, false);
+  ctx.stroke();
+  ctx.restore();
 }
 
 /**

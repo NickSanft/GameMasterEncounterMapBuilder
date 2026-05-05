@@ -361,6 +361,172 @@ describe('serializeState / deserializeState', () => {
     });
   });
 
+  describe('Phase 154 — token lock (locked field)', () => {
+    it('treats missing `locked` as undefined (legacy saves are unlocked)', () => {
+      const legacy = {
+        ...serializeState(createDefaultState()),
+        tokens: [
+          {
+            id: 't1',
+            x: 0,
+            y: 0,
+            label: 'A',
+            color: '#ff0000',
+            imageId: null,
+            size: 1,
+            // locked missing — pre-154 sessions
+          },
+        ],
+      } as unknown as SerializedSessionState;
+      const restored = deserializeState(legacy);
+      expect(restored.tokens[0]!.locked).toBeUndefined();
+    });
+
+    it('preserves locked: true across a round-trip', () => {
+      const state = createDefaultState();
+      state.tokens.push({
+        id: 't-pinned',
+        x: 0,
+        y: 0,
+        label: 'Statue',
+        color: '#aaa',
+        imageId: null,
+        size: 1,
+        borderColor: null,
+        hp: null,
+        conditions: [],
+        rotation: 0,
+        losRadius: null,
+        light: null,
+        initiativeMod: 0,
+        conditionExpirations: {},
+        deathSaves: { successes: 0, failures: 0 },
+        ownerId: null,
+        auras: [],
+        speedFt: 0,
+        locked: true,
+      });
+      const restored = deserializeState(serializeState(state));
+      expect(restored.tokens[0]!.locked).toBe(true);
+    });
+
+    it('collapses locked: false to undefined (no-op shape)', () => {
+      const state = serializeState(createDefaultState());
+      (state.tokens as unknown[]).push({
+        id: 't-not-locked',
+        x: 0,
+        y: 0,
+        label: 'A',
+        color: '#000',
+        imageId: null,
+        size: 1,
+        borderColor: null,
+        hp: null,
+        conditions: [],
+        rotation: 0,
+        losRadius: null,
+        light: null,
+        initiativeMod: 0,
+        conditionExpirations: {},
+        deathSaves: { successes: 0, failures: 0 },
+        ownerId: null,
+        auras: [],
+        speedFt: 30,
+        locked: false,
+      });
+      const restored = deserializeState(state);
+      expect(restored.tokens[0]!.locked).toBeUndefined();
+    });
+
+    it('rejects malformed string "true" (defensive)', () => {
+      const state = serializeState(createDefaultState());
+      (state.tokens as unknown[]).push({
+        id: 't-malformed',
+        x: 0,
+        y: 0,
+        label: 'A',
+        color: '#000',
+        imageId: null,
+        size: 1,
+        borderColor: null,
+        hp: null,
+        conditions: [],
+        rotation: 0,
+        losRadius: null,
+        light: null,
+        initiativeMod: 0,
+        conditionExpirations: {},
+        deathSaves: { successes: 0, failures: 0 },
+        ownerId: null,
+        auras: [],
+        speedFt: 30,
+        locked: 'true',
+      });
+      const restored = deserializeState(state);
+      expect(restored.tokens[0]!.locked).toBeUndefined();
+    });
+
+    it('rejects truthy non-boolean (1, "yes") as not-locked (defensive)', () => {
+      for (const bad of [1, 'yes', {}, []] as unknown[]) {
+        const state = serializeState(createDefaultState());
+        (state.tokens as unknown[]).push({
+          id: 't-bad',
+          x: 0,
+          y: 0,
+          label: 'A',
+          color: '#000',
+          imageId: null,
+          size: 1,
+          borderColor: null,
+          hp: null,
+          conditions: [],
+          rotation: 0,
+          losRadius: null,
+          light: null,
+          initiativeMod: 0,
+          conditionExpirations: {},
+          deathSaves: { successes: 0, failures: 0 },
+          ownerId: null,
+          auras: [],
+          speedFt: 30,
+          locked: bad,
+        });
+        const restored = deserializeState(state);
+        expect(restored.tokens[0]!.locked).toBeUndefined();
+      }
+    });
+
+    it('preserves the lock through a clone (defensive copy)', () => {
+      const state = createDefaultState();
+      state.tokens.push({
+        id: 't-pin',
+        x: 5,
+        y: 5,
+        label: 'Pinned',
+        color: '#fff',
+        imageId: null,
+        size: 1,
+        borderColor: null,
+        hp: null,
+        conditions: [],
+        rotation: 0,
+        losRadius: null,
+        light: null,
+        initiativeMod: 0,
+        conditionExpirations: {},
+        deathSaves: { successes: 0, failures: 0 },
+        ownerId: null,
+        auras: [],
+        speedFt: 30,
+        locked: true,
+      });
+      const restored = deserializeState(serializeState(state));
+      // Re-serializing the restored state should still be true.
+      const restored2 = deserializeState(serializeState(restored));
+      expect(restored2.tokens[0]!.locked).toBe(true);
+    });
+  });
+
   describe('Phase 140 — background orientation', () => {
     it('defaults rotation/flipX/flipY for legacy saves (pre-140)', () => {
       const legacy = {

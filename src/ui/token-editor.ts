@@ -246,6 +246,16 @@ export function mountTokenEditor(opts: TokenEditorOptions): TokenEditorHandle {
           the drag exceeds the speed. Set to 0 to disable the budget
           HUD for this token. Default 30 ft (SRD humanoid base).
         </p>
+        <label class="check lock-check">
+          <input type="checkbox" data-field="locked" />
+          <span>Lock token (prevent drag)</span>
+        </label>
+        <p class="settings-hint">
+          Phase 154 — pinned tokens can still be selected, edited,
+          and deleted via the right-click menu, but the select
+          tool's drag handler skips them. A small lock-glyph badge
+          renders at the token's bottom-left corner.
+        </p>
       </fieldset>
 
       <fieldset class="hp-block">
@@ -431,6 +441,8 @@ export function mountTokenEditor(opts: TokenEditorOptions): TokenEditorHandle {
   const initiativeModInput = modal.querySelector<HTMLInputElement>('[data-field="initiativeMod"]')!;
   // Phase 149 — movement speed input.
   const speedFtInput = modal.querySelector<HTMLInputElement>('[data-field="speedFt"]')!;
+  // Phase 154 — drag-lock checkbox.
+  const lockedInput = modal.querySelector<HTMLInputElement>('[data-field="locked"]')!;
   const rotationInput = modal.querySelector<HTMLInputElement>('[data-field="rotation"]')!;
   const rotationCompass = modal.querySelector<HTMLSpanElement>('[data-field="rotation-compass"]')!;
   const rotationQuickBtns = Array.from(
@@ -528,6 +540,9 @@ export function mountTokenEditor(opts: TokenEditorOptions): TokenEditorHandle {
     syncInitiativeModUI(token.initiativeMod);
     // Phase 149 — sync the speed input.
     speedFtInput.value = String(token.speedFt);
+    // Phase 154 — sync the lock checkbox. Optional field; missing
+    // is treated as unlocked.
+    lockedInput.checked = token.locked === true;
     syncVisibilityUI(token.id);
     syncOwnerUI(token.ownerId);
     syncCounter();
@@ -1478,6 +1493,18 @@ export function mountTokenEditor(opts: TokenEditorOptions): TokenEditorHandle {
       commitSpeedFt();
       e.preventDefault();
     }
+  });
+
+  // Phase 154 — lock checkbox. Stored as `true` only; the optional
+  // field's "absent" state is unlocked, so we patch with `undefined`
+  // when the user unchecks (the deserializer collapses both
+  // `false` and `undefined` to the no-lock state).
+  lockedInput.addEventListener('change', () => {
+    const tok = currentToken();
+    if (!tok) return;
+    const next = lockedInput.checked ? true : undefined;
+    if ((tok.locked === true) === lockedInput.checked) return;
+    update({ locked: next });
   });
 
   // Phase 126 — owner change. Empty value collapses to null

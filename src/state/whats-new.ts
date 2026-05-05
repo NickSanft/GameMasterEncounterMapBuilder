@@ -94,6 +94,13 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW_ENTRIES: readonly WhatsNewEntry[] = [
   {
+    version: '1.29.0',
+    date: '2026-05-05',
+    highlights: [
+      'Token lock — pin a token against drag from the editor; small lock-glyph badge appears at the bottom-left.',
+    ],
+  },
+  {
     version: '1.28.0',
     date: '2026-05-04',
     highlights: [
