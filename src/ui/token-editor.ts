@@ -373,6 +373,25 @@ export function mountTokenEditor(opts: TokenEditorOptions): TokenEditorHandle {
         </select>
       </fieldset>
 
+      <!-- Phase 162 — GM-only mini-statblock scratchpad. Free-form
+           text for "AC 16 / Save +5 / Multiattack 2x scimitar"
+           reminders. Spectators never see this field; the editor is
+           a GM-side modal. -->
+      <fieldset class="notes-fieldset">
+        <legend>Notes (GM-only)</legend>
+        <textarea
+          data-field="notes"
+          class="token-editor-notes"
+          rows="3"
+          placeholder="AC, saves, special abilities, reminders…"
+          spellcheck="true"
+        ></textarea>
+        <p class="settings-hint">
+          Phase 162 — free-form GM scratchpad attached to this
+          token. Persists with the scene. Hidden from Spectators.
+        </p>
+      </fieldset>
+
       <hr />
       <div class="modal-footer">
         <button type="button" data-action="save-library" title="Save this token's appearance to the library for reuse">Save to Library</button>
@@ -424,6 +443,10 @@ export function mountTokenEditor(opts: TokenEditorOptions): TokenEditorHandle {
   // Phase 156 — parent ("carried by") dropdown.
   const parentSelect = modal.querySelector<HTMLSelectElement>(
     '[data-field="parent-select"]',
+  )!;
+  // Phase 162 — GM-only notes textarea.
+  const notesInput = modal.querySelector<HTMLTextAreaElement>(
+    '[data-field="notes"]',
   )!;
   const counter = modal.querySelector<HTMLSpanElement>('[data-field="counter"]')!;
   const hasSightInput = modal.querySelector<HTMLInputElement>('[data-field="hasSight"]')!;
@@ -588,6 +611,9 @@ export function mountTokenEditor(opts: TokenEditorOptions): TokenEditorHandle {
     // Phase 154 — sync the lock checkbox. Optional field; missing
     // is treated as unlocked.
     lockedInput.checked = token.locked === true;
+    // Phase 162 — sync the notes textarea. Optional field; missing
+    // collapses to an empty string for the form control.
+    notesInput.value = token.notes ?? '';
     syncVisibilityUI(token.id);
     syncOwnerUI(token.ownerId);
     syncParentUI(token);
@@ -1598,6 +1624,20 @@ export function mountTokenEditor(opts: TokenEditorOptions): TokenEditorHandle {
     const next = lockedInput.checked ? true : undefined;
     if ((tok.locked === true) === lockedInput.checked) return;
     update({ locked: next });
+  });
+
+  // Phase 162 — notes textarea. Empty string collapses to undefined
+  // so the in-memory shape matches the optional Token.notes type.
+  // Commits on blur (instead of every keystroke) to avoid a patch
+  // per character.
+  notesInput.addEventListener('blur', () => {
+    const tok = currentToken();
+    if (!tok) return;
+    const trimmed = notesInput.value;
+    const next = trimmed.length > 0 ? trimmed : undefined;
+    const current = tok.notes ?? undefined;
+    if (next === current) return;
+    update({ notes: next });
   });
 
   // Phase 126 — owner change. Empty value collapses to null

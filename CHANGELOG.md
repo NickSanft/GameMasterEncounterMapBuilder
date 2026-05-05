@@ -131,6 +131,47 @@ gaps so the v1.0 cut is genuinely "stable + remote-play-capable."
 
 ---
 
+## [1.37.0] — 2026-05-05 — Per-token GM notes scratchpad
+
+Phase 162 — first of the v1.37 → v1.55 batch. Adds an optional `Token.notes` field with a "Notes (GM-only)" textarea in the token editor's footer. Lets the GM jot AC / saves / spell DCs / attack reminders right on the token instead of burying them in the global Notes panel.
+
+### Added
+- **`Token.notes?: string`** field. Optional + back-compat. Pre-162 sessions and freshly-created tokens carry no field (in-memory `undefined`). The deserializer accepts only non-empty strings — empty / missing / non-string all collapse to `undefined` so the in-memory shape stays consistent with the `Token` type's optional.
+- **Notes fieldset** in the token editor between the Movement section and the modal footer. Free-form `<textarea>` (3 rows, spellcheck on). GM-only — Spectators don't mount the editor at all, so the field is implicitly hidden from players.
+- **Blur-commit, not keystroke-commit.** The textarea writes through to the store on `blur` (not `input`), so quick edits don't flood the patch / undo history with one entry per character. Empty content collapses to `undefined` on commit.
+
+### Why this matters
+Pre-162 the GM has one global Notes panel for the whole session. Bigger encounters mean cross-referencing 6+ NPCs' stats from a single textarea — error-prone, slow. Post-162 each token carries its own scratchpad. Use cases:
+- Monster sheet shorthand: AC, saves, special abilities right where you click.
+- Per-NPC dialog hooks.
+- Combat reminders (vulnerabilities, recharge cooldowns).
+- Loot inventory.
+
+Other VTTs bind a full character sheet to each token; this is the lightweight, GM-private equivalent that fits the encounter-mapping focus without bringing in a stats system.
+
+### Architecture
+- **Optional field, no required deserialize default.** Same pattern as Phase 154's `locked` and Phase 156's `parentId`.
+- **Forward-only over the wire.** Pre-162 peers will drop the field on receive.
+- **Blur over input.** Avoids one patch per keystroke.
+
+### Tests
+- **+4 unit tests** in `src/sync/messages.test.ts`: pre-162 missing-field default, round-trip, empty-string collapse, non-string defensive.
+- **+2 Playwright specs** in `e2e/token-notes.spec.ts` (new): textarea is present + default empty, notes round-trip across editor close + re-open.
+- **All 1648 unit tests + 403 Playwright specs pass** locally.
+
+### Bundle
+- 115.89 / 120 KB initial-load brotli (+0.18 KB).
+- Lazy chunks 20.23 / 21 KB unchanged. CSS unchanged.
+
+### Pre-push checklist
+- typecheck: clean.
+- unit suite: 1648 passing.
+- e2e suite: 403 passing.
+- visual regression: all baselines green (no canvas-visible changes).
+- size-limit: all 5 budgets green.
+
+---
+
 ## [1.36.0] — 2026-05-05 — Auto-extracted "what's new" from CHANGELOG
 
 Phase 161 — final phase of the v1.29 → v1.36 batch. Replaces the hand-maintained `WHATS_NEW_ENTRIES` array in `src/state/whats-new.ts` with an auto-generated file derived from `CHANGELOG.md` version-header lines. Closes the 8-phase batch the user picked from the third suggestion list.

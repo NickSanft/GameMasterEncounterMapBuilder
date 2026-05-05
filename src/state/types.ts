@@ -209,6 +209,19 @@ export interface Token {
    */
   speedFt: number;
   /**
+   * Phase 162 — per-token GM scratchpad / mini-statblock. Free-form
+   * text for "AC 16 / Save +5 / Multiattack 2x scimitar / Vulnerable
+   * to fire" reminders the GM wants attached to a specific token
+   * instead of buried in the global Notes panel.
+   *
+   * GM-only: rendered in the token editor's Notes tab; never shown
+   * to Spectators. Optional + back-compat. Pre-162 tokens carry no
+   * field (in-memory `undefined`); the deserializer treats missing
+   * / non-string values as `undefined` so the field is "absent"
+   * not "empty string" until authored.
+   */
+  notes?: string;
+  /**
    * Phase 156 — vehicle / mount relationship. When set to another
    * token's id, this token is "carried" by its parent: dragging the
    * parent translates this token by the same delta. The cascade is

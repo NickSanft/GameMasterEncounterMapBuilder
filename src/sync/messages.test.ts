@@ -527,6 +527,115 @@ describe('serializeState / deserializeState', () => {
     });
   });
 
+  describe('Phase 162 — token notes (statblock scratchpad)', () => {
+    it('treats missing notes as undefined (legacy saves)', () => {
+      const legacy = {
+        ...serializeState(createDefaultState()),
+        tokens: [
+          {
+            id: 't',
+            x: 0,
+            y: 0,
+            label: 'A',
+            color: '#fff',
+            imageId: null,
+            size: 1,
+          },
+        ],
+      } as unknown as SerializedSessionState;
+      const restored = deserializeState(legacy);
+      expect(restored.tokens[0]!.notes).toBeUndefined();
+    });
+
+    it('preserves notes across a round-trip', () => {
+      const state = createDefaultState();
+      state.tokens.push({
+        id: 't',
+        x: 0,
+        y: 0,
+        label: 'Goblin',
+        color: '#7e57c2',
+        imageId: null,
+        size: 1,
+        borderColor: null,
+        hp: null,
+        conditions: [],
+        rotation: 0,
+        losRadius: null,
+        light: null,
+        initiativeMod: 0,
+        conditionExpirations: {},
+        deathSaves: { successes: 0, failures: 0 },
+        ownerId: null,
+        auras: [],
+        speedFt: 30,
+        notes: 'AC 15, +4 to hit, Multiattack 2× scimitar',
+      });
+      const restored = deserializeState(serializeState(state));
+      expect(restored.tokens[0]!.notes).toBe(
+        'AC 15, +4 to hit, Multiattack 2× scimitar',
+      );
+    });
+
+    it('collapses empty-string notes to undefined (no-op shape)', () => {
+      const state = serializeState(createDefaultState());
+      (state.tokens as unknown[]).push({
+        id: 't',
+        x: 0,
+        y: 0,
+        label: 'A',
+        color: '#000',
+        imageId: null,
+        size: 1,
+        borderColor: null,
+        hp: null,
+        conditions: [],
+        rotation: 0,
+        losRadius: null,
+        light: null,
+        initiativeMod: 0,
+        conditionExpirations: {},
+        deathSaves: { successes: 0, failures: 0 },
+        ownerId: null,
+        auras: [],
+        speedFt: 30,
+        notes: '',
+      });
+      const restored = deserializeState(state);
+      expect(restored.tokens[0]!.notes).toBeUndefined();
+    });
+
+    it('rejects non-string notes (defensive)', () => {
+      for (const bad of [123, true, {}, [], null] as unknown[]) {
+        const state = serializeState(createDefaultState());
+        (state.tokens as unknown[]).push({
+          id: 't',
+          x: 0,
+          y: 0,
+          label: 'A',
+          color: '#000',
+          imageId: null,
+          size: 1,
+          borderColor: null,
+          hp: null,
+          conditions: [],
+          rotation: 0,
+          losRadius: null,
+          light: null,
+          initiativeMod: 0,
+          conditionExpirations: {},
+          deathSaves: { successes: 0, failures: 0 },
+          ownerId: null,
+          auras: [],
+          speedFt: 30,
+          notes: bad,
+        });
+        const restored = deserializeState(state);
+        expect(restored.tokens[0]!.notes).toBeUndefined();
+      }
+    });
+  });
+
   describe('Phase 158 — travel routes', () => {
     it('defaults travelRoutes to [] for legacy saves (pre-158)', () => {
       const legacy = serializeState(createDefaultState());

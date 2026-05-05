@@ -683,6 +683,16 @@ export function deserializeState(s: SerializedSessionState): SessionState {
       // collapses to undefined → unlocked.
       locked:
         (t as { locked?: unknown }).locked === true ? true : undefined,
+      // Phase 162 — GM-only mini-statblock notes. Optional; pre-162
+      // sessions and freshly-created tokens have no field. Accept
+      // only non-empty strings — empty / missing / non-string all
+      // collapse to `undefined` so the in-memory shape stays
+      // consistent with the Token type's optional.
+      notes:
+        typeof (t as { notes?: unknown }).notes === 'string' &&
+        (t as { notes: string }).notes.length > 0
+          ? (t as { notes: string }).notes
+          : undefined,
       // Phase 156 — vehicle / parent relationship. Optional; pre-156
       // sessions and unparented tokens carry no field (the in-memory
       // shape uses `undefined` for "no parent" so the type matches
