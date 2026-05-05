@@ -131,6 +131,63 @@ gaps so the v1.0 cut is genuinely "stable + remote-play-capable."
 
 ---
 
+## [1.36.0] — 2026-05-05 — Auto-extracted "what's new" from CHANGELOG
+
+Phase 161 — final phase of the v1.29 → v1.36 batch. Replaces the hand-maintained `WHATS_NEW_ENTRIES` array in `src/state/whats-new.ts` with an auto-generated file derived from `CHANGELOG.md` version-header lines. Closes the 8-phase batch the user picked from the third suggestion list.
+
+### Added
+- **`scripts/extract-whats-new.mjs`** (new) — parses `CHANGELOG.md` line-by-line, captures every version-header that matches `^## [<X.Y.Z>] — <YYYY-MM-DD> — <title>`, writes `src/state/whats-new-entries.generated.ts` as a TypeScript module exporting `GENERATED_WHATS_NEW_ENTRIES: readonly WhatsNewEntry[]`. Cap of 24 entries (newest first) so the bundle stays small.
+- **`src/state/whats-new-entries.generated.ts`** (auto-generated) — committed to source control so CI doesn't have to regenerate. The header comment reminds editors not to hand-edit it; running `npm run extract:whats-new` is the only sanctioned change path.
+- **`npm run extract:whats-new`** script in `package.json`. Run after appending a new release entry to CHANGELOG.md to keep the modal's data in sync.
+- **`src/state/whats-new.ts`** now re-exports `GENERATED_WHATS_NEW_ENTRIES` as `WHATS_NEW_ENTRIES`. The legacy hand-maintained array is preserved as a commented-out reference block (uncomment to fall back to manual curation).
+- **`src/state/whats-new-extract.test.ts`** (new) — independently re-implements the extractor's regex inline and asserts the generated file matches what the script would produce from the current CHANGELOG. If a developer adds a new release without re-running the extractor, this test fails at CI so the out-of-sync state never reaches main.
+
+### Why this matters
+Pre-161 every release required two coordinated edits: append the rich CHANGELOG entry AND duplicate the headline into `whats-new.ts`. Across the v1.29 → v1.36 batch I forgot once — caught it in review, but the discipline overhead is real. Post-161 the CHANGELOG is the single source of truth; the modal data is generated. CI verification means there's no way for the two to drift.
+
+### Architecture
+- **Generated file is committed.** The alternative — gitignore + regenerate at build time — would require a `prebuild` script and a fresh checkout to run `extract` before `dev`. Committing keeps the build path identical to pre-161; the script is run on demand.
+- **One highlight per entry, taken from the section title.** The CHANGELOG version header is `## [1.36.0] — 2026-05-05 — Auto-extracted "what's new" from CHANGELOG`; the script captures the trailing text. Multi-bullet richer summaries are deferred — the modal is for "what changed since I last opened" context, not full release notes.
+- **Independent regex re-implementation in the test.** The script is JS (no types); the test is TS. They share no code. If the format changes, the test catches the mismatch and the developer updates both.
+- **`GENERATED_WHATS_NEW_ENTRIES` over `WHATS_NEW_ENTRIES`.** The export-rename pattern keeps the modal's import surface (`WHATS_NEW_ENTRIES`) stable while making the auto-generated nature visible at the import site (`whats-new-entries.generated.js`).
+
+### UX details
+- **No visible change.** The modal renders the same one-line-per-version summary as before. Only the source of those summaries changed.
+- **Future polish: multi-bullet entries.** A natural extension is to also capture the first 2-3 bullets of the "Added" section per release. The script's `renderModule` could grow a `summaryBullets` parser without breaking the existing single-string `highlights[0]` shape.
+
+### Tests
+- **+3 unit tests** in `src/state/whats-new-extract.test.ts` (new): parses ≥1 entry from CHANGELOG, generated entries match parsed entries line-for-line, newest-first ordering.
+- **All 1644 unit tests + 403 Playwright specs pass** locally.
+
+### Bundle
+- 116.11 / 120 KB initial-load brotli unchanged (the modal's data shape is the same; the per-entry strings are slightly shorter on average since the extracted titles are the section headers, not the longer hand-curated highlights).
+- Lazy chunks 20.23 / 21 KB unchanged. CSS unchanged.
+
+### Pre-push checklist
+- typecheck: clean.
+- unit suite: 1644 passing.
+- e2e suite: 403 passing.
+- visual regression: all baselines green.
+- size-limit: all 5 budgets green.
+
+### v1.29 → v1.36 batch is complete
+Phases 154 through 161 ship the user's third suggestion list (8 polish features). Across the batch:
+
+| Phase | Version | Feature |
+|---|---|---|
+| 154 | v1.29.0 | Token lock |
+| 155 | v1.30.0 | Initiative auto-skip on dead tokens |
+| 156 | v1.31.0 | Token vehicle / parent-child relationships |
+| 157 | v1.32.0 | Per-scene GM notes |
+| 158 | v1.33.0 | Travel route polylines |
+| 159 | v1.34.0 | Aura presets |
+| 160 | v1.35.0 | Wall-clipping for auras |
+| 161 | v1.36.0 | Auto-extracted "what's new" from CHANGELOG |
+
+Total bundle delta: +2.95 KB JS initial-load (113.16 → 116.11 KB), all under the 120 KB budget set in v1.16. Lazy chunks bumped from 20 → 21 KB during Phase 155 to give the next batch headroom.
+
+---
+
 ## [1.35.0] — 2026-05-05 — Wall-clipping for auras
 
 Phase 160 — seventh of the v1.29 → v1.36 batch. Adds an opt-in "clip auras by walls" rendering preference. When ON, token aura rings stop at sight-blocking walls — visually matches the 5e RAW "sphere blocked by total cover" interpretation. Powered by the same `computeVisibilityPolygon` helper that drives the Phase 55 fog-visibility pipeline, so no new geometry code.

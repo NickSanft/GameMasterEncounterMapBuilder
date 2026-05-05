@@ -82,9 +82,16 @@ export function shouldShowWhatsNew(): boolean {
 }
 
 /**
- * Static summary of recent updates the modal renders. Keep this
- * short — a few highlights per version, not the full CHANGELOG.
- * Newest first.
+ * Summary of recent updates the modal renders. Keep this short — a
+ * few highlights per version, not the full CHANGELOG. Newest first.
+ *
+ * Phase 161 — the canonical source is CHANGELOG.md. The
+ * `scripts/extract-whats-new.mjs` script parses the CHANGELOG and
+ * writes `whats-new-entries.generated.ts`; this file re-exports
+ * those entries as `WHATS_NEW_ENTRIES`. To update the modal after
+ * a release: append the entry to CHANGELOG.md, run `npm run
+ * extract:whats-new`, commit both files. CI verifies the
+ * generated file matches what the script would produce.
  */
 export interface WhatsNewEntry {
   version: string;
@@ -92,7 +99,15 @@ export interface WhatsNewEntry {
   highlights: string[];
 }
 
-export const WHATS_NEW_ENTRIES: readonly WhatsNewEntry[] = [
+export { GENERATED_WHATS_NEW_ENTRIES as WHATS_NEW_ENTRIES } from './whats-new-entries.generated.js';
+
+// Phase 161 — the legacy hand-maintained list below is kept for
+// reference only (commented out). The active export above pulls
+// from the auto-generated file. To re-enable hand-maintained
+// entries (e.g. add a custom curated highlight), revert the export
+// line above and uncomment this block.
+/*
+export const WHATS_NEW_ENTRIES_LEGACY: readonly WhatsNewEntry[] = [
   {
     version: '1.35.0',
     date: '2026-05-05',
@@ -210,3 +225,4 @@ export const WHATS_NEW_ENTRIES: readonly WhatsNewEntry[] = [
     highlights: ['Universal VTT (.dd2vtt / .uvtt) import — single-file Dungeondraft / Foundry import.'],
   },
 ];
+*/

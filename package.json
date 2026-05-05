@@ -16,7 +16,8 @@
     "test:e2e:report": "playwright show-report",
     "size": "size-limit",
     "analyze": "node scripts/analyze.mjs",
-    "baselines": "node scripts/regen-baselines.mjs"
+    "baselines": "node scripts/regen-baselines.mjs",
+    "extract:whats-new": "node scripts/extract-whats-new.mjs"
   },
   "size-limit": [
     {
