@@ -21,6 +21,16 @@ import { formatLogEvent, formatClock } from '../state/combat-log.js';
 
 export interface CombatLogPanelOptions {
   log: CombatLog;
+  /**
+   * Phase 179 — host-supplied "rewind to here" handler. When
+   * supplied, each entry renders a small `↺` button; clicking it
+   * passes the entry's timestamp up to the host, which then
+   * looks up the nearest snapshot at-or-before that time and
+   * prompts the GM to restore. When omitted, the buttons don't
+   * render — keeps Spectator-side / test mounts that don't have
+   * snapshot access from showing dead controls.
+   */
+  onRewindToTimestamp?: (timestamp: number) => void;
 }
 
 export interface CombatLogPanelHandle {
@@ -34,7 +44,7 @@ export interface CombatLogPanelHandle {
 export function mountCombatLogPanel(
   opts: CombatLogPanelOptions,
 ): CombatLogPanelHandle {
-  const { log } = opts;
+  const { log, onRewindToTimestamp } = opts;
 
   const panel = document.createElement('aside');
   panel.className = 'combat-log-panel';
@@ -120,6 +130,23 @@ export function mountCombatLogPanel(
     text.textContent = formatLogEvent(entry.event);
     li.appendChild(time);
     li.appendChild(text);
+    // Phase 179 — "Rewind to here" button. Renders only when the
+    // host supplied the callback (GM-side mounts).
+    if (onRewindToTimestamp) {
+      const rewindBtn = document.createElement('button');
+      rewindBtn.type = 'button';
+      rewindBtn.className = 'combat-log-entry-rewind';
+      rewindBtn.title = 'Rewind to the nearest snapshot at this point';
+      rewindBtn.setAttribute(
+        'aria-label',
+        `Rewind to ${formatClock(entry.timestamp)}`,
+      );
+      rewindBtn.textContent = '↺';
+      rewindBtn.addEventListener('click', () => {
+        onRewindToTimestamp(entry.timestamp);
+      });
+      li.appendChild(rewindBtn);
+    }
     return li;
   }
 

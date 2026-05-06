@@ -80,6 +80,7 @@ import {
 import { createFirstUseHintsStore } from '../state/first-use-hints.js';
 import { mountFirstUseHintToast } from '../ui/first-use-hint.js';
 import {
+  listSnapshots,
   recordSnapshot,
   type Snapshot,
 } from '../state/snapshot-history.js';
@@ -1352,7 +1353,60 @@ const wallEditor = mountWallEditor({
 // max-HP edits which would otherwise look like real combat events).
 const combatLog = createCombatLog();
 const combatLogObserver = attachCombatLogObserver({ store, log: combatLog });
-const combatLogPanel = mountCombatLogPanel({ log: combatLog });
+// Phase 179 — combat-log entries can rewind to the nearest
+// snapshot at-or-before their timestamp. The handler queries
+// the active scene's snapshots, picks the latest with
+// `takenAt <= entryTimestamp`, prompts for confirmation, and
+// restores via the same path the snapshot-history modal uses.
+const combatLogPanel = mountCombatLogPanel({
+  log: combatLog,
+  onRewindToTimestamp: (timestamp) => {
+    void rewindToNearestSnapshot(timestamp);
+  },
+});
+
+async function rewindToNearestSnapshot(timestamp: number): Promise<void> {
+  const sceneId = getActiveSceneId();
+  if (!sceneId) {
+    announcer.announce('No active scene to rewind.', 'assertive');
+    return;
+  }
+  let snaps: Snapshot[];
+  try {
+    snaps = await listSnapshots(sceneId);
+  } catch (err) {
+    console.warn('[combat-log-rewind] listSnapshots failed', err);
+    announcer.announce('Failed to load snapshots for rewind.', 'assertive');
+    return;
+  }
+  // Snapshots are returned newest-first; we want the latest
+  // `takenAt <= timestamp` (the snapshot that captures state
+  // BEFORE the event the user clicked).
+  const candidate = snaps.find((s) => s.takenAt <= timestamp);
+  if (!candidate) {
+    announcer.announce(
+      'No snapshot exists from before that event. Open the snapshot history to pick manually.',
+    );
+    snapshotHistoryModal.open();
+    return;
+  }
+  const ts = new Date(candidate.takenAt).toLocaleTimeString();
+  if (!window.confirm(`Rewind to snapshot from ${ts}? Current state will be lost (use Ctrl+Z afterwards if needed).`)) {
+    return;
+  }
+  try {
+    store.loadState(deserializeState(candidate.state));
+    store.clearHistory();
+    void saveState(store.getState());
+    announcer.announce(
+      `Rewound to snapshot from ${ts}.`,
+      'assertive',
+    );
+  } catch (err) {
+    console.warn('[combat-log-rewind] restore failed', err);
+    announcer.announce('Failed to restore snapshot.', 'assertive');
+  }
+}
 // Reference once so the unused-binding lint stays happy; the handle
 // lives for the lifetime of the page.
 void combatLogObserver;

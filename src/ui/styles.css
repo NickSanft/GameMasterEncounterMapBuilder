@@ -7258,3 +7258,26 @@ body.reduced-motion .tour-popover {
   border-color: #cf6679;
   color: #cf6679;
 }
+
+/* Phase 179 — combat-log entry rewind button. */
+.combat-log-entry-rewind {
+  appearance: none;
+  background: transparent;
+  border: none;
+  color: var(--accent, #5eaaff);
+  cursor: pointer;
+  font-size: 0.95rem;
+  padding: 0 0.3rem;
+  opacity: 0;
+  transition: opacity 150ms;
+  margin-left: auto;
+}
+
+.combat-log-entry:hover .combat-log-entry-rewind,
+.combat-log-entry-rewind:focus-visible {
+  opacity: 0.85;
+}
+
+.combat-log-entry-rewind:hover {
+  opacity: 1;
+}

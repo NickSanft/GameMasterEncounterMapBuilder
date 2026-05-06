@@ -131,6 +131,51 @@ gaps so the v1.0 cut is genuinely "stable + remote-play-capable."
 
 ---
 
+## [1.54.0] — 2026-05-06 — Combat log "rewind to here"
+
+Phase 179 — eighteenth of the v1.37 → v1.55 batch. Each entry in the combat log now has a small `↺` button on hover. Click it → the GM is prompted to restore the snapshot taken just before that event. Bridges the existing Phase 94 combat log + Phase 97 snapshot history into a "go back to before this happened" flow.
+
+### Added
+- **`onRewindToTimestamp?: (timestamp: number) => void`** option in `CombatLogPanelOptions`. When supplied, each entry renders a `↺` button; clicking passes the entry's `timestamp` up to the host. When omitted (Spectator-side / test mounts that don't have snapshot access), the buttons stay hidden.
+- **`rewindToNearestSnapshot(timestamp)` helper** in `src/entries/gm.ts`. Looks up `listSnapshots(activeSceneId)` (newest-first), finds the latest with `takenAt <= timestamp`, prompts the GM via `window.confirm`, then restores via the same `store.loadState(deserializeState(snap.state))` path the snapshot history modal uses. Falls back to opening the snapshot-history modal when no candidate exists.
+- **Hover-reveal button** in `src/ui/styles.css`: `.combat-log-entry-rewind` is `opacity: 0` by default, `0.85` on entry hover or focus-visible — keeps the log visually clean until the GM mouses over a row.
+
+### Why this matters
+Pre-179: a misclicked turn-skip / accidental damage / fat-finger condition required a multi-step recovery — open the snapshot-history modal, scan timestamps, pick the nearest, restore. Post-179: hover the offending log entry → click `↺` → confirm → done.
+
+Use cases:
+- **Misclicked critical hit damage**: hover the `Bandit took 12 damage` entry → rewind.
+- **Wrong target**: realized the spell hit the wrong NPC after applying damage; rewind to before.
+- **Quick "do over"**: GM rolled a turn but the player wanted to do something else first; rewind to the start of that turn.
+
+### Architecture
+- **Reuses snapshot infrastructure.** Phase 97's `listSnapshots` / `getSnapshot` / restore-via-`loadState` is unchanged. Phase 179 just exposes a new entry point that uses the timestamp filter.
+- **"At-or-before" semantics.** The user clicks an entry whose effect they want to undo. The snapshot they need is the most recent one taken BEFORE that event — not after. We pick the latest with `takenAt <= timestamp`. If none exists (e.g., the event happened before any snapshot was recorded), we fall through to opening the modal so the GM can pick manually.
+- **Confirm prompt is mandatory.** Snapshot restore is destructive (`store.clearHistory()` follows so Ctrl+Z can't undo it). The `window.confirm` gives the GM one last chance to abort.
+- **Per-scene snapshots.** `listSnapshots(sceneId)` is scoped to the active scene — rewinding only considers that scene's history. Cross-scene rewind would be incoherent (snapshot states are per-scene).
+
+### UX details
+- **Hover-only reveal.** Mid-combat the log fills with damage / heal / condition entries; permanent `↺` buttons would clutter every row. Hover-only is unobtrusive while still discoverable.
+- **Falls back to manual pick.** If no snapshot pre-dates the clicked event (e.g., right after scene load, before any snapshot ran), we open the existing snapshot-history modal so the GM can pick one anyway. Better than a hard fail.
+- **Best-effort.** Snapshots are rate-limited to one per ~30 seconds, so rewinding to a moment-by-moment effect isn't always exact. The GM rewinds to "before the recent change" and re-applies what they want to keep.
+
+### Tests
+- The rewind handler is composed of existing tested pieces (`listSnapshots`, `loadState`, `deserializeState`); the wiring + the prompt are integration concerns. The combat-log panel's existing e2e specs continue to pass.
+- **All 1702 unit tests + 411 Playwright specs pass** locally.
+
+### Bundle
+- 120.68 / 122 KB initial-load brotli (+0.29 KB for the helper + button).
+- Lazy chunks 26.05 / 28 KB unchanged. CSS 14.11 / 15 KB (+0.05 KB for the hover-reveal rule).
+
+### Pre-push checklist
+- typecheck: clean.
+- unit suite: 1702 passing.
+- e2e suite: 411 passing.
+- visual regression: all baselines green.
+- size-limit: all 5 budgets green.
+
+---
+
 ## [1.53.0] — 2026-05-06 — D&D vision modes (visual indicators)
 
 Phase 178 — seventeenth of the v1.37 → v1.55 batch. New optional `Token.visionModes?: VisionMode[]` field tracks D&D-style sight modes (darkvision / blindsight / tremorsense / truesight). The renderer paints a faint dashed disk per mode at its radius — visual reminder for the GM. Editor exposes a list-row UI similar to auras.
