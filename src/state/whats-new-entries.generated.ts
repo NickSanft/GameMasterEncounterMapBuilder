@@ -15,6 +15,11 @@ import type { WhatsNewEntry } from './whats-new.js';
 
 export const GENERATED_WHATS_NEW_ENTRIES: readonly WhatsNewEntry[] = [
   {
+    version: '1.47.0',
+    date: '2026-05-05',
+    highlights: ['PWA install prompt + offline banner'],
+  },
+  {
     version: '1.46.0',
     date: '2026-05-05',
     highlights: ['Per-scene Notes panel open-state'],
@@ -128,10 +133,5 @@ export const GENERATED_WHATS_NEW_ENTRIES: readonly WhatsNewEntry[] = [
     version: '1.24.0',
     date: '2026-05-04',
     highlights: ['Token movement budget HUD'],
-  },
-  {
-    version: '1.23.0',
-    date: '2026-05-04',
-    highlights: ['Recently-used tokens strip'],
   },
 ];

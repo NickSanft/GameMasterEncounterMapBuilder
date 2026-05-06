@@ -6963,3 +6963,73 @@ body.reduced-motion .tour-popover {
   background: var(--hover-overlay);
   color: var(--fg);
 }
+
+/* Phase 172 — PWA install hint + offline banner. */
+.pwa-install-hint {
+  position: fixed;
+  right: 1rem;
+  bottom: 1rem;
+  z-index: 200;
+  max-width: 280px;
+  background: var(--surface, #1f2228);
+  color: var(--fg, #f0f0f0);
+  border: 1px solid var(--border, #444);
+  border-radius: 8px;
+  padding: 0.75rem 0.9rem;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45);
+  font-size: 0.9rem;
+}
+
+.pwa-install-hint-body strong {
+  display: block;
+  margin-bottom: 0.25rem;
+}
+
+.pwa-install-hint-body p {
+  margin: 0 0 0.5rem 0;
+  font-size: 0.85rem;
+  opacity: 0.85;
+}
+
+.pwa-install-hint-actions {
+  display: flex;
+  gap: 0.4rem;
+  justify-content: flex-end;
+}
+
+.pwa-install-hint-actions button {
+  appearance: none;
+  background: transparent;
+  border: 1px solid var(--border, #555);
+  color: var(--fg);
+  border-radius: 4px;
+  padding: 0.3rem 0.7rem;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.85rem;
+}
+
+.pwa-install-hint-accept {
+  background: var(--accent, #5eaaff) !important;
+  border-color: var(--accent, #5eaaff) !important;
+  color: #000 !important;
+}
+
+.pwa-install-hint-actions button:hover {
+  filter: brightness(1.1);
+}
+
+.pwa-offline-banner {
+  position: fixed;
+  left: 50%;
+  bottom: 1rem;
+  transform: translateX(-50%);
+  z-index: 200;
+  background: rgba(220, 80, 80, 0.92);
+  color: #fff;
+  padding: 0.4rem 0.9rem;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+}

@@ -131,6 +131,46 @@ gaps so the v1.0 cut is genuinely "stable + remote-play-capable."
 
 ---
 
+## [1.47.0] — 2026-05-05 — PWA install prompt + offline banner
+
+Phase 172 — eleventh of the v1.37 → v1.55 batch. Adds two opt-in PWA polish surfaces: an install-as-app hint card (when the browser supports `beforeinstallprompt`) and an offline banner (when `navigator.onLine` flips to false).
+
+### Added
+- **`src/ui/pwa-install-hint.ts`** (new, ~150 lines) — `mountPwaInstallHint()` returns a handle that owns:
+  - **Install hint card** in the bottom-right corner. Listens for `beforeinstallprompt`, intercepts the auto-mini-bar (so we control timing), and shows a small dismissible card with `Install` / `Not now` buttons. `Install` triggers the cached event's `prompt()` to open the browser-native install flow. `Not now` writes a persistent `gm-encounter-maps-pwa-install-dismissed` flag so the card doesn't reappear.
+  - **Offline banner** centered at the bottom. Listens for `online` / `offline` window events; shows the banner when offline so the GM knows remote-play sync to Spectators is paused (changes still save locally; resume on reconnect). Also runs once at mount time so the banner shows immediately if the page boots offline.
+- **CSS** — `.pwa-install-hint`, `.pwa-install-hint-body`, `.pwa-install-hint-actions`, `.pwa-install-hint-accept`, `.pwa-install-hint-dismiss`, `.pwa-offline-banner` rules added to `src/ui/styles.css`. Uses existing CSS variables (`--surface`, `--fg`, `--border`, `--accent`) so it adapts to all 5 themes.
+- **Wired in `src/entries/gm.ts`** — `mountPwaInstallHint()` runs alongside the existing `registerPwa()` SW registration.
+
+### Why this matters
+Pre-172: users installing the app had to dig into the browser's address-bar install button. Most don't know it exists. Post-172: when Chromium fires `beforeinstallprompt`, a small, dismissible card invites the user to install. Same flow Foundry / Owlbear Rodeo use.
+
+The offline banner is similarly low-touch but high-value: a GM mid-session who briefly loses Wi-Fi gets immediate visual feedback that sync is paused, and reassurance that local saves continue. No more "did my notes save?" moments.
+
+### Architecture
+- **Cache the prompt event.** `beforeinstallprompt` fires once and is consumed once. Caching the event lets us surface the prompt at our chosen UX moment instead of the browser's automatic mini-bar.
+- **Persistent dismiss.** The `Not now` flag prevents repeated nags. (To re-prompt, the user can clear the localStorage key OR reinstall the browser, OR Chrome's heuristics may eventually re-fire `beforeinstallprompt` if usage patterns change.)
+- **Pure DOM, no framework.** The hint + banner are minimal `<div>`s appended to body. No React-equivalent overhead.
+- **Initial-state sync.** The offline banner runs `syncOnlineStatus()` at mount so a page that boots offline shows the banner immediately (otherwise the user has to toggle online/offline once to see it).
+
+### Tests
+- **+3 Playwright specs** in `e2e/pwa-install-hint.spec.ts` (new): banner element present + hidden by default, install card present + hidden until `beforeinstallprompt`, synthetic `offline` / `online` events toggle the banner.
+- The actual install flow (`prompt()` → user clicks Install in the OS dialog) requires a real browser + manifest registration; out of scope for headless e2e.
+- **All 1665 unit tests + 409 Playwright specs pass** locally.
+
+### Bundle
+- 117.95 / 120 KB initial-load brotli (~unchanged — the new module displaces some duplicate work).
+- Lazy chunks 20.39 / 21 KB unchanged. CSS 13.55 / 14 KB (+0.17 KB for hint + banner styles).
+
+### Pre-push checklist
+- typecheck: clean.
+- unit suite: 1665 passing.
+- e2e suite: 409 passing.
+- visual regression: all baselines green (the hint + banner only render on specific events, not in default-state baselines).
+- size-limit: all 5 budgets green.
+
+---
+
 ## [1.46.0] — 2026-05-05 — Per-scene Notes panel open-state
 
 Phase 171 — tenth of the v1.37 → v1.55 batch. Phase 157 made the Notes panel CONTENT per-scene; Phase 171 makes its OPEN-STATE per-scene too. A user who keeps Notes open in scene A but closed in scene B sees that distinction preserved across switches.

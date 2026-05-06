@@ -225,6 +225,7 @@ import { EXPORT_FILENAME_PREFIX } from '../util/constants.js';
 import { isEditableFocus } from '../util/focus.js';
 import { createAnnouncer } from '../util/announcer.js';
 import { registerPwa } from '../util/pwa.js';
+import { mountPwaInstallHint } from '../ui/pwa-install-hint.js';
 import { applyTheme } from '../util/theme.js';
 import { createFogWorkerClient } from '../render/fog-worker-client.js';
 import FogWorker from '../render/fog-worker.js?worker';
@@ -4544,6 +4545,12 @@ window.addEventListener('keydown', (e) => {
     }
   }
 });
+
+// Phase 172 — install-as-app hint + offline banner. Listens for
+// `beforeinstallprompt` (Chromium-only, no-op elsewhere) and the
+// `online` / `offline` events; the hint card auto-shows on the
+// install-prompt event and stays dismissible.
+mountPwaInstallHint();
 
 // Register the service worker. When a new version is installed and
 // ready to take over, surface an "Update available — Reload to update"
