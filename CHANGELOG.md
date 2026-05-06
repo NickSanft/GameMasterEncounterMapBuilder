@@ -131,6 +131,54 @@ gaps so the v1.0 cut is genuinely "stable + remote-play-capable."
 
 ---
 
+## [1.48.0] — 2026-05-05 — What's-new modal: full release notes on click
+
+Phase 173 — twelfth of the v1.37 → v1.55 batch. The what's-new modal now renders the full markdown body of the most-recent 4 release entries behind a `<details>` "Read full notes" expand toggle. Older entries keep just the one-line title. The entries module is dynamic-imported on first open so the markdown bodies don't bloat the main bundle.
+
+### Added
+- **`MAX_ENTRIES_WITH_BODY = 4`** in `scripts/extract-whats-new.mjs`. The most-recent 4 entries get their full markdown body captured (everything between the `## [vX.Y.Z]` header and the next `---` separator); older entries stay title-only.
+- **`WhatsNewEntry.body?: string`** on the type. Carries the captured markdown for entries that have one. Older entries (and entries without bodies in CHANGELOG) leave it `undefined`.
+- **`loadWhatsNewEntries()` async helper** in `src/state/whats-new.ts`. Replaces the static `WHATS_NEW_ENTRIES` re-export with a dynamic import wrapped in a cached promise. Keeps the modal's lazy-loading transparent to callers (single `await` on first open; subsequent calls hit the cache).
+- **`src/util/micro-markdown.ts`** (new, ~85 lines) — minimal markdown-to-HTML renderer supporting the small subset the CHANGELOG uses (`### h3`, `- bullets`, `**bold**`, `` `code` ``, `---` rules). Plain-text everything else with HTML-escaping for XSS safety. **+12 unit tests** in `src/util/micro-markdown.test.ts`: empty input, plain text, HTML-escape, bullets, list-close on non-bullet, headings, bold, code, code-wins-over-bold, hr, XSS-safe.
+- **Dynamic-imported micro-markdown** inside the modal's first-open path, parallel-fetched alongside the entries via `Promise.all` so the lazy chunks load together.
+- **`<details>` expand toggle per entry with body** — `summary: "Read full notes"`, click expands inline. CSS rules added for `.whats-new-version-details`, `.whats-new-version-body`, and the body's child elements (h3 / h4 / ul / p / code / hr).
+- **Loading skeleton** — "Loading recent updates…" placeholder shown until the lazy chunks arrive (typically <50 ms on second open due to caching).
+
+### Why this matters
+Pre-173: the modal showed one-line highlights only. Users wanting "what exactly changed in v1.45?" had to leave the app and read GitHub's CHANGELOG.md. Post-173: same modal, expandable details right there.
+
+The lazy-load architecture means the bundle size stays flat for users who never open the modal — the markdown bodies are paid for only when actually read. ~6 KB brotli savings on the main bundle vs. eagerly importing 4 release notes.
+
+### Architecture
+- **Bundle splitting via dynamic import.** Vite hoists `import('./whats-new-entries.generated.js')` into its own chunk. `loadWhatsNewEntries` caches the resulting Promise so concurrent opens share the fetch; Vite's runtime caches the parsed module, so subsequent `import()` calls are sync.
+- **Tokenize-then-transform inline parser.** The micro-markdown bold transformer would otherwise interpret `**foo**` inside `<code>...**foo**...</code>`. Inline-code spans are tokenized into placeholders first, then bold runs over the tokenless string, then placeholders are restored. ~15 lines for safety.
+- **HTML escape before transform.** All raw input goes through `escapeHtml` before the inline transforms run, so user-authored markdown can't smuggle scripts. The `<code>` and `<strong>` tags we emit are introduced AFTER escaping; they don't get re-escaped.
+- **Size-limit config update.** Added `whats-new-entries.generated-*.js` to the lazy-chunks pattern (excluded from initial-load) + bumped lazy-chunks budget from 21 → 26 KB to accommodate the new chunk plus future growth.
+
+### UX details
+- **4-entry body cap.** Most users care about "what changed since I last opened the app" — usually 1-3 versions. Capping at 4 keeps the modal load fast + the lazy chunk small (~6 KB brotli for 4 entries vs. ~12 KB for 8).
+- **Older entries link out implicitly.** They keep just the title; users wanting full history go to GitHub CHANGELOG.md (link added in a future polish phase).
+- **Loading placeholder visible briefly.** On a slow connection, the first open shows "Loading recent updates…" until the chunk arrives. Subsequent opens are instant (cached).
+
+### Tests
+- **+12 unit tests** in `src/util/micro-markdown.test.ts` (new): full coverage of the micro-markdown subset including XSS safety + the code-wins-over-bold edge case.
+- **Updated `src/state/whats-new.test.ts`** to use the async `loadWhatsNewEntries()` instead of the removed static `WHATS_NEW_ENTRIES` export. Both the original tests (current APP_VERSION first; well-formed shapes) preserved.
+- **All 1677 unit tests + 408 Playwright specs pass** locally.
+
+### Bundle
+- 118.27 / 120 KB initial-load brotli (down from pre-173's "would be 123" — the lazy split saved ~5 KB on initial).
+- Lazy chunks 25.48 / 26 KB brotli — bumped from 21 → 26 KB to fit the new entries chunk (~6.1 KB) + the existing modals/dice/help-overlay (~19.4 KB combined). The lazy budget was already filling up; this bump gives the next 7 phases comfortable headroom.
+- CSS 13.69 / 14 KB (+0.31 KB for `.whats-new-version-details` + body styles).
+
+### Pre-push checklist
+- typecheck: clean.
+- unit suite: 1677 passing.
+- e2e suite: 408 passing.
+- visual regression: all baselines green (the modal isn't in the default-state baseline).
+- size-limit: all 5 budgets green after the lazy-chunks bump.
+
+---
+
 ## [1.47.0] — 2026-05-05 — PWA install prompt + offline banner
 
 Phase 172 — eleventh of the v1.37 → v1.55 batch. Adds two opt-in PWA polish surfaces: an install-as-app hint card (when the browser supports `beforeinstallprompt`) and an offline banner (when `navigator.onLine` flips to false).

@@ -7033,3 +7033,62 @@ body.reduced-motion .tour-popover {
   font-weight: 600;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
 }
+
+/* Phase 173 — full-release-notes expand inside the what's-new modal. */
+.whats-new-version-details {
+  margin-top: 0.5rem;
+  border-top: 1px solid var(--border, #444);
+  padding-top: 0.4rem;
+}
+
+.whats-new-version-details summary {
+  cursor: pointer;
+  font-size: 0.85rem;
+  color: var(--accent, #5eaaff);
+  user-select: none;
+}
+
+.whats-new-version-details summary:hover {
+  filter: brightness(1.15);
+}
+
+.whats-new-version-body {
+  margin-top: 0.5rem;
+  padding: 0.4rem 0.5rem 0.4rem 0.6rem;
+  background: rgba(0, 0, 0, 0.18);
+  border-left: 2px solid var(--accent, #5eaaff);
+  border-radius: 4px;
+  font-size: 0.85rem;
+}
+
+.whats-new-version-body h3,
+.whats-new-version-body h4 {
+  margin: 0.6rem 0 0.25rem 0;
+  font-size: 0.9rem;
+}
+
+.whats-new-version-body h3:first-child,
+.whats-new-version-body h4:first-child {
+  margin-top: 0;
+}
+
+.whats-new-version-body ul {
+  margin: 0.25rem 0 0.25rem 1.2rem;
+}
+
+.whats-new-version-body p {
+  margin: 0.4rem 0;
+}
+
+.whats-new-version-body code {
+  background: rgba(255, 255, 255, 0.08);
+  padding: 0 0.2em;
+  border-radius: 2px;
+  font-size: 0.95em;
+}
+
+.whats-new-version-body hr {
+  border: none;
+  border-top: 1px dashed var(--border, #444);
+  margin: 0.5rem 0;
+}

@@ -97,9 +97,35 @@ export interface WhatsNewEntry {
   version: string;
   date: string;
   highlights: string[];
+  /**
+   * Phase 173 — optional full markdown body extracted from the
+   * CHANGELOG entry. Present only for the most-recent N entries
+   * (capped by `MAX_ENTRIES_WITH_BODY` in the extractor) to keep
+   * the bundle small. Older entries keep just the title; the
+   * modal links them to the GitHub CHANGELOG.md anchor.
+   */
+  body?: string;
 }
 
-export { GENERATED_WHATS_NEW_ENTRIES as WHATS_NEW_ENTRIES } from './whats-new-entries.generated.js';
+/**
+ * Phase 173 — lazy-load the entries module. Pre-173 we re-exported
+ * the generated array as a static binding which pulled the full
+ * markdown bodies into the main bundle (~6.4 KB brotli for 8
+ * entries). Post-173 the modal calls `loadWhatsNewEntries()` on
+ * first-open so the bodies live in their own chunk and never reach
+ * users who don't open the modal.
+ *
+ * Caches the promise so concurrent calls share the same fetch.
+ */
+let entriesPromise: Promise<readonly WhatsNewEntry[]> | null = null;
+export async function loadWhatsNewEntries(): Promise<readonly WhatsNewEntry[]> {
+  if (!entriesPromise) {
+    entriesPromise = import('./whats-new-entries.generated.js').then(
+      (m) => m.GENERATED_WHATS_NEW_ENTRIES,
+    );
+  }
+  return entriesPromise;
+}
 
 // Phase 161 — the legacy hand-maintained list below is kept for
 // reference only (commented out). The active export above pulls

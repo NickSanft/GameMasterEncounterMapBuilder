@@ -33,6 +33,20 @@ const OUTPUT_PATH = resolve(
 );
 
 const MAX_ENTRIES = 24;
+/**
+ * Phase 173 — number of most-recent entries that ALSO carry the
+ * full markdown body in the bundle. Older entries keep just the
+ * one-line title (the GitHub CHANGELOG.md is the canonical full-
+ * history source). Tuned to keep the bundle under budget while
+ * giving the user full notes for the last few releases — most
+ * users care about "what changed since I last opened the app",
+ * which is usually 1-3 versions back.
+ *
+ * v1.48 measurement: 4 release-note bodies × ~3 KB of markdown
+ * each ≈ 12 KB raw / ~3 KB brotli, comfortably under budget.
+ * Bumping to 8 ate +6.4 KB and broke the initial-load cap.
+ */
+const MAX_ENTRIES_WITH_BODY = 4;
 
 const VERSION_HEADER_RE =
   /^## \[(\d+\.\d+\.\d+)\] — (\d{4}-\d{2}-\d{2}) — (.+?)\s*$/;
@@ -42,12 +56,19 @@ const VERSION_HEADER_RE =
  * @property {string} version
  * @property {string} date    `YYYY-MM-DD`
  * @property {string} title   Section title (post-date em-dash text)
+ * @property {string} [body]  Full markdown body (the most-recent N entries)
  */
 
 /**
  * Parse the CHANGELOG into the most-recent-first list of entries.
  * Skips the `## [Unreleased]` header (which has no `- date —` segment
  * matching VERSION_HEADER_RE so it falls through naturally).
+ *
+ * Phase 173 — for the most-recent `MAX_ENTRIES_WITH_BODY` entries,
+ * also captures the full markdown body (everything between the
+ * version header and the next `## [` or `---` separator). The
+ * modal expands these on click; older entries keep just the
+ * title and link to GitHub CHANGELOG.md for details.
  *
  * @param {string} markdown
  * @returns {ParsedEntry[]}
@@ -56,17 +77,77 @@ function parseChangelog(markdown) {
   /** @type {ParsedEntry[]} */
   const out = [];
   const lines = markdown.split(/\r?\n/);
-  for (const line of lines) {
-    const m = VERSION_HEADER_RE.exec(line);
-    if (!m) continue;
-    out.push({
-      version: m[1],
-      date: m[2],
-      title: m[3].trim(),
-    });
+  /** @type {{ index: number, version: string, date: string, title: string } | null} */
+  let pending = null;
+  /** @type {string[]} */
+  let bodyLines = [];
+  for (let i = 0; i < lines.length; i++) {
     if (out.length >= MAX_ENTRIES) break;
+    const line = lines[i];
+    const m = VERSION_HEADER_RE.exec(line);
+    if (m) {
+      // Flush the previous pending entry's body before starting
+      // the new one.
+      if (pending) {
+        flushPending(pending, bodyLines, out);
+        if (out.length >= MAX_ENTRIES) {
+          pending = null;
+          bodyLines = [];
+          break;
+        }
+      }
+      pending = {
+        index: out.length,
+        version: m[1],
+        date: m[2],
+        title: m[3].trim(),
+      };
+      bodyLines = [];
+      continue;
+    }
+    if (pending) {
+      // The CHANGELOG separates entries with a `---` line. Stop
+      // capturing body when we hit it so the next entry's body
+      // starts clean.
+      if (/^---\s*$/.test(line)) {
+        flushPending(pending, bodyLines, out);
+        pending = null;
+        bodyLines = [];
+        if (out.length >= MAX_ENTRIES) break;
+        continue;
+      }
+      bodyLines.push(line);
+    }
+  }
+  // Flush any trailing pending entry (only if we still have headroom).
+  if (pending && out.length < MAX_ENTRIES) {
+    flushPending(pending, bodyLines, out);
   }
   return out;
+}
+
+/**
+ * @param {{ index: number, version: string, date: string, title: string }} pending
+ * @param {string[]} bodyLines
+ * @param {ParsedEntry[]} out
+ */
+function flushPending(pending, bodyLines, out) {
+  const entry = {
+    version: pending.version,
+    date: pending.date,
+    title: pending.title,
+  };
+  // Only the most-recent N entries carry the full body. Older
+  // entries stay title-only to keep the bundle small.
+  if (pending.index < MAX_ENTRIES_WITH_BODY) {
+    // Trim leading/trailing blank lines but preserve interior
+    // structure so the markdown renderer sees clean blocks.
+    const trimmed = bodyLines.join('\n').replace(/^\n+|\n+$/g, '');
+    if (trimmed.length > 0) {
+      entry.body = trimmed;
+    }
+  }
+  out.push(entry);
 }
 
 /**
@@ -80,10 +161,17 @@ function renderModule(entries) {
   const records = entries
     .map((e) => {
       const escapedTitle = e.title.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+      // Phase 173 — the optional `body` field carries the full
+      // markdown for recent entries. Use a JSON string (handles
+      // newlines + backslashes + quotes correctly without manual
+      // escaping).
+      const bodyLine = e.body
+        ? `\n    body: ${JSON.stringify(e.body)},`
+        : '';
       return `  {
     version: '${e.version}',
     date: '${e.date}',
-    highlights: ['${escapedTitle}'],
+    highlights: ['${escapedTitle}'],${bodyLine}
   },`;
     })
     .join('\n');

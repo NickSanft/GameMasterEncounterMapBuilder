@@ -8,7 +8,7 @@ import {
   shouldShowWhatsNew,
   markCurrentVersionSeen,
   getLastSeenVersion,
-  WHATS_NEW_ENTRIES,
+  loadWhatsNewEntries,
 } from './whats-new.js';
 import {
   APP_VERSION,
@@ -95,13 +95,15 @@ describe('markCurrentVersionSeen / getLastSeenVersion (Phase 152)', () => {
   });
 });
 
-describe('WHATS_NEW_ENTRIES (Phase 152)', () => {
-  it('includes the current APP_VERSION as the first entry', () => {
-    expect(WHATS_NEW_ENTRIES[0]?.version).toBe(APP_VERSION);
+describe('loadWhatsNewEntries (Phase 152 / 173)', () => {
+  it('includes the current APP_VERSION as the first entry', async () => {
+    const entries = await loadWhatsNewEntries();
+    expect(entries[0]?.version).toBe(APP_VERSION);
   });
 
-  it('every entry has a version + date + at least one highlight', () => {
-    for (const entry of WHATS_NEW_ENTRIES) {
+  it('every entry has a version + date + at least one highlight', async () => {
+    const entries = await loadWhatsNewEntries();
+    for (const entry of entries) {
       expect(entry.version).toMatch(/^\d+\.\d+\.\d+$/);
       expect(entry.date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
       expect(entry.highlights.length).toBeGreaterThan(0);

@@ -14,10 +14,14 @@
  */
 import { APP_NAME, APP_VERSION } from '../util/constants.js';
 import {
-  WHATS_NEW_ENTRIES,
+  loadWhatsNewEntries,
   markCurrentVersionSeen,
+  type WhatsNewEntry,
 } from '../state/whats-new.js';
 import { attachFocusTrap, rememberFocus, restoreFocus } from '../util/focus.js';
+// Phase 173 — `renderMicroMarkdown` is dynamic-imported on first
+// open (alongside the lazy entries) so its ~1 KB stays out of the
+// main bundle for users who never open the modal.
 
 export interface WhatsNewModalHandle {
   open(): void;
@@ -60,20 +64,52 @@ export function mountWhatsNewModal(): WhatsNewModalHandle {
   intro.textContent = `You're on v${APP_VERSION}. Recent updates:`;
   body.appendChild(intro);
 
-  for (const entry of WHATS_NEW_ENTRIES) {
-    const block = document.createElement('section');
-    block.className = 'whats-new-version';
-    const h = document.createElement('h3');
-    h.textContent = `v${entry.version} — ${entry.date}`;
-    block.appendChild(h);
-    const ul = document.createElement('ul');
-    for (const highlight of entry.highlights) {
-      const li = document.createElement('li');
-      li.textContent = highlight;
-      ul.appendChild(li);
+  // Phase 173 — entries are lazy-loaded on first open so the
+  // markdown bodies don't bloat the main bundle. Show a skeleton
+  // placeholder until the chunk arrives.
+  const loading = document.createElement('p');
+  loading.className = 'whats-new-loading';
+  loading.textContent = 'Loading recent updates…';
+  body.appendChild(loading);
+  let entriesRendered = false;
+
+  function renderEntries(
+    entries: readonly WhatsNewEntry[],
+    renderMd: (md: string) => string,
+  ): void {
+    if (entriesRendered) return;
+    entriesRendered = true;
+    loading.remove();
+    for (const entry of entries) {
+      const block = document.createElement('section');
+      block.className = 'whats-new-version';
+      const h = document.createElement('h3');
+      h.textContent = `v${entry.version} — ${entry.date}`;
+      block.appendChild(h);
+      const ul = document.createElement('ul');
+      for (const highlight of entry.highlights) {
+        const li = document.createElement('li');
+        li.textContent = highlight;
+        ul.appendChild(li);
+      }
+      block.appendChild(ul);
+      // Phase 173 — when the entry carries a full body (most-recent
+      // N entries), expose it as a `<details>` expand toggle.
+      // Older entries stay title-only.
+      if (entry.body) {
+        const details = document.createElement('details');
+        details.className = 'whats-new-version-details';
+        const summary = document.createElement('summary');
+        summary.textContent = 'Read full notes';
+        details.appendChild(summary);
+        const bodyWrap = document.createElement('div');
+        bodyWrap.className = 'whats-new-version-body';
+        bodyWrap.innerHTML = renderMd(entry.body);
+        details.appendChild(bodyWrap);
+        block.appendChild(details);
+      }
+      body.appendChild(block);
     }
-    block.appendChild(ul);
-    body.appendChild(block);
   }
 
   modal.appendChild(body);
@@ -114,6 +150,16 @@ export function mountWhatsNewModal(): WhatsNewModalHandle {
       savedFocus = rememberFocus();
       backdrop.hidden = false;
       closeBtn.focus();
+      // Phase 173 — kick off the lazy-loaded entries + micro-
+      // markdown fetch (idempotent — `loadWhatsNewEntries` caches
+      // the promise; Vite caches the dynamic import). Both load
+      // in parallel; render happens once both arrive.
+      void Promise.all([
+        loadWhatsNewEntries(),
+        import('../util/micro-markdown.js').then((m) => m.renderMicroMarkdown),
+      ]).then(([entries, renderMd]) => {
+        renderEntries(entries, renderMd);
+      });
     },
     close,
     isOpen: () => !backdrop.hidden,

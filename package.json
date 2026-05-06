@@ -27,7 +27,8 @@
         "!dist/assets/help-overlay-content-*.js",
         "!dist/assets/settings-modal-content-*.js",
         "!dist/assets/remote-play-modal-content-*.js",
-        "!dist/assets/dice-animation-*.js"
+        "!dist/assets/dice-animation-*.js",
+        "!dist/assets/whats-new-entries.generated-*.js"
       ],
       "limit": "120 KB"
     },
@@ -37,9 +38,10 @@
         "dist/assets/help-overlay-content-*.js",
         "dist/assets/settings-modal-content-*.js",
         "dist/assets/remote-play-modal-content-*.js",
-        "dist/assets/dice-animation-*.js"
+        "dist/assets/dice-animation-*.js",
+        "dist/assets/whats-new-entries.generated-*.js"
       ],
-      "limit": "21 KB"
+      "limit": "26 KB"
     },
     {
       "name": "CSS (all chunks, brotli)",
