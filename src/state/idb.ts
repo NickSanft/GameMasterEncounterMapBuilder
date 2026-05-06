@@ -14,14 +14,18 @@ import { IDB_DB_NAME as DB_NAME } from '../util/constants.js';
  *        idempotent — every store is gated on `objectStoreNames.contains`.
  *   v5 — added `snapshots` object store for Phase 97 auto-save snapshot
  *        history. Same idempotent pattern; existing data unaffected.
+ *   v6 — added `encounters` object store for Phase 180 saved-encounter
+ *        library. Idempotent — pre-180 databases gain the store on
+ *        first boot of v1.55 without migration.
  */
-export const DB_VERSION = 5;
+export const DB_VERSION = 6;
 
 export const IMAGES_STORE = 'images';
 export const TOKEN_CATALOG_STORE = 'tokenCatalog';
 export const TEMPLATE_CATALOG_STORE = 'templateCatalog';
 export const SESSIONS_STORE = 'sessions';
 export const SNAPSHOTS_STORE = 'snapshots';
+export const ENCOUNTERS_STORE = 'encounters';
 
 /**
  * Record id used by Phase 39 when the app only supported one session.
@@ -37,7 +41,8 @@ export type StoreName =
   | typeof TOKEN_CATALOG_STORE
   | typeof TEMPLATE_CATALOG_STORE
   | typeof SESSIONS_STORE
-  | typeof SNAPSHOTS_STORE;
+  | typeof SNAPSHOTS_STORE
+  | typeof ENCOUNTERS_STORE;
 
 let dbPromise: Promise<IDBDatabase> | null = null;
 
@@ -67,6 +72,12 @@ export function openDB(): Promise<IDBDatabase> {
         const store = db.createObjectStore(SNAPSHOTS_STORE, { keyPath: 'id' });
         store.createIndex('sceneId', 'sceneId', { unique: false });
         store.createIndex('takenAt', 'takenAt', { unique: false });
+      }
+      if (!db.objectStoreNames.contains(ENCOUNTERS_STORE)) {
+        // Phase 180 — saved encounters store. `id` is the keyPath;
+        // `updatedAt` index supports newest-first listing.
+        const store = db.createObjectStore(ENCOUNTERS_STORE, { keyPath: 'id' });
+        store.createIndex('updatedAt', 'updatedAt', { unique: false });
       }
     };
     req.onsuccess = () => resolve(req.result);

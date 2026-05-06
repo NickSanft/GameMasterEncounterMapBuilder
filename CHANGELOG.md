@@ -131,6 +131,83 @@ gaps so the v1.0 cut is genuinely "stable + remote-play-capable."
 
 ---
 
+## [1.55.0] — 2026-05-06 — Saved encounter library · **closes the v1.37 → v1.55 batch** 🎉
+
+Phase 180 — final phase of the v1.37 → v1.55 batch (19 phases, all shipped under the per-phase ship workflow). New IDB-backed "encounters" store + two palette commands ("Save scene as encounter…" / "Drop saved encounter into scene…") for building reusable token+wall sets and dropping them into any scene.
+
+### Added
+- **`src/state/encounters.ts`** (new, ~95 lines) — pure module:
+  - `Encounter { id, name, createdAt, updatedAt, payload: { tokens, walls? } }` shape.
+  - `saveEncounter({ name, payload, id? }, { now? })` — idempotent save (existing id preserves `createdAt`, bumps `updatedAt`); deep-copies tokens + walls into the record.
+  - `listEncounters()` — newest-first by `updatedAt`.
+  - `getEncounter(id)` / `deleteEncounter(id)` — single-record fetch / delete.
+  - `instantiateEncounter(payload)` — clones tokens + walls with FRESH ids so dropping the same encounter twice doesn't id-collide.
+- **`encounters` IDB object store** (DB v6) with an `updatedAt` index. Idempotent upgrade — pre-180 databases gain the store on first boot of v1.55 without migration.
+- **Two palette commands** in `src/entries/gm.ts` (group: Session):
+  - "Save scene as encounter…" — prompts for a name; saves all current tokens + walls (when present). Initiative entries deliberately NOT saved — those are per-encounter context that should be re-rolled when the encounter triggers.
+  - "Drop saved encounter into scene…" — numbered `window.prompt` lists every saved encounter with its token/wall counts; user types a number; the entities batch-add into the current scene with fresh ids (one undo step). Toast with Undo follows on success.
+
+### Why this matters
+Pre-180: every encounter the GM ran from scratch. Building a "Goblin Ambush" with 6 goblins, 2 walls, and a chest? Repeat for the next session. Post-180: build it once, save, drop into any scene later. Saves the GM 5-15 minutes of rebuild per re-used encounter.
+
+Use cases:
+- **Module pre-prep**: build all the encounters from a published adventure once; drop into the appropriate scene as the party reaches each.
+- **Recurring encounters**: "Random Encounter — Bandits" gets saved once + reused across campaigns.
+- **Cross-campaign reuse**: same encounter library works across every game the GM runs.
+- **Rapid iteration**: tweak an encounter (rename, adjust HP), save under same name to overwrite, redrop into the test scene.
+
+### Architecture
+- **Separate IDB store, not in scene records.** Encounters are CROSS-scene assets. Putting them in `scenes` would mean copying the encounter blob every time it's dropped; a shared store keeps one source of truth.
+- **Fresh ids on every drop.** `instantiateEncounter` regenerates `id` for tokens + walls. Without this, dropping the same encounter twice would silently no-op the second add (the store treats `id` as a primary key; dupes are dropped).
+- **One undo step per drop.** `store.batch(...)` wraps the add-all so a regretted drop is one Ctrl+Z (or Undo toast click).
+- **Numbered prompt for picker.** Quick-and-cheap; future polish: a styled picker modal with thumbnails / preview. The prompt works in headless test environments AND respects the user's keyboard-first flow.
+- **Initiative stays per-scene.** Saved encounters carry tokens + walls but NOT the initiative order — the order's `value` field is a per-roll concept that doesn't transfer across uses.
+
+### Tests
+- **+14 unit tests** in `src/state/encounters.test.ts` (new): save with generated id + matching createdAt/updatedAt, update preserves createdAt, list newest-first, "Untitled encounter" fallback, deep-copy isolates caller mutations, walls round-trip when present; getEncounter null for unknown id, deleteEncounter removes one + leaves others, deleteEncounter no-op for unknown id; instantiateEncounter mints fresh ids, omits walls when absent, includes walls with fresh ids when present, doesn't mutate the input, unique ids across two consecutive instantiations.
+- **All 1716 unit tests + 411 Playwright specs pass** locally.
+
+### Bundle
+- 121.36 / 122 KB initial-load brotli (+0.68 KB for the encounters module + palette commands + drop helpers).
+- Lazy chunks 26.16 / 28 KB unchanged. CSS unchanged.
+
+### Pre-push checklist
+- typecheck: clean.
+- unit suite: 1716 passing.
+- e2e suite: 411 passing.
+- visual regression: all baselines green (no canvas-visible default-state changes).
+- size-limit: all 5 budgets green.
+
+### v1.37.0 → v1.55.0 batch is complete
+
+Phases 162 through 180 ship the user's fourth suggestion list (19 polish features). Across the batch:
+
+| Phase | Version | Feature |
+|---|---|---|
+| 162 | v1.37.0 | Per-token GM notes scratchpad |
+| 163 | v1.38.0 | Token thumbnail in initiative-bar pip |
+| 164 | v1.39.0 | Hover popover on active initiative entry |
+| 165 | v1.40.0 | Auto-pan to active turn + shared `tweenCamera` |
+| 166 | v1.41.0 | Smooth tween on bookmark jumps |
+| 167 | v1.42.0 | Contextual fit-to-selection (`F`) |
+| 168 | v1.43.0 | Right-click "Distance to…" |
+| 169 | v1.44.0 | Per-scene background fill color |
+| 170 | v1.45.0 | D&D 5e cover wall presets |
+| 171 | v1.46.0 | Per-scene Notes panel open-state |
+| 172 | v1.47.0 | PWA install hint + offline banner |
+| 173 | v1.48.0 | What's-new modal: full release notes on click |
+| 174 | v1.49.0 | Combat target reticle |
+| 175 | v1.50.0 | Toast stack with Undo on destructive ops |
+| 176 | v1.51.0 | Drag-handle reorder in initiative tracker |
+| 177 | v1.52.0 | Token tags + select-by-tag |
+| 178 | v1.53.0 | D&D vision modes (visual indicators) |
+| 179 | v1.54.0 | Combat log "rewind to here" |
+| 180 | v1.55.0 | Saved encounter library |
+
+Total bundle delta across the batch: +5.65 KB JS initial-load (115.71 → 121.36 KB; budget bumped 120 → 122 KB to accommodate). Lazy chunks budget bumped 21 → 28 KB to fit the new what's-new entries chunk + cumulative settings/help-overlay growth. CSS bumped 14 → 15 KB to fit the cumulative addition of toast + popover + DnD + vision-modes styles.
+
+---
+
 ## [1.54.0] — 2026-05-06 — Combat log "rewind to here"
 
 Phase 179 — eighteenth of the v1.37 → v1.55 batch. Each entry in the combat log now has a small `↺` button on hover. Click it → the GM is prompted to restore the snapshot taken just before that event. Bridges the existing Phase 94 combat log + Phase 97 snapshot history into a "go back to before this happened" flow.

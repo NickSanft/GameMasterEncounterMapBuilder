@@ -84,6 +84,11 @@ import {
   recordSnapshot,
   type Snapshot,
 } from '../state/snapshot-history.js';
+import {
+  saveEncounter,
+  listEncounters,
+  instantiateEncounter,
+} from '../state/encounters.js';
 import { mountSnapshotHistoryModal } from '../ui/snapshot-history-modal.js';
 import { mountConflictLoserArchiveModal } from '../ui/conflict-loser-archive-modal.js';
 import { mountUploadDropZone } from '../ui/upload-drop-zone.js';
@@ -1364,6 +1369,117 @@ const combatLogPanel = mountCombatLogPanel({
     void rewindToNearestSnapshot(timestamp);
   },
 });
+
+/**
+ * Phase 180 — save the current scene's combat-relevant state as
+ * a reusable encounter. Walls + tokens travel together so the
+ * GM can build "Goblin Ambush" in one scene + drop into another
+ * without rebuilding from scratch. Initiative entries are
+ * deliberately NOT saved — they're per-encounter context that
+ * should be re-rolled when the encounter triggers.
+ */
+async function saveCurrentSceneAsEncounter(): Promise<void> {
+  const state = store.getState();
+  if (state.tokens.length === 0) {
+    announcer.announce('No tokens to save. Place some tokens first.');
+    return;
+  }
+  const name = window.prompt(
+    `Name this encounter (saving ${state.tokens.length} token${
+      state.tokens.length === 1 ? '' : 's'
+    }):`,
+    'Untitled encounter',
+  );
+  if (!name) return;
+  try {
+    const record = await saveEncounter({
+      name,
+      payload: {
+        tokens: state.tokens.map((t) => ({ ...t })),
+        walls: state.walls.length > 0
+          ? state.walls.map((w) => ({ ...w }))
+          : undefined,
+      },
+    });
+    announcer.announce(`Saved encounter "${record.name}".`);
+    toasts.show({
+      message: `Saved encounter "${record.name}".`,
+    });
+  } catch (err) {
+    console.warn('[encounters] save failed', err);
+    announcer.announce('Failed to save encounter.', 'assertive');
+  }
+}
+
+/**
+ * Phase 180 — drop a saved encounter's tokens + walls into the
+ * current scene. Each entity gets a fresh id (via
+ * `instantiateEncounter`) so dropping the same encounter twice
+ * doesn't id-collide. Patches are batched so the entire drop is
+ * one undo step.
+ */
+async function dropSavedEncounterIntoScene(): Promise<void> {
+  let encounters: Awaited<ReturnType<typeof listEncounters>>;
+  try {
+    encounters = await listEncounters();
+  } catch (err) {
+    console.warn('[encounters] list failed', err);
+    announcer.announce('Failed to load saved encounters.', 'assertive');
+    return;
+  }
+  if (encounters.length === 0) {
+    announcer.announce(
+      'No saved encounters yet. Build one and use "Save scene as encounter…" first.',
+    );
+    return;
+  }
+  // Numbered prompt — quick + cheap. Future polish: a styled
+  // modal picker. The numbered list lets the user pick by
+  // typing the number.
+  const lines = encounters
+    .map(
+      (e, i) =>
+        `${i + 1}. ${e.name} (${e.payload.tokens.length} token${
+          e.payload.tokens.length === 1 ? '' : 's'
+        }${
+          e.payload.walls && e.payload.walls.length > 0
+            ? `, ${e.payload.walls.length} wall${e.payload.walls.length === 1 ? '' : 's'}`
+            : ''
+        })`,
+    )
+    .join('\n');
+  const raw = window.prompt(
+    `Pick an encounter to drop into the scene (1-${encounters.length}):\n\n${lines}`,
+    '1',
+  );
+  if (!raw) return;
+  const idx = parseInt(raw, 10) - 1;
+  if (!Number.isInteger(idx) || idx < 0 || idx >= encounters.length) {
+    announcer.announce('Invalid selection.');
+    return;
+  }
+  const encounter = encounters[idx]!;
+  const { tokens, walls } = instantiateEncounter(encounter.payload);
+  store.batch(() => {
+    for (const t of tokens) store.applyPatch({ kind: 'token-add', token: t });
+    if (walls) {
+      for (const w of walls) store.applyPatch({ kind: 'wall-add', wall: w });
+    }
+  });
+  announcer.announce(
+    `Dropped encounter "${encounter.name}" — ${tokens.length} token${
+      tokens.length === 1 ? '' : 's'
+    } added.`,
+  );
+  toasts.show({
+    message: `Dropped "${encounter.name}".`,
+    actionLabel: 'Undo',
+    onAction: () => {
+      store.undo();
+      announcer.announce('Undid drop.');
+    },
+  });
+}
 
 async function rewindToNearestSnapshot(timestamp: number): Promise<void> {
   const sceneId = getActiveSceneId();
@@ -4244,6 +4360,29 @@ function slugForFilename(name: string): string {
         store.resetSession();
         announcer.announce('New session started.');
       }
+    },
+  });
+
+  // Phase 180 — saved encounter library. Two palette commands:
+  //   - "Save scene as encounter…" — prompts for a name; saves
+  //     all current tokens (+ walls) as a new encounter record.
+  //   - "Drop encounter into scene…" — prompts the user to pick
+  //     one of the saved encounters; replays the tokens + walls
+  //     into the current scene with fresh ids.
+  reg.register({
+    id: 'save-encounter',
+    label: 'Save scene as encounter…',
+    group: 'Session',
+    run: () => {
+      void saveCurrentSceneAsEncounter();
+    },
+  });
+  reg.register({
+    id: 'drop-encounter',
+    label: 'Drop saved encounter into scene…',
+    group: 'Session',
+    run: () => {
+      void dropSavedEncounterIntoScene();
     },
   });
 
