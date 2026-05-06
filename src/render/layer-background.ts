@@ -27,7 +27,11 @@ export function drawBackground(
   getImage: ImageProvider,
   options: BackgroundRenderOptions = { theme: 'dark' },
 ): void {
-  ctx.fillStyle = FALLBACK_FILL[options.theme];
+  // Phase 169 — when the user authored a custom fill color, use it
+  // instead of the theme fallback. The image (if any) renders ON
+  // TOP of the fill, so an image with transparent regions shows
+  // the color through.
+  ctx.fillStyle = background.fillColor || FALLBACK_FILL[options.theme];
   ctx.fillRect(0, 0, grid.cols * grid.cellSize, grid.rows * grid.cellSize);
 
   if (!background.imageId) return;

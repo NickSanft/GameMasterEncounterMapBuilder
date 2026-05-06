@@ -1474,6 +1474,39 @@ const cameraBookmarksModal = mountCameraBookmarksModal({
  * (e.g. user presses Alt+5 on a scene with two bookmarks).
  */
 /**
+ * Phase 169 — programmatically open the OS color picker for
+ * setting the background fill color. Creates a hidden
+ * `<input type="color">` lazily on first call (we keep the
+ * element around for subsequent picks so the picker remembers
+ * the last value), wires a one-shot `change` listener that
+ * dispatches the `background-update` patch, then clicks() the
+ * input.
+ */
+let bgFillColorPicker: HTMLInputElement | null = null;
+function pickBackgroundFillColor(initial: string | undefined): void {
+  if (!bgFillColorPicker) {
+    bgFillColorPicker = document.createElement('input');
+    bgFillColorPicker.type = 'color';
+    bgFillColorPicker.style.position = 'fixed';
+    bgFillColorPicker.style.left = '-9999px';
+    bgFillColorPicker.style.opacity = '0';
+    document.body.appendChild(bgFillColorPicker);
+  }
+  bgFillColorPicker.value = initial || '#1a1a1a';
+  const onChange = () => {
+    bgFillColorPicker!.removeEventListener('change', onChange);
+    const next = bgFillColorPicker!.value;
+    if (!/^#[0-9a-fA-F]{6}$/.test(next)) return;
+    store.applyPatch({
+      kind: 'background-update',
+      changes: { fillColor: next },
+    });
+  };
+  bgFillColorPicker.addEventListener('change', onChange);
+  bgFillColorPicker.click();
+}
+
+/**
  * Phase 168 — right-click "Distance to…" measurement. The GM
  * right-clicks token A, picks "Distance to…", then clicks any
  * token B; the distance from A to B is computed and announced.
@@ -2355,6 +2388,31 @@ canvas.addEventListener('contextmenu', (e) => {
           },
         },
       );
+    }
+    // Phase 169 — fill color always available, even when no
+    // background image is set (the primary use case is empty
+    // scenes wanting a custom backdrop). Uses a hidden
+    // `<input type="color">` element clicked programmatically
+    // so the user gets the OS-native color picker.
+    items.push(
+      { kind: 'separator' },
+      {
+        label: bg.fillColor
+          ? `Change fill color (${bg.fillColor})…`
+          : 'Set fill color…',
+        onClick: () => pickBackgroundFillColor(bg.fillColor),
+      },
+    );
+    if (bg.fillColor) {
+      items.push({
+        label: 'Clear fill color',
+        onClick: () => {
+          store.applyPatch({
+            kind: 'background-update',
+            changes: { fillColor: undefined },
+          });
+        },
+      });
     }
   }
 

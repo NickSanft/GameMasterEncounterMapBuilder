@@ -288,6 +288,15 @@ export interface Background {
    */
   flipX?: boolean;
   /**
+   * Phase 169 — solid fill color rendered behind any background
+   * image. Useful for empty scenes that want a colored backdrop
+   * (e.g. "stormy sky" blue, "desert" tan) without uploading an
+   * image. Optional + back-compat — pre-169 saves have no field
+   * and the renderer keeps the existing transparent / theme-
+   * default backdrop. Forward-only over the wire.
+   */
+  fillColor?: string;
+  /**
    * Phase 140 — mirror vertically around the background's center.
    * See `flipX` for composition semantics.
    */

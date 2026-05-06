@@ -620,6 +620,15 @@ export function deserializeState(s: SerializedSessionState): SessionState {
           : 0,
       flipX: bg.flipX === true,
       flipY: bg.flipY === true,
+      // Phase 169 — solid fill color. Optional; pre-169 saves and
+      // freshly-created backgrounds have no value (in-memory
+      // `undefined`). Accepts only non-empty strings; everything
+      // else collapses to `undefined`.
+      fillColor:
+        typeof (bg as { fillColor?: unknown }).fillColor === 'string' &&
+        (bg as { fillColor: string }).fillColor.length > 0
+          ? (bg as { fillColor: string }).fillColor
+          : undefined,
     },
     tokens: s.tokens.map((t) => ({
       ...t,

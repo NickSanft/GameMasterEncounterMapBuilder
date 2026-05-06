@@ -131,6 +131,48 @@ gaps so the v1.0 cut is genuinely "stable + remote-play-capable."
 
 ---
 
+## [1.44.0] — 2026-05-05 — Per-scene background fill color
+
+Phase 169 — eighth of the v1.37 → v1.55 batch. Optional `Background.fillColor` field; when set, the renderer fills the playable area with that color before any background image. Picker is in the Map-tool right-click menu, using the OS-native color input.
+
+### Added
+- **`Background.fillColor?: string`** field. Optional + back-compat. Pre-169 saves and freshly-created backgrounds carry no field; the deserializer accepts only non-empty hex-like strings — non-string / null / empty all collapse to `undefined`.
+- **`pickBackgroundFillColor(initial)` helper** in `src/entries/gm.ts`. Lazily creates a hidden `<input type="color">` once per session, programmatically `.click()`s it to open the OS-native color picker, dispatches a `background-update` patch on `change`. Reuses the same input across picks so the OS remembers the last value.
+- **Map-tool context-menu entries**: "Set fill color…" / "Change fill color (#RRGGBB)…" appears in the canvas context menu when no entity is hit. When a fill is set, an additional "Clear fill color" entry resets it to undefined.
+- **Renderer integration** in `src/render/layer-background.ts`: when `background.fillColor` is set, it's used in place of the theme-fallback color. The image (if any) renders ON TOP of the fill, so partially-transparent map images show the color through.
+
+### Why this matters
+Pre-169: empty scenes (no map image) showed the theme's default backdrop — a slab of dark gray on the dark theme, parchment-tan on parchment, etc. GMs running "battle on a stormy sky" or "dream sequence" without a custom map image had to upload a solid-color image just to set the mood. Post-169: right-click → "Set fill color…" → OS color picker → done.
+
+Use cases:
+- **Theatre-of-the-mind battle on a colored backdrop** (no map needed).
+- **Custom mood per scene** without uploading.
+- **Map images with transparency**: the fill color shows through.
+
+### Architecture
+- **OS-native color picker.** A custom in-app picker would be ~few-hundred lines + accessibility work. The native `<input type="color">` is one line of HTML + works everywhere (color management, accessibility, recent colors). The downside is the picker UI varies by OS, but for a GM-side authoring affordance that's fine.
+- **Lazy single-instance input.** Created once per session, reused on subsequent picks. The OS color dialog remembers its last value, so re-opening is fast.
+- **Forward-only over the wire.** Pre-169 peers will drop the field on receive (same forward-only pattern as Phase 154's `locked`, etc).
+- **Image-on-top.** The fill paints first, then the image. Maps with alpha channels (PNG transparency) compose nicely with the fill.
+
+### Tests
+- **+4 unit tests** in `src/sync/messages.test.ts`: pre-169 missing default, round-trip, non-string defensive, empty-string collapse.
+- The renderer change is purely additive and doesn't alter the default-state baseline; visual regression baselines stay green.
+- **All 1658 unit tests + 406 Playwright specs pass** locally.
+
+### Bundle
+- 117.62 / 120 KB initial-load brotli (+0.32 KB for the picker helper + menu entries + deserialize defensiveness).
+- Lazy chunks unchanged. CSS unchanged.
+
+### Pre-push checklist
+- typecheck: clean.
+- unit suite: 1658 passing.
+- e2e suite: 406 passing.
+- visual regression: all baselines green.
+- size-limit: all 5 budgets green.
+
+---
+
 ## [1.43.0] — 2026-05-05 — Right-click "Distance to…"
 
 Phase 168 — seventh of the v1.37 → v1.55 batch. Right-click any token → "Distance to…" → click another token → the distance from A to B is announced via the live region using the active diagonal rule + distance unit.

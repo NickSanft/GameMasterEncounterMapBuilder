@@ -15,6 +15,11 @@ import type { WhatsNewEntry } from './whats-new.js';
 
 export const GENERATED_WHATS_NEW_ENTRIES: readonly WhatsNewEntry[] = [
   {
+    version: '1.44.0',
+    date: '2026-05-05',
+    highlights: ['Per-scene background fill color'],
+  },
+  {
     version: '1.43.0',
     date: '2026-05-05',
     highlights: ['Right-click "Distance to…"'],
@@ -128,10 +133,5 @@ export const GENERATED_WHATS_NEW_ENTRIES: readonly WhatsNewEntry[] = [
     version: '1.21.0',
     date: '2026-05-04',
     highlights: ['Player ping attribution'],
-  },
-  {
-    version: '1.20.0',
-    date: '2026-05-04',
-    highlights: ['Scene-switch loading overlay'],
   },
 ];

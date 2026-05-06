@@ -527,6 +527,40 @@ describe('serializeState / deserializeState', () => {
     });
   });
 
+  describe('Phase 169 — background fill color', () => {
+    it('treats missing fillColor as undefined (legacy saves)', () => {
+      const legacy = serializeState(createDefaultState());
+      // The serializer doesn't emit `fillColor` for default state
+      // (undefined), so the deserialize round-trip should also
+      // produce undefined.
+      const restored = deserializeState(legacy);
+      expect(restored.background.fillColor).toBeUndefined();
+    });
+
+    it('preserves fillColor across a round-trip', () => {
+      const state = createDefaultState();
+      state.background.fillColor = '#2a3a4a';
+      const restored = deserializeState(serializeState(state));
+      expect(restored.background.fillColor).toBe('#2a3a4a');
+    });
+
+    it('collapses non-string fillColor to undefined (defensive)', () => {
+      for (const bad of [123, true, null, [], {}] as unknown[]) {
+        const state = serializeState(createDefaultState());
+        (state.background as { fillColor?: unknown }).fillColor = bad;
+        const restored = deserializeState(state);
+        expect(restored.background.fillColor).toBeUndefined();
+      }
+    });
+
+    it('collapses empty-string fillColor to undefined', () => {
+      const state = serializeState(createDefaultState());
+      (state.background as { fillColor?: unknown }).fillColor = '';
+      const restored = deserializeState(state);
+      expect(restored.background.fillColor).toBeUndefined();
+    });
+  });
+
   describe('Phase 162 — token notes (statblock scratchpad)', () => {
     it('treats missing notes as undefined (legacy saves)', () => {
       const legacy = {
