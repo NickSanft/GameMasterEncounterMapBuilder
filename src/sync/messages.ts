@@ -17,6 +17,8 @@ import type {
   TimeOfDay,
   TravelRoute,
   TravelRouteVisibility,
+  VisionMode,
+  VisionModeKind,
   Wall,
   WeatherKind,
 } from '../state/types.js';
@@ -140,6 +142,38 @@ function normalizeTilePaints(raw: unknown): TilePaint[] {
     });
   }
   return out;
+}
+
+/**
+ * Phase 178 — defensive parser for the optional
+ * `Token.visionModes`. Drops malformed entries (unknown kind,
+ * non-finite radius). Returns `undefined` for non-array / empty
+ * input so the in-memory shape stays consistent with the
+ * optional `Token.visionModes?` type.
+ */
+const VALID_VISION_KINDS: ReadonlySet<VisionModeKind> =
+  new Set<VisionModeKind>([
+    'darkvision',
+    'blindsight',
+    'tremorsense',
+    'truesight',
+  ]);
+function normalizeVisionModes(raw: unknown): VisionMode[] | undefined {
+  if (!Array.isArray(raw) || raw.length === 0) return undefined;
+  const out: VisionMode[] = [];
+  for (const v of raw) {
+    if (!v || typeof v !== 'object') continue;
+    const m = v as Partial<VisionMode>;
+    if (typeof m.kind !== 'string') continue;
+    if (!VALID_VISION_KINDS.has(m.kind as VisionModeKind)) continue;
+    if (typeof m.radiusFt !== 'number' || !Number.isFinite(m.radiusFt)) continue;
+    if (m.radiusFt <= 0) continue;
+    out.push({
+      kind: m.kind as VisionModeKind,
+      radiusFt: m.radiusFt,
+    });
+  }
+  return out.length > 0 ? out : undefined;
 }
 
 /**
@@ -722,6 +756,12 @@ export function deserializeState(s: SerializedSessionState): SessionState {
       // collapses to undefined → unlocked.
       locked:
         (t as { locked?: unknown }).locked === true ? true : undefined,
+      // Phase 178 — D&D vision modes. Optional; pre-178 tokens
+      // have no field. Defensive: drops entries with unknown
+      // kind, non-finite radius, etc.
+      visionModes: normalizeVisionModes(
+        (t as { visionModes?: unknown }).visionModes,
+      ),
       // Phase 177 — token tags for "select by tag" grouping.
       // Optional; pre-177 sessions and freshly-created tokens
       // have no field. Defensive: requires an array of non-empty

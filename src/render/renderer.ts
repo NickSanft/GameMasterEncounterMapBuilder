@@ -350,6 +350,8 @@ export function createRenderer(opts: CreateRendererOptions): Renderer {
       // Phase 174 — combat target reticle. Pulled from the live
       // ref every frame so changes apply on the next paint.
       targetTokenId: getTargetTokenId ? getTargetTokenId() : null,
+      // Phase 178 — feet-per-square for vision-mode disk math.
+      feetPerSquare: getPreferences ? getPreferences().feetPerSquare : 5,
     });
     drawAoeTemplates(ctx, state, {
       mode,

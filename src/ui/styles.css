@@ -7219,3 +7219,42 @@ body.reduced-motion .tour-popover {
 .initiative-list-row-drop-after::after {
   bottom: -1px;
 }
+
+/* Phase 178 — vision modes list in the token editor. */
+.vision-mode-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0.25rem 0;
+}
+
+.vision-mode-row select {
+  flex: 1;
+}
+
+.vision-mode-row input {
+  width: 5em;
+}
+
+.vision-mode-ft-label {
+  font-size: 0.85rem;
+  opacity: 0.75;
+}
+
+.vision-mode-remove {
+  appearance: none;
+  background: transparent;
+  border: 1px solid var(--border, #444);
+  color: var(--fg, #f0f0f0);
+  font: inherit;
+  padding: 0 0.5rem;
+  cursor: pointer;
+  border-radius: 3px;
+  opacity: 0.7;
+}
+
+.vision-mode-remove:hover {
+  opacity: 1;
+  border-color: #cf6679;
+  color: #cf6679;
+}

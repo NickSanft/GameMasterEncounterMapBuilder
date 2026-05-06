@@ -527,6 +527,157 @@ describe('serializeState / deserializeState', () => {
     });
   });
 
+  describe('Phase 178 — vision modes', () => {
+    it('treats missing visionModes as undefined (legacy saves)', () => {
+      const legacy = {
+        ...serializeState(createDefaultState()),
+        tokens: [
+          {
+            id: 't',
+            x: 0,
+            y: 0,
+            label: 'A',
+            color: '#fff',
+            imageId: null,
+            size: 1,
+          },
+        ],
+      } as unknown as SerializedSessionState;
+      const restored = deserializeState(legacy);
+      expect(restored.tokens[0]!.visionModes).toBeUndefined();
+    });
+
+    it('round-trips a list with multiple modes', () => {
+      const state = createDefaultState();
+      state.tokens.push({
+        id: 't',
+        x: 0,
+        y: 0,
+        label: 'Drow',
+        color: '#fff',
+        imageId: null,
+        size: 1,
+        borderColor: null,
+        hp: null,
+        conditions: [],
+        rotation: 0,
+        losRadius: null,
+        light: null,
+        initiativeMod: 0,
+        conditionExpirations: {},
+        deathSaves: { successes: 0, failures: 0 },
+        ownerId: null,
+        auras: [],
+        speedFt: 30,
+        visionModes: [
+          { kind: 'darkvision', radiusFt: 120 },
+          { kind: 'truesight', radiusFt: 30 },
+        ],
+      });
+      const restored = deserializeState(serializeState(state));
+      expect(restored.tokens[0]!.visionModes).toEqual([
+        { kind: 'darkvision', radiusFt: 120 },
+        { kind: 'truesight', radiusFt: 30 },
+      ]);
+    });
+
+    it('drops entries with unknown kind', () => {
+      const state = serializeState(createDefaultState());
+      (state.tokens as unknown[]).push({
+        id: 't',
+        x: 0,
+        y: 0,
+        label: 'A',
+        color: '#000',
+        imageId: null,
+        size: 1,
+        borderColor: null,
+        hp: null,
+        conditions: [],
+        rotation: 0,
+        losRadius: null,
+        light: null,
+        initiativeMod: 0,
+        conditionExpirations: {},
+        deathSaves: { successes: 0, failures: 0 },
+        ownerId: null,
+        auras: [],
+        speedFt: 30,
+        visionModes: [
+          { kind: 'darkvision', radiusFt: 60 },
+          { kind: 'x-ray-vision', radiusFt: 30 },
+        ],
+      });
+      const restored = deserializeState(state);
+      expect(restored.tokens[0]!.visionModes).toEqual([
+        { kind: 'darkvision', radiusFt: 60 },
+      ]);
+    });
+
+    it('drops entries with non-finite or non-positive radius', () => {
+      const state = serializeState(createDefaultState());
+      (state.tokens as unknown[]).push({
+        id: 't',
+        x: 0,
+        y: 0,
+        label: 'A',
+        color: '#000',
+        imageId: null,
+        size: 1,
+        borderColor: null,
+        hp: null,
+        conditions: [],
+        rotation: 0,
+        losRadius: null,
+        light: null,
+        initiativeMod: 0,
+        conditionExpirations: {},
+        deathSaves: { successes: 0, failures: 0 },
+        ownerId: null,
+        auras: [],
+        speedFt: 30,
+        visionModes: [
+          { kind: 'darkvision', radiusFt: 60 },
+          { kind: 'blindsight', radiusFt: NaN },
+          { kind: 'tremorsense', radiusFt: 0 },
+          { kind: 'truesight', radiusFt: -10 },
+        ],
+      });
+      const restored = deserializeState(state);
+      expect(restored.tokens[0]!.visionModes).toEqual([
+        { kind: 'darkvision', radiusFt: 60 },
+      ]);
+    });
+
+    it('returns undefined for non-array input', () => {
+      const state = serializeState(createDefaultState());
+      (state.tokens as unknown[]).push({
+        id: 't',
+        x: 0,
+        y: 0,
+        label: 'A',
+        color: '#000',
+        imageId: null,
+        size: 1,
+        borderColor: null,
+        hp: null,
+        conditions: [],
+        rotation: 0,
+        losRadius: null,
+        light: null,
+        initiativeMod: 0,
+        conditionExpirations: {},
+        deathSaves: { successes: 0, failures: 0 },
+        ownerId: null,
+        auras: [],
+        speedFt: 30,
+        visionModes: 'darkvision 60',
+      });
+      const restored = deserializeState(state);
+      expect(restored.tokens[0]!.visionModes).toBeUndefined();
+    });
+  });
+
   describe('Phase 177 — token tags', () => {
     it('treats missing tags as undefined (legacy saves)', () => {
       const legacy = {

@@ -4,6 +4,7 @@ import type {
   SessionState,
   Token,
   ViewMode,
+  VisionMode,
   Wall,
 } from '../state/types.js';
 import type { ImageProvider } from './layer-background.js';
@@ -64,6 +65,20 @@ export interface TokenRenderOptions {
    * Appearance → Auras).
    */
   clipAurasByWalls?: boolean;
+  /**
+   * Phase 178 — feet-per-square preference. Used to convert
+   * `VisionMode.radiusFt` (SRD vocab) → world pixels for the
+   * faint vision-range disks. Optional; defaults to 5 when
+   * omitted (the SRD humanoid baseline).
+   */
+  feetPerSquare?: number;
+  /**
+   * Phase 178 — when true, the per-token vision-range disks
+   * (`token.visionModes`) render below the token body — visual
+   * reminder for the GM. Currently always shown to the GM and
+   * hidden on Spectator views.
+   */
+  showVisionModes?: boolean;
   /**
    * Phase 174 — id of a token currently designated as the
    * combat target. When set + matching a real token, a reticle
@@ -140,6 +155,24 @@ export function drawTokens(
     options.reducedMotion || typeof options.now !== 'number'
       ? null
       : options.now;
+
+  // Phase 178 — vision-mode rings render BELOW auras (and BELOW
+  // the token body). GM-only: Spectators don't need to see the
+  // GM's vision-range reminders. Each mode draws a faint dashed
+  // disk in its kind-specific color so multiple modes on the
+  // same token stay distinguishable.
+  if (options.mode === 'gm' && options.showVisionModes !== false) {
+    for (const t of state.tokens) {
+      if (!t.visionModes || t.visionModes.length === 0) continue;
+      const display = withOverlay(t, overlay, cellSize);
+      drawTokenVisionModes(
+        ctx,
+        display,
+        state.grid,
+        options.feetPerSquare ?? 5,
+      );
+    }
+  }
 
   // Phase 139 — auras render BELOW token bodies so the token icon
   // sits cleanly on top of its own emanation. GM-only auras are
@@ -404,6 +437,46 @@ function drawOwnerDot(
 }
 
 const DRAG_GHOST_ALPHA = 0.6;
+
+/**
+ * Phase 178 — paint a faint dashed disk for each vision mode on
+ * a token. GM-only. Each `kind` gets a distinct color so the GM
+ * can tell darkvision (warm yellow) from blindsight (red) at a
+ * glance. The disks are STROKE-only — no fill — to avoid muddying
+ * other render passes.
+ *
+ * Visual-only in v1.53; doesn't affect fog math.
+ */
+const VISION_MODE_COLORS: Record<VisionMode['kind'], string> = {
+  darkvision: '#ffd54f',
+  blindsight: '#ff5e5e',
+  tremorsense: '#ff9800',
+  truesight: '#b388ff',
+};
+function drawTokenVisionModes(
+  ctx: CanvasRenderingContext2D,
+  t: Token,
+  grid: GridConfig,
+  feetPerSquare: number,
+): void {
+  const center = tokenCenterWorld(t, grid);
+  const cx = center.x;
+  const cy = center.y;
+  const cellSize = grid.cellSize;
+  ctx.save();
+  ctx.lineWidth = 1.5;
+  ctx.setLineDash([6, 4]);
+  for (const mode of t.visionModes ?? []) {
+    if (!Number.isFinite(mode.radiusFt) || mode.radiusFt <= 0) continue;
+    const radiusPx = (mode.radiusFt / feetPerSquare) * cellSize;
+    ctx.strokeStyle = VISION_MODE_COLORS[mode.kind] ?? '#ffd54f';
+    ctx.globalAlpha = 0.55;
+    ctx.beginPath();
+    ctx.arc(cx, cy, radiusPx, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
 
 /**
  * Phase 160 — collect sight-blocking wall segments for the aura

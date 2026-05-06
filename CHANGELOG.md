@@ -131,6 +131,55 @@ gaps so the v1.0 cut is genuinely "stable + remote-play-capable."
 
 ---
 
+## [1.53.0] — 2026-05-06 — D&D vision modes (visual indicators)
+
+Phase 178 — seventeenth of the v1.37 → v1.55 batch. New optional `Token.visionModes?: VisionMode[]` field tracks D&D-style sight modes (darkvision / blindsight / tremorsense / truesight). The renderer paints a faint dashed disk per mode at its radius — visual reminder for the GM. Editor exposes a list-row UI similar to auras.
+
+### Added
+- **`VisionModeKind`** type union: `'darkvision' | 'blindsight' | 'tremorsense' | 'truesight'`. Covers the 4 SRD-named senses.
+- **`VisionMode { kind: VisionModeKind; radiusFt: number }`** type. Radius in feet (SRD vocab); editor converts to world pixels via the active `feetPerSquare`.
+- **`Token.visionModes?: VisionMode[]`** field. Optional + back-compat. Pre-178 tokens carry no field; the deserializer drops malformed entries (unknown kind, non-finite / non-positive radius) and returns `undefined` for non-array input.
+- **`normalizeVisionModes(raw)`** in `src/sync/messages.ts`. Defensive parser used by the deserialize path.
+- **Render layer** in `src/render/layer-tokens.ts` — `drawTokenVisionModes` paints a faint dashed disk per mode in a kind-specific color (darkvision=warm yellow, blindsight=red, tremorsense=orange, truesight=violet). GM-only render — Spectators don't see the GM's vision-range reminders.
+- **Token editor list-row UI** mirroring auras: kind dropdown + radius input + remove button + "+ Add vision" button. Default new entry: `darkvision 60 ft`.
+- **CSS** — `.vision-mode-row`, `.vision-mode-remove`, etc. styles added.
+
+### Why this matters
+Pre-178: GMs running NPCs with SRD sight modes (the dragon has blindsight 30 ft, the drow has darkvision 120 ft, the elemental has tremorsense 60 ft) had no visual reminder of those reach circles. Post-178: each vision mode gets a faint dashed disk so the GM sees at a glance "the goblin can detect the rogue from this distance via tremorsense."
+
+Use cases:
+- **Encounter prep**: the GM tags the demon with `truesight 120 ft` — visual reminder during play that this NPC sees through invisibility.
+- **Stealth checks**: faint blindsight disk tells the GM whether the rogue is in range.
+- **Tremorsense reminders**: see at a glance which tokens detect each other through walls.
+
+### Architecture
+- **Visual-only in v1.53.** The fog / LoS pipeline still keys off `Token.losRadius` for actual visibility math; vision modes don't currently influence what cells are revealed. Adding mechanical effect would require:
+  - `blindsight` ignores walls — skip the visibility-polygon clamp.
+  - `tremorsense` only reveals tokens (not terrain) within radius — different rule than fog.
+  - `truesight` reveals invisibility-flagged tokens — needs a new `Token.invisible` field.
+  
+  Each is a viable future polish; v1.53 ships the data + visual reminders.
+- **GM-only render gate.** The `drawTokenVisionModes` pass is wrapped in `options.mode === 'gm'`. Spectators don't see the GM's vision reminders — the disks would otherwise leak "this NPC can see X far" to players.
+- **Dashed stroke + alpha 0.55.** Faint enough not to compete with auras (Phase 139) for visual real estate; dashed pattern distinguishes from the solid aura outlines.
+- **Per-mode colors.** Each kind gets a distinct hue so a token with multiple modes (darkvision 120 + truesight 30) shows two distinct dashed rings rather than one ambiguous combined ring.
+
+### Tests
+- **+5 unit tests** in `src/sync/messages.test.ts`: pre-178 missing default, round-trip multi-mode, drop unknown kinds, drop non-finite/non-positive radii, non-array → undefined.
+- **All 1702 unit tests + 411 Playwright specs pass** locally.
+
+### Bundle
+- 120.39 / 122 KB initial-load brotli — bumped from 120 → 122 KB to fit the editor UI + render layer + helpers.
+- Lazy chunks 26.18 / 28 KB unchanged. CSS 14.06 / 15 KB — bumped from 14 → 15 KB to fit the `.vision-mode-*` styles + cumulative growth across the batch.
+
+### Pre-push checklist
+- typecheck: clean.
+- unit suite: 1702 passing.
+- e2e suite: 411 passing.
+- visual regression: all baselines green (vision modes only render when authored on a token; default-state baselines have none).
+- size-limit: all 5 budgets green after the JS + CSS bumps.
+
+---
+
 ## [1.52.0] — 2026-05-06 — Token tags for selection groups
 
 Phase 177 — sixteenth of the v1.37 → v1.55 batch. Optional `Token.tags?: string[]` field, comma-separated input in the editor, and a "Select by tag…" command-palette action that selects every token sharing a tag in one click.

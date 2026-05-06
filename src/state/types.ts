@@ -88,6 +88,36 @@ export interface Aura {
   visibility: 'gm' | 'shared';
 }
 
+/**
+ * Phase 178 — D&D-style tagged vision modes (darkvision /
+ * blindsight / tremorsense / truesight). Each entry records a
+ * `kind` (semantic) + `radiusFt` (in feet, the SRD vocabulary)
+ * — the renderer converts to world pixels using the active grid.
+ *
+ * Visual-only in v1.53. The fog / LoS pipeline still keys off
+ * `Token.losRadius` for actual visibility math; vision modes
+ * just paint faint colored disks centered on the token so the
+ * GM sees "darkvision 60 ft" / "blindsight 30 ft" at a glance.
+ *
+ * Future polish could couple specific kinds to fog math:
+ *   - `blindsight` ignores walls (mechanically: skip the
+ *     visibility-polygon clamp).
+ *   - `tremorsense` only sees adjacent tokens (radiusFt becomes
+ *     a brute-force nearby-tokens predicate).
+ *   - `truesight` reveals invisible / illusion / etc.
+ */
+export type VisionModeKind =
+  | 'darkvision'
+  | 'blindsight'
+  | 'tremorsense'
+  | 'truesight';
+
+export interface VisionMode {
+  kind: VisionModeKind;
+  /** Radius in feet (SRD). Editor converts via the active feetPerSquare. */
+  radiusFt: number;
+}
+
 export interface Token {
   id: ID;
   x: number;
@@ -208,6 +238,14 @@ export interface Token {
    * the token editor's "Movement" section.
    */
   speedFt: number;
+  /**
+   * Phase 178 — D&D vision modes (darkvision / blindsight / etc.).
+   * Visual-only — the renderer paints a faint colored disk at
+   * each mode's radius. Mechanical effect on fog / LoS is
+   * deferred. Optional + back-compat. Pre-178 tokens carry no
+   * field; deserializer treats missing as `undefined`.
+   */
+  visionModes?: VisionMode[];
   /**
    * Phase 177 — free-form tags for grouping / multi-select.
    * Authored via the token editor as a comma-separated input;

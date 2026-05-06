@@ -1,6 +1,14 @@
 import type { Store } from '../state/store.js';
 import type { SelectionState } from '../input/context.js';
-import type { Aura, ID, Token, TokenHp, TokenLight } from '../state/types.js';
+import type {
+  Aura,
+  ID,
+  Token,
+  TokenHp,
+  TokenLight,
+  VisionMode,
+  VisionModeKind,
+} from '../state/types.js';
 import { nid as nanoNid } from '../util/id.js';
 import {
   isStable,
@@ -210,6 +218,21 @@ export function mountTokenEditor(opts: TokenEditorOptions): TokenEditorHandle {
             by some viewer AND lit by some light.
           </p>
         </div>
+      </fieldset>
+
+      <!-- Phase 178 — D&D vision modes. Visual reminder only in
+           v1.53 — fog / LoS math still uses Token.losRadius. -->
+      <fieldset class="vision-modes-block">
+        <legend>Vision modes</legend>
+        <div class="vision-mode-list" data-field="vision-mode-list"></div>
+        <button type="button" class="vision-mode-add" data-action="add-vision-mode">
+          + Add vision
+        </button>
+        <p class="settings-hint">
+          Phase 178 — D&amp;D vision modes (darkvision, blindsight,
+          tremorsense, truesight) shown as faint dashed disks on
+          the GM canvas. Visual reminder; doesn't affect fog math.
+        </p>
       </fieldset>
 
       <fieldset class="aura-block">
@@ -470,6 +493,13 @@ export function mountTokenEditor(opts: TokenEditorOptions): TokenEditorHandle {
   const tagsInput = modal.querySelector<HTMLInputElement>(
     '[data-field="tags"]',
   )!;
+  // Phase 178 — vision-modes list + add button.
+  const visionListEl = modal.querySelector<HTMLDivElement>(
+    '[data-field="vision-mode-list"]',
+  )!;
+  const visionAddBtn = modal.querySelector<HTMLButtonElement>(
+    '[data-action="add-vision-mode"]',
+  )!;
   const counter = modal.querySelector<HTMLSpanElement>('[data-field="counter"]')!;
   const hasSightInput = modal.querySelector<HTMLInputElement>('[data-field="hasSight"]')!;
   const sightDetails = modal.querySelector<HTMLDivElement>('[data-field="sight-details"]')!;
@@ -638,6 +668,8 @@ export function mountTokenEditor(opts: TokenEditorOptions): TokenEditorHandle {
     notesInput.value = token.notes ?? '';
     // Phase 177 — sync the tags input as a comma-separated string.
     tagsInput.value = (token.tags ?? []).join(', ');
+    // Phase 178 — render vision modes.
+    syncVisionModesUI(token.visionModes ?? []);
     syncVisibilityUI(token.id);
     syncOwnerUI(token.ownerId);
     syncParentUI(token);
@@ -1662,6 +1694,115 @@ export function mountTokenEditor(opts: TokenEditorOptions): TokenEditorHandle {
     const current = tok.notes ?? undefined;
     if (next === current) return;
     update({ notes: next });
+  });
+
+  /**
+   * Phase 178 — render the vision-modes list + wire per-row
+   * commit / remove. Each row is a kind dropdown + a feet
+   * input + a remove button. Add via the "+ Add vision" button
+   * appends a default `darkvision 60 ft`.
+   */
+  function syncVisionModesUI(modes: readonly VisionMode[]): void {
+    visionListEl.replaceChildren();
+    if (modes.length === 0) {
+      const empty = document.createElement('p');
+      empty.className = 'vision-mode-empty settings-hint';
+      empty.textContent = 'No vision modes. Click "+ Add vision" to start.';
+      visionListEl.appendChild(empty);
+      return;
+    }
+    modes.forEach((mode, idx) => {
+      const row = document.createElement('div');
+      row.className = 'vision-mode-row';
+
+      const kindSelect = document.createElement('select');
+      kindSelect.className = 'vision-mode-kind';
+      const kinds: Array<{ id: VisionModeKind; label: string }> = [
+        { id: 'darkvision', label: 'Darkvision' },
+        { id: 'blindsight', label: 'Blindsight' },
+        { id: 'tremorsense', label: 'Tremorsense' },
+        { id: 'truesight', label: 'Truesight' },
+      ];
+      for (const k of kinds) {
+        const opt = document.createElement('option');
+        opt.value = k.id;
+        opt.textContent = k.label;
+        if (k.id === mode.kind) opt.selected = true;
+        kindSelect.appendChild(opt);
+      }
+      kindSelect.addEventListener('change', () => {
+        commitVisionMode(idx, {
+          kind: kindSelect.value as VisionModeKind,
+          radiusFt: mode.radiusFt,
+        });
+      });
+
+      const radiusInput = document.createElement('input');
+      radiusInput.type = 'number';
+      radiusInput.min = '5';
+      radiusInput.max = '240';
+      radiusInput.step = '5';
+      radiusInput.value = String(mode.radiusFt);
+      radiusInput.className = 'vision-mode-radius';
+      radiusInput.title = 'Radius in feet';
+      radiusInput.addEventListener('change', () => {
+        const ft = parseInt(radiusInput.value, 10);
+        if (!Number.isFinite(ft) || ft <= 0) {
+          radiusInput.value = String(mode.radiusFt);
+          return;
+        }
+        commitVisionMode(idx, {
+          kind: mode.kind,
+          radiusFt: Math.max(0, ft),
+        });
+      });
+
+      const ftLabel = document.createElement('span');
+      ftLabel.className = 'vision-mode-ft-label';
+      ftLabel.textContent = 'ft';
+
+      const removeBtn = document.createElement('button');
+      removeBtn.type = 'button';
+      removeBtn.className = 'vision-mode-remove';
+      removeBtn.title = 'Remove this vision mode';
+      removeBtn.textContent = '×';
+      removeBtn.addEventListener('click', () => removeVisionMode(idx));
+
+      row.appendChild(kindSelect);
+      row.appendChild(radiusInput);
+      row.appendChild(ftLabel);
+      row.appendChild(removeBtn);
+      visionListEl.appendChild(row);
+    });
+  }
+
+  function commitVisionMode(index: number, next: VisionMode): void {
+    const tok = currentToken();
+    if (!tok) return;
+    const modes = (tok.visionModes ?? []).slice();
+    if (index < 0 || index >= modes.length) return;
+    modes[index] = next;
+    update({ visionModes: modes });
+    syncVisionModesUI(modes);
+  }
+
+  function removeVisionMode(index: number): void {
+    const tok = currentToken();
+    if (!tok) return;
+    const modes = (tok.visionModes ?? []).slice();
+    if (index < 0 || index >= modes.length) return;
+    modes.splice(index, 1);
+    update({ visionModes: modes.length > 0 ? modes : undefined });
+    syncVisionModesUI(modes);
+  }
+
+  visionAddBtn.addEventListener('click', () => {
+    const tok = currentToken();
+    if (!tok) return;
+    const modes = (tok.visionModes ?? []).slice();
+    modes.push({ kind: 'darkvision', radiusFt: 60 });
+    update({ visionModes: modes });
+    syncVisionModesUI(modes);
   });
 
   // Phase 177 — tags input. Commits on blur. Splits the comma-
