@@ -66,6 +66,11 @@ test.describe('Phase 157 — per-scene notes', () => {
     // Create + switch to a second scene.
     await createScene(page, 'Second Scene');
 
+    // Phase 171 — panel-open state is now per-scene. The new
+    // scene has no per-scene "open" record yet, so the panel
+    // closes on switch. Re-open it to inspect the textarea.
+    await openNotes(page);
+
     // The notes textarea should now reflect the second scene's
     // (empty) notes, NOT the first scene's content.
     expect(await getNotesValue(page)).toBe('');
@@ -87,6 +92,10 @@ test.describe('Phase 157 — per-scene notes', () => {
     await expect(page.locator('.scene-indicator-label')).not.toHaveText(
       /Second Scene/,
     );
+
+    // Phase 171 — Notes was open in scene 1 when we left, so the
+    // per-scene open state should restore the panel as open.
+    await expect(page.locator('.notes-panel')).toBeVisible();
 
     // Notes should restore to the first scene's content.
     expect(await getNotesValue(page)).toBe('First scene notes');

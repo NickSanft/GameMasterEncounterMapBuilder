@@ -15,6 +15,11 @@ import type { WhatsNewEntry } from './whats-new.js';
 
 export const GENERATED_WHATS_NEW_ENTRIES: readonly WhatsNewEntry[] = [
   {
+    version: '1.46.0',
+    date: '2026-05-05',
+    highlights: ['Per-scene Notes panel open-state'],
+  },
+  {
     version: '1.45.0',
     date: '2026-05-05',
     highlights: ['D&D 5e cover wall presets'],
@@ -128,10 +133,5 @@ export const GENERATED_WHATS_NEW_ENTRIES: readonly WhatsNewEntry[] = [
     version: '1.23.0',
     date: '2026-05-04',
     highlights: ['Recently-used tokens strip'],
-  },
-  {
-    version: '1.22.0',
-    date: '2026-05-04',
-    highlights: ['Initiative-bar pip parity'],
   },
 ];

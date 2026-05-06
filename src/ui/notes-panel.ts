@@ -2,6 +2,7 @@ import {
   NOTES_TEXT_KEY,
   NOTES_TEXT_KEY_PREFIX,
   NOTES_OPEN_KEY,
+  NOTES_OPEN_KEY_PREFIX,
 } from '../util/constants.js';
 import { debounce } from '../util/debounce.js';
 import {
@@ -91,6 +92,31 @@ export function mountNotesPanel(opts: NotesPanelOptions = {}): NotesPanelHandle 
   // into when the switch fires.
   let lastSceneId: string | null = getActiveSceneId?.() ?? null;
 
+  // Phase 171 — derive per-scene open-state key. Same fallback
+  // pattern as the per-scene text key: per-scene wins, legacy
+  // global serves as the default for scenes the user hasn't
+  // opened/closed Notes in yet.
+  function activeOpenKey(): string {
+    const id = getActiveSceneId?.() ?? null;
+    return id ? `${NOTES_OPEN_KEY_PREFIX}${id}` : NOTES_OPEN_KEY;
+  }
+
+  function readOpenState(): boolean {
+    const key = activeOpenKey();
+    try {
+      const own = localStorage.getItem(key);
+      if (own !== null) return own === 'true';
+      // Fallback to legacy global key when per-scene is unset.
+      if (key !== NOTES_OPEN_KEY) {
+        const legacy = localStorage.getItem(NOTES_OPEN_KEY);
+        if (legacy !== null) return legacy === 'true';
+      }
+      return false;
+    } catch {
+      return false;
+    }
+  }
+
   const panel = document.createElement('aside');
   panel.className = 'notes-panel';
   panel.setAttribute('role', 'complementary');
@@ -153,7 +179,9 @@ export function mountNotesPanel(opts: NotesPanelOptions = {}): NotesPanelHandle 
   let statusIsError = false;
 
   textarea.value = readNotes();
-  const initiallyOpen = localStorage.getItem(NOTES_OPEN_KEY) === 'true';
+  // Phase 171 — read the per-scene open state (with legacy
+  // fallback) instead of the global NOTES_OPEN_KEY directly.
+  const initiallyOpen = readOpenState();
   setOpen(initiallyOpen, { persist: false });
 
   const persist = debounce(() => {
@@ -261,7 +289,10 @@ export function mountNotesPanel(opts: NotesPanelOptions = {}): NotesPanelHandle 
     document.body.classList.toggle('notes-open', next);
     if (options.persist !== false) {
       try {
-        localStorage.setItem(NOTES_OPEN_KEY, next ? 'true' : 'false');
+        // Phase 171 — write to the per-scene open key (with legacy
+        // global fallback when no scene is active). Mirrors the
+        // notes-text-key pattern from Phase 157.
+        localStorage.setItem(activeOpenKey(), next ? 'true' : 'false');
       } catch {
         /* ignore */
       }
@@ -303,16 +334,28 @@ export function mountNotesPanel(opts: NotesPanelOptions = {}): NotesPanelHandle 
   function notifySceneSwitched(): void {
     if (!getActiveSceneId) return;
     persist.flush();
-    const outgoingKey = lastSceneId
+    const outgoingTextKey = lastSceneId
       ? `${NOTES_TEXT_KEY_PREFIX}${lastSceneId}`
       : NOTES_TEXT_KEY;
+    // Phase 171 — also save the OUTGOING scene's open state
+    // before swapping. We reach into panel.hidden directly since
+    // setOpen would persist under the NEW active key (which is
+    // wrong — we're persisting the outgoing).
+    const outgoingOpenKey = lastSceneId
+      ? `${NOTES_OPEN_KEY_PREFIX}${lastSceneId}`
+      : NOTES_OPEN_KEY;
     try {
-      localStorage.setItem(outgoingKey, textarea.value);
+      localStorage.setItem(outgoingTextKey, textarea.value);
+      localStorage.setItem(outgoingOpenKey, panel.hidden ? 'false' : 'true');
     } catch (err) {
       console.warn('[notes-panel] save outgoing scene failed', err);
     }
     lastSceneId = getActiveSceneId();
     textarea.value = readNotes();
+    // Phase 171 — load the incoming scene's open state too.
+    // Skip persist on this setOpen so we don't double-write the
+    // value we just read.
+    setOpen(readOpenState(), { persist: false });
   }
 
   return {

@@ -131,6 +131,51 @@ gaps so the v1.0 cut is genuinely "stable + remote-play-capable."
 
 ---
 
+## [1.46.0] — 2026-05-05 — Per-scene Notes panel open-state
+
+Phase 171 — tenth of the v1.37 → v1.55 batch. Phase 157 made the Notes panel CONTENT per-scene; Phase 171 makes its OPEN-STATE per-scene too. A user who keeps Notes open in scene A but closed in scene B sees that distinction preserved across switches.
+
+### Added
+- **`NOTES_OPEN_KEY_PREFIX = 'gm-encounter-maps-notes-open:'`** in `src/util/constants.ts`. Per-scene open state under `${NOTES_OPEN_KEY_PREFIX}${sceneId}`.
+- **`activeOpenKey()` + `readOpenState()` helpers** in `src/ui/notes-panel.ts`. Same fallback pattern as the per-scene text key from Phase 157: per-scene wins; legacy global `NOTES_OPEN_KEY` serves as the default for scenes the user hasn't opened/closed Notes in yet.
+- **`notifySceneSwitched` extension**: now also saves the OUTGOING scene's open state to its per-scene key before swapping, then loads the INCOMING scene's open state via `readOpenState()` + `setOpen({ persist: false })` (skip persist so we don't double-write the value we just read).
+- **Direct `panel.hidden` read in the outgoing-save path.** `setOpen` would persist under the NEW active key (wrong — we're saving the outgoing); we read the DOM element's hidden flag directly.
+
+### Why this matters
+Pre-171: switch to scene B, Notes panel stays open even if you closed it in scene B last session. The mental model "per-scene state stays with the scene" was incomplete — content was per-scene (Phase 157) but the panel's visibility was global.
+
+Post-171: each scene "remembers" whether the GM had Notes open. Especially useful for:
+- **Combat-heavy scenes** where Notes are open to track per-NPC reminders.
+- **Theatre-of-the-mind scenes** where Notes are closed (no map clutter).
+- **Quick-reference scenes** (rules cheatsheet) where Notes always opens.
+
+### Architecture
+- **Open-state shape mirrors text-state shape.** Both are scene-keyed strings ('true' / 'false' for open, the textarea value for content). Both use the same `NOTES_*_KEY` (legacy) → `NOTES_*_KEY_PREFIX:sceneId` (per-scene) layout.
+- **`setOpen({ persist: false })` on incoming load.** Reads the new scene's saved open state and reflects it in the DOM without writing through (we just read it). Mirrors the textarea's pattern.
+- **Outgoing-save uses cached `lastSceneId`.** Same pattern as Phase 157 — the active-scene pointer has already flipped to the new scene by the time `notifySceneSwitched()` runs, so we cache the outgoing id internally.
+
+### UX details
+- **Migration is invisible.** First boot post-171: scene-A's Notes uses the legacy global state (whatever it was). On first close/open in scene-A, the per-scene record is created. Subsequent scene-A loads use the per-scene record.
+- **No new UI.** The behavior is implicit — the user just sees "the panel I closed in scene B stays closed when I come back."
+
+### Tests
+- **+4 unit tests** in `src/ui/notes-panel.test.ts`: per-scene open key honored, legacy global fallback, distinct per scene survives notifySceneSwitched, outgoing scene's open state saved on switch.
+- **Updated `e2e/scene-notes.spec.ts`** to reflect the new behavior — switching to a fresh scene now closes Notes (the new scene has no per-scene "open" record); the test re-opens Notes after the switch and verifies the per-scene textarea content + open-state restore on switch-back.
+- **All 1665 unit tests + 406 Playwright specs pass** locally.
+
+### Bundle
+- 117.99 / 120 KB initial-load brotli (+0.14 KB for the new helpers + key).
+- Lazy chunks unchanged. CSS unchanged.
+
+### Pre-push checklist
+- typecheck: clean.
+- unit suite: 1665 passing.
+- e2e suite: 406 passing.
+- visual regression: all baselines green.
+- size-limit: all 5 budgets green.
+
+---
+
 ## [1.45.0] — 2026-05-05 — D&D 5e cover wall presets
 
 Phase 170 — ninth of the v1.37 → v1.55 batch. Adds three new built-in wall presets that match D&D 5e cover terminology so 5e-fluent GMs can pick by intent ("Half-cover") instead of by geometry ("low wall, sight passes through, blocks movement").

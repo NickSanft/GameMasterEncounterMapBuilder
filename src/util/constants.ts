@@ -7,7 +7,7 @@ export const APP_NAME = 'GM Encounter Maps';
  * release commit (no auto-injection from package.json — keeps the
  * value visible in source so version drift is reviewable).
  */
-export const APP_VERSION = '1.45.0';
+export const APP_VERSION = '1.46.0';
 export const WHATS_NEW_LAST_SEEN_KEY = 'gm-encounter-maps-last-seen-version';
 
 export const STORAGE_KEY = 'gm-encounter-maps-state';
@@ -23,6 +23,15 @@ export const NOTES_TEXT_KEY = 'gm-encounter-maps-notes';
  */
 export const NOTES_TEXT_KEY_PREFIX = 'gm-encounter-maps-notes:';
 export const NOTES_OPEN_KEY = 'gm-encounter-maps-notes-open';
+/**
+ * Phase 171 — per-scene Notes open-state key prefix. The panel-
+ * open state is persisted per scene so a user who keeps Notes
+ * open in scene A but closed in scene B sees that distinction
+ * preserved across switches. Pre-171 saves used the global
+ * `NOTES_OPEN_KEY`; the panel uses that as a fallback for
+ * scenes without a per-scene record.
+ */
+export const NOTES_OPEN_KEY_PREFIX = 'gm-encounter-maps-notes-open:';
 export const BROADCAST_CHANNEL_NAME = 'gm-encounter-maps-session';
 export const IDB_DB_NAME = 'gm-encounter-maps';
 export const EXPORT_FILENAME_PREFIX = 'gm-encounter-maps';

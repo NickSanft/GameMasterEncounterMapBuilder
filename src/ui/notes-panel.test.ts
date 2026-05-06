@@ -8,6 +8,8 @@ import { mountNotesPanel } from './notes-panel.js';
 import {
   NOTES_TEXT_KEY,
   NOTES_TEXT_KEY_PREFIX,
+  NOTES_OPEN_KEY,
+  NOTES_OPEN_KEY_PREFIX,
 } from '../util/constants.js';
 
 describe('mountNotesPanel — Phase 157 per-scene notes', () => {
@@ -140,5 +142,55 @@ describe('mountNotesPanel — Phase 157 per-scene notes', () => {
     activeId = 'scene-real';
     handle.notifySceneSwitched();
     expect(ta.value).toBe('real scene notes');
+  });
+});
+
+describe('mountNotesPanel — Phase 171 per-scene open state', () => {
+  beforeEach(() => {
+    document.body.innerHTML = '';
+    localStorage.clear();
+  });
+
+  it('reads the per-scene open key when getActiveSceneId is supplied', () => {
+    localStorage.setItem(`${NOTES_OPEN_KEY_PREFIX}scene-1`, 'true');
+    mountNotesPanel({ getActiveSceneId: () => 'scene-1' });
+    const panel = document.querySelector<HTMLElement>('.notes-panel')!;
+    expect(panel.hidden).toBe(false);
+  });
+
+  it('falls back to the legacy global key when per-scene is unset', () => {
+    localStorage.setItem(NOTES_OPEN_KEY, 'true');
+    mountNotesPanel({ getActiveSceneId: () => 'scene-fresh' });
+    const panel = document.querySelector<HTMLElement>('.notes-panel')!;
+    expect(panel.hidden).toBe(false);
+  });
+
+  it('open state distinct per scene survives notifySceneSwitched', () => {
+    let activeId: string = 'scene-a';
+    localStorage.setItem(`${NOTES_OPEN_KEY_PREFIX}scene-a`, 'true');
+    localStorage.setItem(`${NOTES_OPEN_KEY_PREFIX}scene-b`, 'false');
+
+    const handle = mountNotesPanel({ getActiveSceneId: () => activeId });
+    const panel = document.querySelector<HTMLElement>('.notes-panel')!;
+    expect(panel.hidden).toBe(false);
+
+    activeId = 'scene-b';
+    handle.notifySceneSwitched();
+    expect(panel.hidden).toBe(true);
+
+    // Switching back picks up the per-scene "open" state.
+    activeId = 'scene-a';
+    handle.notifySceneSwitched();
+    expect(panel.hidden).toBe(false);
+  });
+
+  it('saves the outgoing scene\'s open state on switch', () => {
+    let activeId: string = 'scene-a';
+    const handle = mountNotesPanel({ getActiveSceneId: () => activeId });
+    handle.open();
+    activeId = 'scene-b';
+    handle.notifySceneSwitched();
+    // Outgoing (scene-a) should now have its open state saved.
+    expect(localStorage.getItem(`${NOTES_OPEN_KEY_PREFIX}scene-a`)).toBe('true');
   });
 });
