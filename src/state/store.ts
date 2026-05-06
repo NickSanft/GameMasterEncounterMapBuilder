@@ -256,6 +256,38 @@ export function createStore(initial?: SessionState): Store {
         };
         break;
       }
+      case 'initiative-reorder': {
+        // Phase 176 — validate the new order contains exactly the
+        // same set of ids as the existing order. Drop unknown ids
+        // silently; require the count to match. A no-op order is
+        // a no-op.
+        const existing = state.initiative.order;
+        const byId = new Map(existing.map((e) => [e.id, e]));
+        const next: typeof existing = [];
+        const seen = new Set<string>();
+        for (const id of patch.order) {
+          if (seen.has(id)) continue;
+          const entry = byId.get(id);
+          if (!entry) continue;
+          seen.add(id);
+          next.push(entry);
+        }
+        if (next.length !== existing.length) return;
+        // Same-shape no-op fast path.
+        let same = true;
+        for (let i = 0; i < next.length; i++) {
+          if (next[i]!.id !== existing[i]!.id) {
+            same = false;
+            break;
+          }
+        }
+        if (same) return;
+        state = {
+          ...state,
+          initiative: { ...state.initiative, order: next },
+        };
+        break;
+      }
       case 'initiative-set-active': {
         // Phase 70 — when the round counter ADVANCES, scan every token
         // and strip any condition whose timer is <= the new round. A

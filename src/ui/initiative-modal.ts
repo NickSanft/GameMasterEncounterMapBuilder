@@ -105,6 +105,90 @@ export function mountInitiativeModal(
 
   let triggerFocus: HTMLElement | null = null;
 
+  // Phase 176 — drag/drop reorder. Listeners are attached ONCE on
+  // the list element (delegation across renders). The dragstart
+  // payload is the dragged row's `data-id`; dragover computes
+  // whether to insert before/after the row under the cursor and
+  // toggles a CSS class for the visual indicator; drop dispatches
+  // the `initiative-reorder` patch. `renderList` clears
+  // `listEl.innerHTML` each render but the listeners on `listEl`
+  // itself survive the children being recreated.
+  let dragId: string | null = null;
+  listEl.addEventListener('dragstart', (e) => {
+    const target = (e.target as HTMLElement).closest(
+      'li.initiative-list-row',
+    ) as HTMLElement | null;
+    if (!target || !target.dataset.id) return;
+    dragId = target.dataset.id;
+    target.classList.add('initiative-list-row-dragging');
+    if (e.dataTransfer) {
+      e.dataTransfer.effectAllowed = 'move';
+      // Some browsers require setData to start a drag.
+      e.dataTransfer.setData('text/plain', dragId);
+    }
+  });
+  function clearDragVisuals(): void {
+    listEl
+      .querySelectorAll('.initiative-list-row-dragging')
+      .forEach((el) => el.classList.remove('initiative-list-row-dragging'));
+    listEl
+      .querySelectorAll('.initiative-list-row-drop-before')
+      .forEach((el) => el.classList.remove('initiative-list-row-drop-before'));
+    listEl
+      .querySelectorAll('.initiative-list-row-drop-after')
+      .forEach((el) => el.classList.remove('initiative-list-row-drop-after'));
+  }
+  listEl.addEventListener('dragend', () => {
+    clearDragVisuals();
+    dragId = null;
+  });
+  listEl.addEventListener('dragover', (e) => {
+    if (!dragId) return;
+    const target = (e.target as HTMLElement).closest(
+      'li.initiative-list-row',
+    ) as HTMLElement | null;
+    if (!target || target.dataset.id === dragId) return;
+    e.preventDefault();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+    const rect = target.getBoundingClientRect();
+    const before = e.clientY < rect.top + rect.height / 2;
+    listEl
+      .querySelectorAll('.initiative-list-row-drop-before')
+      .forEach((el) => el.classList.remove('initiative-list-row-drop-before'));
+    listEl
+      .querySelectorAll('.initiative-list-row-drop-after')
+      .forEach((el) => el.classList.remove('initiative-list-row-drop-after'));
+    target.classList.add(
+      before
+        ? 'initiative-list-row-drop-before'
+        : 'initiative-list-row-drop-after',
+    );
+  });
+  listEl.addEventListener('drop', (e) => {
+    if (!dragId) return;
+    const target = (e.target as HTMLElement).closest(
+      'li.initiative-list-row',
+    ) as HTMLElement | null;
+    if (!target || target.dataset.id === dragId) return;
+    e.preventDefault();
+    const dropOnId = target.dataset.id!;
+    const rect = target.getBoundingClientRect();
+    const before = e.clientY < rect.top + rect.height / 2;
+    const orderNow = store
+      .getState()
+      .initiative.order.map((entry) => entry.id);
+    const fromIdx = orderNow.indexOf(dragId);
+    if (fromIdx < 0) return;
+    orderNow.splice(fromIdx, 1);
+    let toIdx = orderNow.indexOf(dropOnId);
+    if (toIdx < 0) return;
+    if (!before) toIdx++;
+    orderNow.splice(toIdx, 0, dragId);
+    store.applyPatch({ kind: 'initiative-reorder', order: orderNow });
+    clearDragVisuals();
+    dragId = null;
+  });
+
   function open() {
     triggerFocus = rememberFocus();
     populate();
@@ -171,9 +255,21 @@ export function mountInitiativeModal(
       const li = document.createElement('li');
       li.className = 'initiative-list-row';
       if (entry.id === activeId) li.classList.add('active');
+      // Phase 176 — drag-handle reorder. The whole row is the
+      // draggable target; the handle is a visual affordance + the
+      // accessible "this is draggable" cue. We mark `data-id` so
+      // the dragover/drop handlers can map DOM ↔ entry.
+      li.draggable = true;
+      li.dataset.id = entry.id;
       const linkedToken: Token | undefined = entry.tokenId
         ? state.tokens.find((t) => t.id === entry.tokenId)
         : undefined;
+
+      const handle = document.createElement('span');
+      handle.className = 'initiative-list-handle';
+      handle.setAttribute('aria-hidden', 'true');
+      handle.title = 'Drag to reorder';
+      handle.textContent = '⋮⋮';
 
       const valueEl = document.createElement('span');
       valueEl.className = 'initiative-list-value';
@@ -215,6 +311,7 @@ export function mountInitiativeModal(
       actions.appendChild(setActiveBtn);
       actions.appendChild(removeBtn);
 
+      li.appendChild(handle);
       li.appendChild(valueEl);
       li.appendChild(nameEl);
       li.appendChild(actions);

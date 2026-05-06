@@ -7175,3 +7175,47 @@ body.reduced-motion .tour-popover {
 .toast-close:hover {
   opacity: 1;
 }
+
+/* Phase 176 — drag-handle reorder for the initiative tracker. */
+.initiative-list-handle {
+  display: inline-block;
+  font-size: 0.95rem;
+  color: var(--fg, #f0f0f0);
+  opacity: 0.55;
+  cursor: grab;
+  user-select: none;
+  margin-right: 0.4rem;
+  padding: 0 0.15rem;
+  letter-spacing: -0.15em;
+}
+
+.initiative-list-row {
+  position: relative;
+}
+
+.initiative-list-row[draggable="true"] {
+  cursor: default;
+}
+
+.initiative-list-row-dragging {
+  opacity: 0.45;
+}
+
+.initiative-list-row-drop-before::before,
+.initiative-list-row-drop-after::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--accent, #5eaaff);
+  pointer-events: none;
+}
+
+.initiative-list-row-drop-before::before {
+  top: -1px;
+}
+
+.initiative-list-row-drop-after::after {
+  bottom: -1px;
+}

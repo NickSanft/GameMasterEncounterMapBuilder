@@ -632,6 +632,15 @@ export type StatePatch =
     }
   | { kind: 'initiative-remove'; id: ID }
   | { kind: 'initiative-set-active'; activeId: ID | null; round: number }
+  /**
+   * Phase 176 — manually reorder the initiative order without
+   * touching the entries' `value` fields. Used by the
+   * drag-handle reorder UI in the tracker modal. The store
+   * handler validates the new order contains the same ids as
+   * the existing order (no add/remove via reorder); ids that
+   * don't match are dropped silently.
+   */
+  | { kind: 'initiative-reorder'; order: ID[] }
   | { kind: 'stroke-add'; stroke: DrawStroke }
   | { kind: 'stroke-update'; id: ID; changes: Partial<Omit<DrawStroke, 'id'>> }
   | { kind: 'stroke-remove'; id: ID }

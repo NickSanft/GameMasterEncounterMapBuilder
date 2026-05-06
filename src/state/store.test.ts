@@ -513,3 +513,65 @@ describe('Phase 72 — death-save round-trip', () => {
     });
   });
 });
+
+describe('Phase 176 — initiative-reorder patch', () => {
+  function setupOrderedStore() {
+    const initial = createDefaultState();
+    initial.initiative = {
+      order: [
+        { id: 'e1', tokenId: null, label: 'A', value: 20 },
+        { id: 'e2', tokenId: null, label: 'B', value: 18 },
+        { id: 'e3', tokenId: null, label: 'C', value: 12 },
+      ],
+      activeId: null,
+      round: 0,
+    };
+    return createStore(initial);
+  }
+
+  it('replaces the order array preserving entries', () => {
+    const store = setupOrderedStore();
+    store.applyPatch({ kind: 'initiative-reorder', order: ['e3', 'e1', 'e2'] });
+    const order = store.getState().initiative.order;
+    expect(order.map((e) => e.id)).toEqual(['e3', 'e1', 'e2']);
+    // Values are preserved (drag reorder doesn't touch values).
+    expect(order.map((e) => e.value)).toEqual([12, 20, 18]);
+  });
+
+  it('drops unknown ids silently when the post-filter count still matches', () => {
+    const store = setupOrderedStore();
+    store.applyPatch({
+      kind: 'initiative-reorder',
+      order: ['e3', 'ghost', 'e1', 'e2'],
+    });
+    // ghost dropped → 3 entries → matches existing → reorder applies.
+    expect(
+      store.getState().initiative.order.map((e) => e.id),
+    ).toEqual(['e3', 'e1', 'e2']);
+  });
+
+  it('bails (no-op) when the new order is missing entries', () => {
+    const store = setupOrderedStore();
+    const before = store.getState().initiative.order.map((e) => e.id);
+    store.applyPatch({ kind: 'initiative-reorder', order: ['e1', 'e2'] });
+    expect(store.getState().initiative.order.map((e) => e.id)).toEqual(before);
+  });
+
+  it('bails (no-op) when the new order has duplicate ids', () => {
+    const store = setupOrderedStore();
+    const before = store.getState().initiative.order.map((e) => e.id);
+    // After de-dup we'd have ['e1', 'e2'], length 2 != 3 → bail.
+    store.applyPatch({ kind: 'initiative-reorder', order: ['e1', 'e1', 'e2'] });
+    expect(store.getState().initiative.order.map((e) => e.id)).toEqual(before);
+  });
+
+  it('is a no-op when the new order matches the existing order', () => {
+    const store = setupOrderedStore();
+    let notifyCount = 0;
+    store.subscribe(() => {
+      notifyCount++;
+    });
+    store.applyPatch({ kind: 'initiative-reorder', order: ['e1', 'e2', 'e3'] });
+    expect(notifyCount).toBe(0);
+  });
+});

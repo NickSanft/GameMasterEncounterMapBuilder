@@ -131,6 +131,47 @@ gaps so the v1.0 cut is genuinely "stable + remote-play-capable."
 
 ---
 
+## [1.51.0] — 2026-05-06 — Drag-handle reorder in initiative tracker
+
+Phase 176 — fifteenth of the v1.37 → v1.55 batch. The initiative tracker modal's rows are now drag-reorderable. Each row gets a `⋮⋮` handle + `draggable=true`; dropping on another row inserts before/after based on cursor position relative to the row's vertical midline. The new `'initiative-reorder'` patch kind preserves entry `value` fields (drag is order-only, doesn't rewrite rolls).
+
+### Added
+- **`'initiative-reorder' { kind, order: ID[] }` patch kind** in `src/state/types.ts`. The store handler validates the new order contains the same id set as the existing order (same length post-dedup; unknown ids dropped silently); same-shape no-op fast-path.
+- **Drag handle + `data-id` per row** in `src/ui/initiative-modal.ts`. The handle (`⋮⋮`) is visual; the entire row is `draggable`.
+- **One-shot DOM listeners** on `listEl` (delegation) for `dragstart` / `dragover` / `drop` / `dragend`. Survive across renders since the listeners attach to the parent, not children. Visual indicator: a 2 px accent-colored line above (drop-before) or below (drop-after) the hovered row.
+- **CSS** — `.initiative-list-handle`, `.initiative-list-row-dragging`, `.initiative-list-row-drop-before/-after::*` rules. Uses existing `--accent` variable.
+
+### Why this matters
+Pre-176: reordering meant editing the `value` fields manually (1d20 + mod) so the auto-sort produced the right order. Tedious for "I want this token to act before that one" tactical adjustments mid-combat. Post-176: drag the row.
+
+Use cases:
+- **Held actions / readied actions**: drag the held character to the position they'll act in.
+- **Surprise rounds**: rearrange the order to put surprised tokens at the back.
+- **GM judgment calls**: "the dragon went before the rogue this round" — drag to swap.
+
+### Architecture
+- **Order-only reorder.** The `value` field is the d20 + mod that determined the sort. Drag-reorder doesn't touch values — moving a row is a deliberate "ignore the math, use this order" move. (If the GM wants the math back, they can roll again or edit values manually.)
+- **Validation in store.** The store handler de-dups input, drops unknown ids, requires count to match existing. Bails on mismatch (no partial reorder). Same-shape input is an early no-op (no notify, no undo step).
+- **Delegated listeners.** `listEl.innerHTML = ''` clears children every render, but listeners on `listEl` itself persist. The single set of listeners delegates via `closest('li.initiative-list-row')`.
+- **Insertion semantics.** Cursor above row's midline → insert before; below → insert after. Matches every standard reorder UI.
+
+### Tests
+- **+5 unit tests** in `src/state/store.test.ts`: replaces the order array preserving entries, drops unknown ids when count still matches, bails on missing entries, bails on duplicates, no-op on same-shape (no notify).
+- **All 1692 unit tests + 411 Playwright specs pass** locally (the flaky `scenes.spec.ts` test recovered on rerun — pre-existing).
+
+### Bundle
+- 119.16 / 120 KB initial-load brotli (+0.35 KB for the patch handler + drag listeners + CSS).
+- Lazy chunks unchanged. CSS 13.98 / 14 KB (+0.12 KB for the DnD handle + drop-indicator pseudo-element styles). Close to the cap; future phases adding CSS may need a small bump.
+
+### Pre-push checklist
+- typecheck: clean.
+- unit suite: 1692 passing.
+- e2e suite: 411 passing.
+- visual regression: all baselines green.
+- size-limit: all 5 budgets green.
+
+---
+
 ## [1.50.0] — 2026-05-05 — Toast stack with Undo
 
 Phase 175 — fourteenth of the v1.37 → v1.55 batch. New `mountToastStack()` mounts a fixed bottom-right notification stack. Wired into the destructive operations (Delete selection, Clear drawings, Clear travel routes) so each fires a "Deleted N tokens — Undo" pill that reverts via `store.undo()` if clicked within 5 seconds.
