@@ -115,6 +115,39 @@ export const BUILTIN_PRESETS: readonly WallPreset[] = [
     blocksMovement: true,
     door: null,
   },
+  // Phase 170 — D&D 5e cover terminology presets. Map game-side
+  // "what cover does this give?" rules onto the existing
+  // sight/movement flags. "Half-cover" and "Window" are mechanically
+  // equivalent (sight passes through, movement blocked) but the
+  // semantic name matches the SRD vocabulary so 5e-fluent GMs can
+  // pick by intent.
+  {
+    id: 'b:half-cover',
+    name: 'Half-cover (low wall)',
+    isBuiltin: true,
+    thickness: 4,
+    blocksSight: false,
+    blocksMovement: true,
+  },
+  {
+    id: 'b:three-quarter-cover',
+    name: 'Three-quarter cover',
+    isBuiltin: true,
+    thickness: 3,
+    blocksSight: true,
+    blocksMovement: true,
+  },
+  {
+    id: 'b:cliff-edge',
+    name: 'Cliff edge',
+    isBuiltin: true,
+    // Edges block movement but you can see across (and shoot
+    // across). Rendered thicker than half-cover so the GM can tell
+    // a cliff from a low wall at a glance.
+    thickness: 6,
+    blocksSight: false,
+    blocksMovement: true,
+  },
 ];
 
 interface Envelope {

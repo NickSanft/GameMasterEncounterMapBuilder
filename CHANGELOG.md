@@ -131,6 +131,40 @@ gaps so the v1.0 cut is genuinely "stable + remote-play-capable."
 
 ---
 
+## [1.45.0] — 2026-05-05 — D&D 5e cover wall presets
+
+Phase 170 — ninth of the v1.37 → v1.55 batch. Adds three new built-in wall presets that match D&D 5e cover terminology so 5e-fluent GMs can pick by intent ("Half-cover") instead of by geometry ("low wall, sight passes through, blocks movement").
+
+### Added
+- **`b:half-cover` — "Half-cover (low wall)"** preset. `blocksSight: false`, `blocksMovement: true`, `thickness: 4`. Mechanically equivalent to the existing Window preset but the SRD-vocab name matches the rule reference. Use for crenellations, half-walls, low fences.
+- **`b:three-quarter-cover` — "Three-quarter cover"** preset. `blocksSight: true`, `blocksMovement: true`, `thickness: 3`. Same shape as an interior divider but explicitly named for the SRD cover rule. Use for arrow slits, narrow doorways, partial collapsed rubble.
+- **`b:cliff-edge` — "Cliff edge"** preset. `blocksSight: false`, `blocksMovement: true`, `thickness: 6`. Visually thicker than half-cover so the GM can tell "this is a drop" from "this is a wall" at a glance. Use for ledges, pit edges, balcony rails.
+
+### Why this matters
+Pre-170: GMs had to remember which existing preset corresponded to which 5e cover tier. "Window" = half-cover semantics, but a GM thinking "I need three-quarter cover here" had to mentally translate. Post-170: the picker reads in the GM's vocabulary. The existing 6 built-ins (stone-exterior / interior-divider / window / secret-passage / wooden-door-closed / remove-door) stay unchanged — Phase 170 is purely additive.
+
+### Architecture
+- **Names matter, semantics overlap.** `b:half-cover` and `b:window` produce the same final wall data; they're different muscle-memory entry points. Naming the SRD cover tiers explicitly is the entire UX value here.
+- **Thickness ordering encodes visual hierarchy.** half-cover (4 px) → three-quarter-cover (3 px, thinner because it's a slit) → cliff-edge (6 px, thicker because it's a ledge edge). At a glance, the GM can identify the wall's intent without reading the label.
+
+### Tests
+- **+3 unit tests** in `src/state/wall-presets.test.ts`: half-cover blocks movement only, three-quarter-cover blocks both, cliff-edge blocks movement only with greater thickness than half-cover.
+- **Bumped chip-count assertion** in `e2e/wall-presets.spec.ts` from 6 → 9 + new "Half-cover" visibility check.
+- **All 1661 unit tests + 405 Playwright specs pass** locally.
+
+### Bundle
+- 117.85 / 120 KB initial-load brotli (+0.23 KB for the three new entries).
+- Lazy chunks unchanged. CSS unchanged.
+
+### Pre-push checklist
+- typecheck: clean.
+- unit suite: 1661 passing.
+- e2e suite: 405 passing.
+- visual regression: all baselines green.
+- size-limit: all 5 budgets green.
+
+---
+
 ## [1.44.0] — 2026-05-05 — Per-scene background fill color
 
 Phase 169 — eighth of the v1.37 → v1.55 batch. Optional `Background.fillColor` field; when set, the renderer fills the playable area with that color before any background image. Picker is in the Map-tool right-click menu, using the OS-native color input.

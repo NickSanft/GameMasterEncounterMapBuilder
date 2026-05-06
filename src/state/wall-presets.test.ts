@@ -69,6 +69,32 @@ describe('wall-presets: built-ins always present', () => {
     expect(removers.length).toBe(1); // only remove-door clears
     expect(removers[0]!.id).toBe('b:remove-door');
   });
+
+  // Phase 170 — D&D 5e cover terminology presets.
+  it('the half-cover built-in blocks movement but not sight', () => {
+    const hc = BUILTIN_PRESETS.find((p) => p.id === 'b:half-cover');
+    expect(hc).toBeTruthy();
+    expect(hc!.blocksSight).toBe(false);
+    expect(hc!.blocksMovement).toBe(true);
+  });
+
+  it('the three-quarter cover built-in blocks both sight and movement', () => {
+    const tq = BUILTIN_PRESETS.find((p) => p.id === 'b:three-quarter-cover');
+    expect(tq).toBeTruthy();
+    expect(tq!.blocksSight).toBe(true);
+    expect(tq!.blocksMovement).toBe(true);
+  });
+
+  it('the cliff-edge built-in blocks movement but not sight, thicker than half-cover', () => {
+    const cliff = BUILTIN_PRESETS.find((p) => p.id === 'b:cliff-edge');
+    const hc = BUILTIN_PRESETS.find((p) => p.id === 'b:half-cover');
+    expect(cliff).toBeTruthy();
+    expect(cliff!.blocksSight).toBe(false);
+    expect(cliff!.blocksMovement).toBe(true);
+    // Thickness ordering — cliff visually thicker so the GM
+    // can tell a cliff from a low wall at a glance.
+    expect(cliff!.thickness ?? 0).toBeGreaterThan(hc!.thickness ?? 0);
+  });
 });
 
 describe('wall-presets: save + remove', () => {
