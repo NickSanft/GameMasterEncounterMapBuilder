@@ -7092,3 +7092,86 @@ body.reduced-motion .tour-popover {
   border-top: 1px dashed var(--border, #444);
   margin: 0.5rem 0;
 }
+
+/* Phase 175 — toast stack at bottom-right. */
+.toast-stack {
+  position: fixed;
+  right: 1rem;
+  bottom: 1rem;
+  z-index: 250;
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 0.4rem;
+  pointer-events: none;
+}
+
+.toast {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.6rem 0.5rem 0.8rem;
+  background: var(--surface, #1f2228);
+  color: var(--fg, #f0f0f0);
+  border: 1px solid var(--border, #444);
+  border-left: 3px solid var(--accent, #5eaaff);
+  border-radius: 6px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.4);
+  font-size: 0.85rem;
+  pointer-events: auto;
+  animation: toast-enter 200ms ease-out;
+  max-width: 360px;
+}
+
+.toast.toast-leaving {
+  opacity: 0;
+  transform: translateX(20px);
+  transition: opacity 200ms ease-in, transform 200ms ease-in;
+}
+
+@keyframes toast-enter {
+  from {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.toast-message {
+  flex: 1;
+}
+
+.toast-action {
+  appearance: none;
+  background: transparent;
+  border: 1px solid var(--accent, #5eaaff);
+  color: var(--accent, #5eaaff);
+  font: inherit;
+  font-size: 0.8rem;
+  padding: 0.15rem 0.55rem;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.toast-action:hover {
+  background: var(--accent, #5eaaff);
+  color: #000;
+}
+
+.toast-close {
+  appearance: none;
+  background: transparent;
+  border: none;
+  color: var(--fg, #f0f0f0);
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 0.2rem;
+  opacity: 0.6;
+}
+
+.toast-close:hover {
+  opacity: 1;
+}

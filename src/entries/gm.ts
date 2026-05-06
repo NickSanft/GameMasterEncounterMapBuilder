@@ -226,6 +226,7 @@ import { isEditableFocus } from '../util/focus.js';
 import { createAnnouncer } from '../util/announcer.js';
 import { registerPwa } from '../util/pwa.js';
 import { mountPwaInstallHint } from '../ui/pwa-install-hint.js';
+import { mountToastStack } from '../ui/toast-stack.js';
 import { applyTheme } from '../util/theme.js';
 import { createFogWorkerClient } from '../render/fog-worker-client.js';
 import FogWorker from '../render/fog-worker.js?worker';
@@ -1236,7 +1237,17 @@ mountSessionMenu(document.body, {
     );
     if (ok) {
       store.applyPatch({ kind: 'strokes-clear' });
-      announcer.announce(`${count} drawing${count === 1 ? '' : 's'} cleared.`);
+      const msg = `${count} drawing${count === 1 ? '' : 's'} cleared.`;
+      announcer.announce(msg);
+      // Phase 175 — Undo toast. Same store.undo pattern.
+      toasts.show({
+        message: msg,
+        actionLabel: 'Undo',
+        onAction: () => {
+          store.undo();
+          announcer.announce('Undid clear.');
+        },
+      });
     }
   },
 });
@@ -3670,7 +3681,21 @@ function deleteSelection(): boolean {
     parts.push(`${aoeCount} AoE template${aoeCount === 1 ? '' : 's'}`);
   }
   if (wallCount > 0) parts.push(`${wallCount} wall${wallCount === 1 ? '' : 's'}`);
-  if (parts.length > 0) announcer.announce(`Deleted ${parts.join(' and ')}.`);
+  if (parts.length > 0) {
+    const summary = `Deleted ${parts.join(' and ')}.`;
+    announcer.announce(summary);
+    // Phase 175 — toast with Undo. The store's undo stack carries
+    // the pre-delete snapshot (a single batch produces one undo
+    // step), so a click on Undo restores everything in one go.
+    toasts.show({
+      message: summary,
+      actionLabel: 'Undo',
+      onAction: () => {
+        store.undo();
+        announcer.announce('Undid delete.');
+      },
+    });
+  }
   return true;
 }
 
@@ -4183,9 +4208,17 @@ function slugForFilename(name: string): string {
       );
       if (ok) {
         store.applyPatch({ kind: 'travel-routes-clear' });
-        announcer.announce(
-          `${count} travel route${count === 1 ? '' : 's'} cleared.`,
-        );
+        const msg = `${count} travel route${count === 1 ? '' : 's'} cleared.`;
+        announcer.announce(msg);
+        // Phase 175 — Undo toast.
+        toasts.show({
+          message: msg,
+          actionLabel: 'Undo',
+          onAction: () => {
+            store.undo();
+            announcer.announce('Undid clear.');
+          },
+        });
       }
     },
   });
@@ -4577,6 +4610,12 @@ window.addEventListener('keydown', (e) => {
     }
   }
 });
+
+// Phase 175 — toast stack with optional Undo action. Wired into
+// destructive operations (delete, clear-drawings, clear-routes)
+// to give a 5-second window to revert. Mounted before the rest
+// of the app so any sub-modules can grab a reference.
+const toasts = mountToastStack();
 
 // Phase 172 — install-as-app hint + offline banner. Listens for
 // `beforeinstallprompt` (Chromium-only, no-op elsewhere) and the

@@ -131,6 +131,50 @@ gaps so the v1.0 cut is genuinely "stable + remote-play-capable."
 
 ---
 
+## [1.50.0] — 2026-05-05 — Toast stack with Undo
+
+Phase 175 — fourteenth of the v1.37 → v1.55 batch. New `mountToastStack()` mounts a fixed bottom-right notification stack. Wired into the destructive operations (Delete selection, Clear drawings, Clear travel routes) so each fires a "Deleted N tokens — Undo" pill that reverts via `store.undo()` if clicked within 5 seconds.
+
+### Added
+- **`src/ui/toast-stack.ts`** (new, ~110 lines) — `mountToastStack()` returns `{ show, clear }`. Each `show({ message, actionLabel?, onAction?, durationMs? })` creates a styled pill with optional action button + dismiss `×`, auto-dismissing after `durationMs` (default 5 s; set 0 for sticky). Caps visible toasts at 5; oldest evicts FIFO so a burst can't fill the screen.
+- **CSS** — `.toast-stack`, `.toast`, `.toast-message`, `.toast-action`, `.toast-close`, `.toast-leaving` rules + a `toast-enter` keyframe for the slide-in / fade-in. Uses existing `--surface` / `--fg` / `--border` / `--accent` variables so it adapts to all 5 themes.
+- **Wired into 3 destructive operations**:
+  - `deleteSelection()` — toast with "Undo" → `store.undo()` reverts the batched delete in one step.
+  - "Clear all drawings" command palette / session-menu action — toast with "Undo".
+  - "Clear all travel routes" command palette action (Phase 158) — toast with "Undo".
+- **Mounted early in `gm.ts`** so any sub-module can use the `toasts` reference.
+
+### Why this matters
+Pre-175: a misclicked Delete or Clear could only be undone via Ctrl+Z, which most users discover late. The screen-reader announcement ("Deleted 3 tokens.") was the only visual feedback. Post-175: a visible toast persists for 5 seconds with a one-click Undo button. Foundry / Roll20 ship the same affordance; this is the lightweight equivalent.
+
+### Architecture
+- **`store.undo()` is the action target.** Each destructive operation already runs as a single batched patch (one undo step). The toast's Undo button calls `store.undo()` — no need for the toast to remember what was deleted; the store's undo stack carries the pre-delete snapshot.
+- **No new patch types.** The toast is a UI-only affordance; reverting goes through the existing undo path.
+- **`pointer-events: none` on the container, `auto` on toasts.** The container layer doesn't block clicks on the canvas underneath; individual toasts capture clicks for their action / dismiss buttons.
+- **Stack cap with FIFO eviction.** Bursts (e.g. clearing 5+ different layers in quick succession) evict the oldest so the newest is always visible.
+
+### UX details
+- **5-second window.** Long enough for "wait, I didn't mean that" reaction; short enough not to clutter.
+- **Slide-in / slide-out animation.** ~200 ms on each end. Reduced-motion users still see the toasts (just without the animation if their browser respects `prefers-reduced-motion` on transitions — a future polish could explicitly gate the keyframe).
+- **× to dismiss** for users who want to clear toasts immediately.
+
+### Tests
+- **+10 unit tests** in `src/ui/toast-stack.test.ts` (new): mounts container, renders message, action button click + callback, action-button absent when not supplied, auto-dismiss after default duration, custom duration, sticky (durationMs 0), × dismiss, MAX_VISIBLE cap with FIFO eviction, clear() dismisses all.
+- **All 1687 unit tests + 411 Playwright specs pass** locally.
+
+### Bundle
+- 118.81 / 120 KB initial-load brotli (+0.50 KB for the toast helper + wiring).
+- Lazy chunks 26.21 / 28 KB unchanged. CSS 13.86 / 14 KB (+0.17 KB for toast styles).
+
+### Pre-push checklist
+- typecheck: clean.
+- unit suite: 1687 passing.
+- e2e suite: 411 passing.
+- visual regression: all baselines green (toasts only render on user action, not in default-state baselines).
+- size-limit: all 5 budgets green.
+
+---
+
 ## [1.49.0] — 2026-05-05 — Combat target reticle
 
 Phase 174 — thirteenth of the v1.37 → v1.55 batch. Right-click a token → "Set as target" → a red corner-bracket reticle pulses on that token. Useful for "the wizard targets the goblin"-style telegraphing during combat. The target id is transient (not persisted) so a tab refresh clears it.
