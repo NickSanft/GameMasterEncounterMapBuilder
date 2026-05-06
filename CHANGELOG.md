@@ -131,6 +131,54 @@ gaps so the v1.0 cut is genuinely "stable + remote-play-capable."
 
 ---
 
+## [1.49.0] — 2026-05-05 — Combat target reticle
+
+Phase 174 — thirteenth of the v1.37 → v1.55 batch. Right-click a token → "Set as target" → a red corner-bracket reticle pulses on that token. Useful for "the wizard targets the goblin"-style telegraphing during combat. The target id is transient (not persisted) so a tab refresh clears it.
+
+### Added
+- **`TokenRenderOptions.targetTokenId?: ID | null`** field. When set + matching a real token, the renderer paints a corner-bracket reticle over that token's body circle.
+- **`drawTargetReticle` helper** in `src/render/layer-tokens.ts`. Four L-shaped corner brackets framing an imaginary bounding box around the token. Red (`#ff4d4d`), 2.5 px line, round caps. Pulses between 0.65 and 1.0 alpha at ~1 Hz when motion is allowed; static at full alpha for reduced-motion users.
+- **`getTargetTokenId` renderer hook** added to the `CreateRendererOptions` interface; pulled each frame from the GM-entry's `targetTokenRef` so the ref change applies on the next paint.
+- **`targetTokenRef` in `src/entries/gm.ts`**: `{ current: ID | null }`. Set / cleared via the right-click menu's contextual entry; auto-cleared when the targeted token is removed (`token-remove` patch) or the session is reset.
+- **Right-click menu entry** "Set as target" (default) / "Clear target" (when the right-clicked token is already the current target). One menu item that toggles, so the GM never needs to scroll a separate "current target" submenu.
+
+### Why this matters
+Pre-174: the GM had no visual way to telegraph "this token is being attacked." Players watching the screen scrolled to find which goblin the wizard meant. Post-174: a single right-click + menu pick frames the target with a clear reticle.
+
+Use cases:
+- **Telegraphing the active turn's attack target.** Reticle marks the goblin the cleric just declared as the spell-target.
+- **Multi-target ambiguity.** "I shoot the closest one" — GM marks the resolved target so everyone agrees on which token took damage.
+- **Streaming visual cue.** The pulse is subtle but visible at low resolutions / over screen-share.
+
+### Architecture
+- **Transient ref, not state.** The target id lives in a closure ref (`targetTokenRef`) outside `SessionState`. Doesn't sync to Spectators, doesn't persist across reloads. This is intentional — a target is a "right-now" combat affordance, not durable scene data. (A future polish could opt-in sync via a remote-play message if a group wants Spectators to see the reticle too.)
+- **Reuses the Phase 144 reduced-motion + `now` plumbing.** The reticle's pulse is computed from the same `performance.now()` value the active-turn ring uses; reduced-motion users get a static reticle without animation churn.
+- **Auto-clear on token-remove.** Subscribing to `token-remove` (and `session-reset`) prevents an orphan reticle floating over an empty cell. Cheap O(1) check inside the existing store-subscribe block.
+- **No new layer pass.** The reticle is drawn at the very end of `drawTokens` — after stack badges, after owner dots — so it always sits on top regardless of paint order. No re-architecture of the token paint pipeline.
+
+### UX details
+- **Pulse subtle, not distracting.** Alpha cycles 0.65 → 1.0 at 1 Hz. Reduced-motion users see static full opacity.
+- **One toggle, not two menu entries.** The menu reads "Set as target" or "Clear target" depending on current state, so the GM doesn't have to find a separate "Clear target" entry that's only valid sometimes.
+- **Esc cancels canvas selection.** The existing Esc handler doesn't touch the target ref — clearing target is intentionally a deliberate menu action, not a side effect of "deselect everything."
+
+### Tests
+- **+2 Playwright specs** in `e2e/token-target.spec.ts` (new): right-click shows "Set as target", post-set the menu reads "Clear target".
+- The reticle render itself is purely additive on the canvas; visual regression baselines stay green (no token-target is set in default-state baselines).
+- **All 1677 unit tests + 411 Playwright specs pass** locally.
+
+### Bundle
+- 118.31 / 120 KB initial-load brotli (+0.04 KB for the reticle helper + ref + menu wire — most of it the menu's contextual label).
+- Lazy chunks 26.21 / 28 KB brotli — bumped from 26 → 28 KB for headroom. CSS unchanged.
+
+### Pre-push checklist
+- typecheck: clean.
+- unit suite: 1677 passing.
+- e2e suite: 411 passing.
+- visual regression: all baselines green.
+- size-limit: all 5 budgets green.
+
+---
+
 ## [1.48.0] — 2026-05-05 — What's-new modal: full release notes on click
 
 Phase 173 — twelfth of the v1.37 → v1.55 batch. The what's-new modal now renders the full markdown body of the most-recent 4 release entries behind a `<details>` "Read full notes" expand toggle. Older entries keep just the one-line title. The entries module is dynamic-imported on first open so the markdown bodies don't bloat the main bundle.

@@ -64,6 +64,14 @@ export interface TokenRenderOptions {
    * Appearance → Auras).
    */
   clipAurasByWalls?: boolean;
+  /**
+   * Phase 174 — id of a token currently designated as the
+   * combat target. When set + matching a real token, a reticle
+   * (4 corner brackets pulsing slowly) renders on top of the
+   * token body. Transient — not persisted in state. Cleared via
+   * the right-click menu's "Clear target" or Esc.
+   */
+  targetTokenId?: ID | null;
 }
 
 const DEFAULT_OPTIONS: TokenRenderOptions = {
@@ -237,6 +245,74 @@ export function drawTokens(
   // Stack-count badge — one per cell that contains ≥2 tokens. Drawn after
   // every other token pass so it always sits on top of the stack.
   drawStackBadges(ctx, state, cellSize, options.mode, overlay);
+
+  // Phase 174 — combat target reticle. Renders LAST so it sits on
+  // top of all token decoration. Pulses gently when reduced-motion
+  // is off; static at full opacity when on.
+  if (options.targetTokenId) {
+    const target = state.tokens.find((t) => t.id === options.targetTokenId);
+    if (
+      target &&
+      !(options.mode === 'spectator' && isTokenFullyHidden(target, state))
+    ) {
+      const display = withOverlay(target, overlay, cellSize);
+      drawTargetReticle(
+        ctx,
+        display,
+        state.grid,
+        options.reducedMotion ? null : (options.now ?? null),
+      );
+    }
+  }
+}
+
+/**
+ * Phase 174 — combat target reticle. Four corner brackets framing
+ * the token's body circle, painted in red with a slight pulse
+ * animation. Indicates "this token is the current attack target"
+ * — purely visual, not persisted in state.
+ *
+ * `pulseTime` is `performance.now()` at frame start when the user
+ * hasn't requested reduced-motion; `null` otherwise. The pulse
+ * cycles between 0.65 and 1.0 alpha at ~1 Hz.
+ */
+function drawTargetReticle(
+  ctx: CanvasRenderingContext2D,
+  t: Token,
+  grid: GridConfig,
+  pulseTime: number | null,
+): void {
+  const center = tokenCenterWorld(t, grid);
+  const cx = center.x;
+  const cy = center.y;
+  const r = (t.size * grid.cellSize) / 2 + 6;
+  const armLen = r * 0.45;
+  const alpha = pulseTime !== null
+    ? 0.825 + Math.sin(pulseTime / 500) * 0.175
+    : 1;
+
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.strokeStyle = '#ff4d4d';
+  ctx.lineWidth = 2.5;
+  ctx.lineCap = 'round';
+
+  // Four L-shaped brackets at the corners of an imaginary
+  // bounding box of side `2 * r`.
+  const corners: Array<[number, number, number, number]> = [
+    [-r, -r, 1, 1], // top-left: arm goes right + down
+    [r, -r, -1, 1], // top-right
+    [r, r, -1, -1], // bottom-right
+    [-r, r, 1, -1], // bottom-left
+  ];
+  for (const [dx, dy, sx, sy] of corners) {
+    ctx.beginPath();
+    ctx.moveTo(cx + dx + sx * armLen, cy + dy);
+    ctx.lineTo(cx + dx, cy + dy);
+    ctx.lineTo(cx + dx, cy + dy + sy * armLen);
+    ctx.stroke();
+  }
+  ctx.restore();
 }
 
 /**

@@ -41,7 +41,7 @@
         "dist/assets/dice-animation-*.js",
         "dist/assets/whats-new-entries.generated-*.js"
       ],
-      "limit": "26 KB"
+      "limit": "28 KB"
     },
     {
       "name": "CSS (all chunks, brotli)",

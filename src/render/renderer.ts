@@ -130,6 +130,13 @@ interface CreateRendererOptions {
    */
   getTravelPreview?(): import('../state/types.js').TravelRoute | null;
   /**
+   * Phase 174 — id of the token currently designated as the combat
+   * target, or `null` for no target. Drives the corner-bracket
+   * reticle layer. Transient (not in state) so an entry tab won't
+   * show another tab's target.
+   */
+  getTargetTokenId?(): ID | null;
+  /**
    * Optional precomputed run-length-compacted fog rectangles. Set by
    * the entry when the fog WebWorker pipeline is available — saves an
    * inline scan through the fog grid each frame on large maps. When
@@ -245,6 +252,7 @@ export function createRenderer(opts: CreateRendererOptions): Renderer {
     getRulerTargetFeet,
     getDrawPreview,
     getTravelPreview,
+    getTargetTokenId,
     getFogRects,
     getWallsOverlay,
     getBlockPreview,
@@ -339,6 +347,9 @@ export function createRenderer(opts: CreateRendererOptions): Renderer {
       clipAurasByWalls: getPreferences
         ? getPreferences().clipAurasByWalls
         : false,
+      // Phase 174 — combat target reticle. Pulled from the live
+      // ref every frame so changes apply on the next paint.
+      targetTokenId: getTargetTokenId ? getTargetTokenId() : null,
     });
     drawAoeTemplates(ctx, state, {
       mode,

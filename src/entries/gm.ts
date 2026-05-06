@@ -136,7 +136,7 @@ import { duplicateTokens } from '../state/token-clipboard.js';
 import { nextLabelSuffix } from '../state/token-numbering.js';
 import { rotateBy, snapRotation } from '../state/token-rotation.js';
 import { tokensInStackAt } from '../state/token-stack.js';
-import type { Annotation, Token } from '../state/types.js';
+import type { Annotation, ID, Token } from '../state/types.js';
 import { DEFAULT_ANNOTATION_COLOR } from '../state/annotation-presets.js';
 import { mountPresetBackgroundsModal } from '../ui/preset-backgrounds-modal.js';
 import { resolvePresetUrl } from '../state/preset-backgrounds.js';
@@ -316,6 +316,10 @@ const drawToolOptionsRef = createDrawToolOptionsRef({
 // Phase 158 — travel-tool overlay + options.
 const travelOverlayRef = createTravelOverlayRef();
 const travelToolOptionsRef = createTravelToolOptionsRef();
+// Phase 174 — combat target indicator (transient ref). When set
+// to a token id, the renderer paints a corner-bracket reticle on
+// that token. Cleared on Esc + via the right-click menu.
+const targetTokenRef: { current: ID | null } = { current: null };
 const rulerToolOptionsRef = createRulerToolOptionsRef();
 const aoeToolOptionsRef = createAoeToolOptionsRef({
   kind: 'sphere',
@@ -395,6 +399,8 @@ const renderer = createRenderer({
   getDrawPreview: () => drawOverlayRef.current,
   // Phase 158 — travel-route in-flight preview from the Travel tool.
   getTravelPreview: () => travelOverlayRef.current,
+  // Phase 174 — combat target id (transient ref, not in state).
+  getTargetTokenId: () => targetTokenRef.current,
   getFogRects: () => fogWorkerClient.getLatest(),
   getWallsOverlay: () => wallsOverlayRef.current,
   // Phase 112 — block-mode drag preview (Walls tool, GM only).
@@ -2273,6 +2279,18 @@ canvas.addEventListener('contextmenu', (e) => {
         onClick: () => startDistanceFromToken(hit),
       },
       {
+        // Phase 174 — combat target indicator. When the menu's
+        // hit-token is already the target, offer "Clear target"
+        // instead so the GM can toggle off without scrolling
+        // through other menus.
+        label: targetTokenRef.current === hit.id ? 'Clear target' : 'Set as target',
+        onClick: () => {
+          targetTokenRef.current =
+            targetTokenRef.current === hit.id ? null : hit.id;
+          renderer.requestRender();
+        },
+      },
+      {
         label: `Damage / Heal${hpTargets.length > 1 ? ` (${hpTargets.length})` : ''}…`,
         disabled: hpTargets.length === 0,
         onClick: () => {
@@ -2814,6 +2832,20 @@ store.subscribe((patch) => {
 // recent-tokens via its own subscribe; the GM-side store-subscribe
 // above feeds it via `recordTokenUse` from every token-add patch.
 mountRecentTokensStrip(document.body, lastPlacedRef);
+
+// Phase 174 — clear the combat-target ref when the target token
+// is removed (or the whole session is reset). Prevents the
+// reticle from sticking to an empty cell after a delete.
+store.subscribe((patch) => {
+  if (!targetTokenRef.current) return;
+  if (patch?.kind === 'token-remove' && patch.id === targetTokenRef.current) {
+    targetTokenRef.current = null;
+    renderer.requestRender();
+  } else if (patch?.kind === 'session-reset') {
+    targetTokenRef.current = null;
+    renderer.requestRender();
+  }
+});
 
 // Phase 165 — auto-pan camera to the active initiative token. We
 // subscribe specifically to `initiative-set-active` patches (and
