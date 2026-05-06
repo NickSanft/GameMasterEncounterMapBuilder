@@ -209,6 +209,21 @@ export interface Token {
    */
   speedFt: number;
   /**
+   * Phase 177 — free-form tags for grouping / multi-select.
+   * Authored via the token editor as a comma-separated input;
+   * stored as a normalized lowercase array (deduped). Used by the
+   * "Select by tag…" command palette action: enter a tag, all
+   * tokens with that tag get selected at once.
+   *
+   * Examples: `["goblin"]`, `["caster", "spellcaster"]`,
+   * `["minion", "encounter-1"]`.
+   *
+   * Optional + back-compat. Pre-177 tokens carry no field;
+   * deserializer treats missing as `undefined`. Forward-only over
+   * the wire — pre-177 peers will drop the field on receive.
+   */
+  tags?: string[];
+  /**
    * Phase 162 — per-token GM scratchpad / mini-statblock. Free-form
    * text for "AC 16 / Save +5 / Multiattack 2x scimitar / Vulnerable
    * to fire" reminders the GM wants attached to a specific token

@@ -4193,6 +4193,34 @@ function slugForFilename(name: string): string {
     },
   });
 
+  // Phase 177 — select-by-tag palette command. Prompts for a tag
+  // string; sets selection.ids to every token with that tag.
+  // Tags are normalized lowercase, so "Goblin" / "goblin" work
+  // identically.
+  reg.register({
+    id: 'select-by-tag',
+    label: 'Select by tag…',
+    group: 'Tokens',
+    run: () => {
+      const raw = window.prompt('Select all tokens with tag:');
+      if (!raw) return;
+      const tag = raw.trim().toLowerCase();
+      if (!tag) return;
+      const matches = store
+        .getState()
+        .tokens.filter((t) => Array.isArray(t.tags) && t.tags.includes(tag));
+      if (matches.length === 0) {
+        announcer.announce(`No tokens with tag "${tag}".`);
+        return;
+      }
+      selection.ids = new Set(matches.map((t) => t.id));
+      renderer.requestRender();
+      announcer.announce(
+        `Selected ${matches.length} token${matches.length === 1 ? '' : 's'} with tag "${tag}".`,
+      );
+    },
+  });
+
   // Phase 158 — clear-all-routes palette command. Per-route delete
   // is deferred (no canvas hit-test for routes in v158); clearing
   // everything is the v1 escape hatch.

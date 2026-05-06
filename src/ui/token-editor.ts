@@ -373,6 +373,24 @@ export function mountTokenEditor(opts: TokenEditorOptions): TokenEditorHandle {
         </select>
       </fieldset>
 
+      <!-- Phase 177 — comma-separated tags. Used by the "Select
+           by tag…" command palette action to multi-select tokens
+           sharing a tag. Lowercased + deduped on commit. -->
+      <fieldset class="tags-fieldset">
+        <legend>Tags</legend>
+        <input
+          type="text"
+          data-field="tags"
+          class="token-editor-tags"
+          placeholder="goblin, minion, encounter-1"
+        />
+        <p class="settings-hint">
+          Phase 177 — comma-separated. Tags are lowercased on
+          commit. Use the command palette's "Select by tag…" to
+          multi-select every token sharing a tag.
+        </p>
+      </fieldset>
+
       <!-- Phase 162 — GM-only mini-statblock scratchpad. Free-form
            text for "AC 16 / Save +5 / Multiattack 2x scimitar"
            reminders. Spectators never see this field; the editor is
@@ -447,6 +465,10 @@ export function mountTokenEditor(opts: TokenEditorOptions): TokenEditorHandle {
   // Phase 162 — GM-only notes textarea.
   const notesInput = modal.querySelector<HTMLTextAreaElement>(
     '[data-field="notes"]',
+  )!;
+  // Phase 177 — comma-separated tags input.
+  const tagsInput = modal.querySelector<HTMLInputElement>(
+    '[data-field="tags"]',
   )!;
   const counter = modal.querySelector<HTMLSpanElement>('[data-field="counter"]')!;
   const hasSightInput = modal.querySelector<HTMLInputElement>('[data-field="hasSight"]')!;
@@ -614,6 +636,8 @@ export function mountTokenEditor(opts: TokenEditorOptions): TokenEditorHandle {
     // Phase 162 — sync the notes textarea. Optional field; missing
     // collapses to an empty string for the form control.
     notesInput.value = token.notes ?? '';
+    // Phase 177 — sync the tags input as a comma-separated string.
+    tagsInput.value = (token.tags ?? []).join(', ');
     syncVisibilityUI(token.id);
     syncOwnerUI(token.ownerId);
     syncParentUI(token);
@@ -1638,6 +1662,43 @@ export function mountTokenEditor(opts: TokenEditorOptions): TokenEditorHandle {
     const current = tok.notes ?? undefined;
     if (next === current) return;
     update({ notes: next });
+  });
+
+  // Phase 177 — tags input. Commits on blur. Splits the comma-
+  // separated string into normalized lowercase tags (trim + dedup
+  // + drop empties + cap at 16). Empty list collapses to
+  // undefined so the in-memory shape matches the optional type.
+  tagsInput.addEventListener('blur', () => {
+    const tok = currentToken();
+    if (!tok) return;
+    const raw = tagsInput.value.split(',');
+    const seen = new Set<string>();
+    const next: string[] = [];
+    for (const piece of raw) {
+      const tag = piece.trim().toLowerCase();
+      if (tag.length === 0) continue;
+      if (seen.has(tag)) continue;
+      seen.add(tag);
+      next.push(tag);
+      if (next.length >= 16) break;
+    }
+    const newTags = next.length > 0 ? next : undefined;
+    const cur = tok.tags ?? undefined;
+    // Same-array fast-path so a no-op blur doesn't fire a patch.
+    if (
+      newTags === cur ||
+      (newTags &&
+        cur &&
+        newTags.length === cur.length &&
+        newTags.every((t, i) => t === cur[i]))
+    ) {
+      // Re-canonicalize the visible input value so a malformed
+      // typed string ("goblin, GOBLIN, ") shows the cleaned form.
+      tagsInput.value = (newTags ?? []).join(', ');
+      return;
+    }
+    update({ tags: newTags });
+    tagsInput.value = (newTags ?? []).join(', ');
   });
 
   // Phase 126 — owner change. Empty value collapses to null

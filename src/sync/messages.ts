@@ -143,6 +143,36 @@ function normalizeTilePaints(raw: unknown): TilePaint[] {
 }
 
 /**
+ * Phase 177 — defensive parser for the optional `Token.tags`.
+ * Returns `undefined` for non-array / empty input. Otherwise:
+ *   - keeps only non-empty string entries
+ *   - trims + lowercases each so "Goblin" and "goblin" merge
+ *   - drops duplicates
+ *   - caps at MAX_TAGS to prevent malformed peers from blowing
+ *     up the array
+ *
+ * `undefined` (vs `[]`) keeps the in-memory shape consistent
+ * with the optional `Token.tags?` type; an empty tag list is the
+ * same as no tags.
+ */
+const MAX_TAGS = 16;
+function normalizeTokenTags(raw: unknown): string[] | undefined {
+  if (!Array.isArray(raw) || raw.length === 0) return undefined;
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const v of raw) {
+    if (typeof v !== 'string') continue;
+    const tag = v.trim().toLowerCase();
+    if (tag.length === 0) continue;
+    if (seen.has(tag)) continue;
+    seen.add(tag);
+    out.push(tag);
+    if (out.length >= MAX_TAGS) break;
+  }
+  return out.length > 0 ? out : undefined;
+}
+
+/**
  * Phase 158 — defensive parser for `travelRoutes: TravelRoute[]`.
  * Drops malformed entries (non-string id, missing/short points
  * array, non-finite coords, unknown visibility). Returns `[]` for
@@ -692,6 +722,11 @@ export function deserializeState(s: SerializedSessionState): SessionState {
       // collapses to undefined → unlocked.
       locked:
         (t as { locked?: unknown }).locked === true ? true : undefined,
+      // Phase 177 — token tags for "select by tag" grouping.
+      // Optional; pre-177 sessions and freshly-created tokens
+      // have no field. Defensive: requires an array of non-empty
+      // strings; lowercased + deduped + capped at 16 entries.
+      tags: normalizeTokenTags((t as { tags?: unknown }).tags),
       // Phase 162 — GM-only mini-statblock notes. Optional; pre-162
       // sessions and freshly-created tokens have no field. Accept
       // only non-empty strings — empty / missing / non-string all

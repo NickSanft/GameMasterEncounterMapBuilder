@@ -131,6 +131,51 @@ gaps so the v1.0 cut is genuinely "stable + remote-play-capable."
 
 ---
 
+## [1.52.0] — 2026-05-06 — Token tags for selection groups
+
+Phase 177 — sixteenth of the v1.37 → v1.55 batch. Optional `Token.tags?: string[]` field, comma-separated input in the editor, and a "Select by tag…" command-palette action that selects every token sharing a tag in one click.
+
+### Added
+- **`Token.tags?: string[]`** field. Optional + back-compat. Pre-177 tokens carry no field; the deserializer normalizes input (lowercase + trim + dedupe + drop-empties + cap at 16).
+- **`normalizeTokenTags(raw)`** in `src/sync/messages.ts`. Defensive parser used by the deserialize path. Returns `undefined` for non-array / empty input; otherwise produces a sanitized array.
+- **Tags input** in the token editor — a single comma-separated text input. Commits on blur with the same normalization the deserializer uses; re-canonicalizes the visible value on commit so a malformed typed string ("Goblin, GOBLIN, ") shows the cleaned form.
+- **"Select by tag…" command-palette action** (group: Tokens) in `src/entries/gm.ts`. `window.prompt` for the tag string; sets `selection.ids` to every token whose `tags` array includes the (lowercased) input. Announces the count via the live region.
+
+### Why this matters
+Pre-177: multi-selecting "every goblin" required either a lasso (works only when the goblins are spatially clustered) or shift-clicking each individually. Post-177: tag every goblin with `goblin` once → `Ctrl+K` → "Select by tag…" → "goblin" → all 8 selected.
+
+Use cases:
+- **Mob selection.** Tag minions; select-all-minions for damage waves, mass moves.
+- **Encounter grouping.** Tag tokens by `encounter-1` / `encounter-2` so prep'd groups can be selected together when their wave triggers.
+- **Faction grouping.** `pcs`, `npcs`, `enemies` for global commands ("hide all enemies from spectators" via the Phase 109 visibility system).
+
+### Architecture
+- **Lowercased throughout.** Deserialize + editor commit both lowercase, so "Goblin" / "goblin" / "GOBLIN" are the same tag. Display in the editor shows the canonical lowercase form after commit.
+- **No state-side dedupe at apply time.** The editor's commit path normalizes BEFORE dispatching the patch, and the deserializer normalizes the wire shape. The store stays naive — same pattern as Phase 50's `conditions` array.
+- **Optional, not required.** Tokens without tags carry no field (`undefined`). Empty arrays collapse to undefined on commit so the in-memory shape stays clean for round-trips.
+- **`MAX_TAGS = 16` cap.** Prevents a malformed peer from blowing up the array. 16 is more than any realistic encounter needs; future polish could expose this as a Settings preference.
+
+### UX details
+- **Comma-separated, not chip UI.** Faster to author for keyboard users; visually consistent with how most form-style tag inputs work. A future polish could swap in a chip control with autocomplete from the existing tag set.
+- **`window.prompt` for the palette action.** Quick-and-cheap; future polish: a styled modal with autocomplete from the current scene's tag set.
+
+### Tests
+- **+5 unit tests** in `src/sync/messages.test.ts`: pre-177 missing default, round-trip normalized list, lowercase + dedup + drop-empties, cap at 16, non-array → undefined.
+- **All 1697 unit tests + 411 Playwright specs pass** locally.
+
+### Bundle
+- 119.64 / 120 KB initial-load brotli (+0.48 KB for the field + helper + editor input + palette action).
+- Lazy chunks 26.21 / 28 KB unchanged. CSS unchanged.
+
+### Pre-push checklist
+- typecheck: clean.
+- unit suite: 1697 passing.
+- e2e suite: 411 passing.
+- visual regression: all baselines green.
+- size-limit: all 5 budgets green.
+
+---
+
 ## [1.51.0] — 2026-05-06 — Drag-handle reorder in initiative tracker
 
 Phase 176 — fifteenth of the v1.37 → v1.55 batch. The initiative tracker modal's rows are now drag-reorderable. Each row gets a `⋮⋮` handle + `draggable=true`; dropping on another row inserts before/after based on cursor position relative to the row's vertical midline. The new `'initiative-reorder'` patch kind preserves entry `value` fields (drag is order-only, doesn't rewrite rolls).

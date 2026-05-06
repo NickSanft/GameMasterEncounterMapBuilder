@@ -527,6 +527,140 @@ describe('serializeState / deserializeState', () => {
     });
   });
 
+  describe('Phase 177 — token tags', () => {
+    it('treats missing tags as undefined (legacy saves)', () => {
+      const legacy = {
+        ...serializeState(createDefaultState()),
+        tokens: [
+          {
+            id: 't',
+            x: 0,
+            y: 0,
+            label: 'A',
+            color: '#fff',
+            imageId: null,
+            size: 1,
+          },
+        ],
+      } as unknown as SerializedSessionState;
+      const restored = deserializeState(legacy);
+      expect(restored.tokens[0]!.tags).toBeUndefined();
+    });
+
+    it('round-trips a normalized tag list', () => {
+      const state = createDefaultState();
+      state.tokens.push({
+        id: 't',
+        x: 0,
+        y: 0,
+        label: 'Goblin',
+        color: '#fff',
+        imageId: null,
+        size: 1,
+        borderColor: null,
+        hp: null,
+        conditions: [],
+        rotation: 0,
+        losRadius: null,
+        light: null,
+        initiativeMod: 0,
+        conditionExpirations: {},
+        deathSaves: { successes: 0, failures: 0 },
+        ownerId: null,
+        auras: [],
+        speedFt: 30,
+        tags: ['goblin', 'minion'],
+      });
+      const restored = deserializeState(serializeState(state));
+      expect(restored.tokens[0]!.tags).toEqual(['goblin', 'minion']);
+    });
+
+    it('lowercases + dedups + drops empties on the deserialize path', () => {
+      const state = serializeState(createDefaultState());
+      (state.tokens as unknown[]).push({
+        id: 't',
+        x: 0,
+        y: 0,
+        label: 'A',
+        color: '#000',
+        imageId: null,
+        size: 1,
+        borderColor: null,
+        hp: null,
+        conditions: [],
+        rotation: 0,
+        losRadius: null,
+        light: null,
+        initiativeMod: 0,
+        conditionExpirations: {},
+        deathSaves: { successes: 0, failures: 0 },
+        ownerId: null,
+        auras: [],
+        speedFt: 30,
+        tags: ['Goblin', 'goblin', '', '  Minion  ', null, 123, 'goblin'],
+      });
+      const restored = deserializeState(state);
+      expect(restored.tokens[0]!.tags).toEqual(['goblin', 'minion']);
+    });
+
+    it('caps at 16 entries (defensive against malformed peers)', () => {
+      const state = serializeState(createDefaultState());
+      const fakeTags = Array.from({ length: 30 }, (_, i) => `tag-${i}`);
+      (state.tokens as unknown[]).push({
+        id: 't',
+        x: 0,
+        y: 0,
+        label: 'A',
+        color: '#000',
+        imageId: null,
+        size: 1,
+        borderColor: null,
+        hp: null,
+        conditions: [],
+        rotation: 0,
+        losRadius: null,
+        light: null,
+        initiativeMod: 0,
+        conditionExpirations: {},
+        deathSaves: { successes: 0, failures: 0 },
+        ownerId: null,
+        auras: [],
+        speedFt: 30,
+        tags: fakeTags,
+      });
+      const restored = deserializeState(state);
+      expect(restored.tokens[0]!.tags).toHaveLength(16);
+    });
+
+    it('returns undefined for a non-array tags value', () => {
+      const state = serializeState(createDefaultState());
+      (state.tokens as unknown[]).push({
+        id: 't',
+        x: 0,
+        y: 0,
+        label: 'A',
+        color: '#000',
+        imageId: null,
+        size: 1,
+        borderColor: null,
+        hp: null,
+        conditions: [],
+        rotation: 0,
+        losRadius: null,
+        light: null,
+        initiativeMod: 0,
+        conditionExpirations: {},
+        deathSaves: { successes: 0, failures: 0 },
+        ownerId: null,
+        auras: [],
+        speedFt: 30,
+        tags: 'goblin,minion',
+      });
+      const restored = deserializeState(state);
+      expect(restored.tokens[0]!.tags).toBeUndefined();
+    });
+  });
+
   describe('Phase 169 — background fill color', () => {
     it('treats missing fillColor as undefined (legacy saves)', () => {
       const legacy = serializeState(createDefaultState());
